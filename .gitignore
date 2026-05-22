@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment files
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+
+# Build outputs
+**/dist/
+**/.next/
+**/build/
+**/.output/
+
+# Logs
+*.log
+**/logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# PM2
+.pm2/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code — local session data, not for repo
+.claude/
+
+# Uploads / media (stored on S3/CDN, not in repo)
+server/uploads/
+**/uploads/
+
+# Prisma generated (regenerated on deploy)
+server/prisma/migrations/*.lock

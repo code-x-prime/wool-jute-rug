@@ -1,0 +1,306 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  /* Hide scrollbar for IE, Edge and Firefox */
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+
+  /* Alternative scrollbar hide class */
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+}
+
+@layer base {
+  :root {
+    /* =============================================
+       WOOL JUTE RUG CO - Brand Color Palette
+       Extracted from Logo:
+       - Dark Brown  : #3D1C02
+       - Gold/Amber  : #C9A84C
+       - Deep Gold   : #A07830
+       - Cream/Beige : #F5ECD7
+       - Off-White   : #FDF8F0
+    ============================================= */
+
+    --background: 40 50% 98%;          /* #FDF8F0 off-white cream */
+    --foreground: 20 95% 12%;          /* #3D1C02 dark brown */
+
+    --card: 0 0% 100%;
+    --card-foreground: 20 95% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 95% 12%;
+
+    /* Primary = Dark Brown #3D1C02 */
+    --primary: 20 95% 12%;
+    --primary-foreground: 40 100% 97%;
+
+    /* Secondary = Gold #C9A84C */
+    --secondary: 40 55% 55%;
+    --secondary-foreground: 20 95% 12%;
+
+    --muted: 38 30% 94%;
+    --muted-foreground: 20 30% 40%;
+
+    /* Accent = Gold #C9A84C */
+    --accent: 40 55% 55%;
+    --accent-foreground: 20 95% 12%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 38 25% 85%;
+    --input: 38 25% 88%;
+    --ring: 40 55% 55%;
+
+    --chart-1: 40 55% 55%;
+    --chart-2: 20 95% 20%;
+    --chart-3: 38 40% 70%;
+    --chart-4: 20 50% 35%;
+    --chart-5: 40 70% 40%;
+
+    --radius: 0.25rem;
+  }
+
+  .dark {
+    --background: 20 95% 6%;
+    --foreground: 40 60% 90%;
+    --card: 20 80% 8%;
+    --card-foreground: 40 60% 90%;
+    --popover: 20 80% 8%;
+    --popover-foreground: 40 60% 90%;
+    --primary: 40 55% 55%;
+    --primary-foreground: 20 95% 10%;
+    --secondary: 20 60% 20%;
+    --secondary-foreground: 40 60% 90%;
+    --muted: 20 50% 14%;
+    --muted-foreground: 40 30% 60%;
+    --accent: 40 55% 55%;
+    --accent-foreground: 20 95% 10%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 20 40% 18%;
+    --input: 20 40% 18%;
+    --ring: 40 55% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-roboto), -apple-system, BlinkMacSystemFont, "Segoe UI",
+      sans-serif;
+  }
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-jost), sans-serif;
+    font-weight: 400;
+    color: #3D1C02;
+  }
+  p,
+  .description,
+  .desc,
+  .product-desc,
+  .about-text {
+    font-weight: 400;
+    font-family: var(--font-roboto), sans-serif;
+  }
+  .font-light {
+    font-weight: 300;
+  }
+  .font-regular {
+    font-weight: 400;
+  }
+  .font-bold {
+    font-weight: 700;
+  }
+}
+
+/* =============================================
+   WOOL JUTE RUG CO - Custom Brand Utilities
+============================================= */
+
+/* Brand Primary = Dark Brown */
+.text-primary-brand {
+  color: #3D1C02;
+}
+.bg-primary-brand {
+  background-color: #3D1C02;
+}
+.border-primary-brand {
+  border-color: #3D1C02;
+}
+.hover\:bg-primary-brand:hover {
+  background-color: #3D1C02;
+}
+.hover\:text-primary-brand:hover {
+  color: #3D1C02;
+}
+
+/* Brand Gold = #C9A84C */
+.text-gold-brand {
+  color: #C9A84C;
+}
+.bg-gold-brand {
+  background-color: #C9A84C;
+}
+.border-gold-brand {
+  border-color: #C9A84C;
+}
+.hover\:bg-gold-brand:hover {
+  background-color: #C9A84C;
+}
+.hover\:text-gold-brand:hover {
+  color: #C9A84C;
+}
+
+/* Brand Cream */
+.bg-cream-brand {
+  background-color: #F5ECD7;
+}
+.text-cream-brand {
+  color: #F5ECD7;
+}
+
+/* Jost font utility */
+.font-jost {
+  font-family: var(--font-jost), sans-serif;
+}
+
+/* Roboto font utility */
+.font-roboto {
+  font-family: var(--font-roboto), sans-serif;
+}
+
+/* Add typography styles for blog content */
+@layer components {
+  .prose {
+    @apply text-gray-700;
+  }
+
+  .prose h1,
+  .prose h2,
+  .prose h3,
+  .prose h4,
+  .prose h5,
+  .prose h6 {
+    @apply text-gray-900 font-bold mt-6 mb-4;
+    font-family: var(--font-jost), sans-serif;
+  }
+
+  .prose h1 {
+    @apply text-3xl;
+  }
+
+  .prose h2 {
+    @apply text-2xl;
+  }
+
+  .prose h3 {
+    @apply text-xl;
+  }
+
+  .prose p {
+    @apply my-4;
+  }
+
+  .prose ul,
+  .prose ol {
+    @apply my-4 pl-6;
+  }
+
+  .prose ul {
+    @apply list-disc;
+  }
+
+  .prose ol {
+    @apply list-decimal;
+  }
+
+  .prose li {
+    @apply mb-2;
+  }
+
+  .prose a {
+    color: #C9A84C;
+    text-decoration: underline;
+  }
+  .prose a:hover {
+    color: #3D1C02;
+  }
+
+  .prose blockquote {
+    @apply pl-4 border-l-4 border-gray-200 italic my-4;
+  }
+
+  .prose code {
+    @apply bg-gray-100 px-1 py-0.5 rounded text-gray-800 font-mono text-sm;
+  }
+
+  .prose pre {
+    @apply bg-gray-800 text-gray-100 p-4 rounded-md overflow-x-auto my-4 font-mono text-sm;
+  }
+
+  .prose pre code {
+    @apply bg-transparent text-inherit p-0;
+  }
+
+  .prose img {
+    @apply rounded-md max-w-full h-auto my-4;
+  }
+
+  .prose strong,
+  .prose b {
+    @apply font-bold;
+  }
+
+  .prose em,
+  .prose i {
+    @apply italic;
+  }
+
+  /* Product thumbnails carousel */
+  .embla-thumbs {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .embla-thumbs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .embla-thumbs > div {
+    display: flex;
+    flex-direction: row;
+    min-width: 100%;
+  }
+}
+
+body {
+  background-color: #FDF8F0;
+  color: #3D1C02;
+}
