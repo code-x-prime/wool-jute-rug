@@ -477,7 +477,7 @@ const ProductCard = ({ product }) => {
           </div>
 
           {/* View Similar Button - Bottom Right on Hover */}
-          <div className="absolute bottom-2 right-2 z-30 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0">
+          {/* <div className="absolute bottom-2 right-2 z-30 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0">
             <button
               onClick={(e) => {
                 e.preventDefault();
@@ -488,7 +488,7 @@ const ProductCard = ({ product }) => {
             >
               Quick View
             </button>
-          </div>
+          </div> */}
         </div>
       </Link>
 
