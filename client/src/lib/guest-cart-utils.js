@@ -1,6 +1,8 @@
 // Guest Cart Utilities
 // This file handles cart functionality for non-logged-in users
 
+import { fetchApi } from "./utils";
+
 const GUEST_CART_KEY = "ecom_cart";
 
 /**
@@ -231,11 +233,8 @@ export const mergeGuestCartWithUserCart = async () => {
   }
 
   try {
-    // Store guest cart items before clearing
     const guestItemsToMerge = [...guestCart.items];
-
-    // Clear guest cart first to prevent any race conditions
-    clearGuestCart();
+    const successfullyMergedIds = [];
 
     // Process all items in parallel for faster merging
     const mergePromises = guestItemsToMerge.map(async (guestItem) => {
@@ -244,36 +243,16 @@ export const mergeGuestCartWithUserCart = async () => {
         const moq = guestItem.moq ?? 1;
         const quantity = Math.max(moq, parseInt(guestItem.quantity) || 1);
 
-        const addResponse = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4001/api"
-          }/cart/add`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-            body: JSON.stringify({
-              productVariantId: guestItem.productVariantId,
-              quantity: quantity,
-            }),
-            // Add timeout to prevent hanging requests
-            signal: AbortSignal.timeout(10000), // 10 second timeout
-          }
-        );
+        await fetchApi("/cart/add", {
+          method: "POST",
+          body: JSON.stringify({
+            productVariantId: guestItem.productVariantId,
+            quantity: quantity,
+          }),
+        });
 
-        if (addResponse.ok) {
-          return { success: true, item: guestItem };
-        } else {
-          console.warn(
-            `Failed to merge item ${guestItem.productVariantId}: ${addResponse.statusText}`
-          );
-          return {
-            success: false,
-            item: guestItem,
-            error: addResponse.statusText,
-          };
-        }
+        successfullyMergedIds.push(guestItem.id);
+        return { success: true, item: guestItem };
       } catch (error) {
         console.error(
           `Error merging item ${guestItem.productVariantId}:`,
@@ -286,13 +265,28 @@ export const mergeGuestCartWithUserCart = async () => {
     // Wait for all merge operations to complete
     const results = await Promise.all(mergePromises);
 
-    // Count successful and failed merges
-    const mergedCount = results.filter((result) => result.success).length;
-    const skippedCount = results.filter((result) => !result.success).length;
+    // Filter guest cart to only keep items that FAILED to merge
+    const remainingGuestItems = guestItemsToMerge.filter(
+      (item) => !successfullyMergedIds.includes(item.id)
+    );
+
+    // Save remaining items back to guest cart
+    const updatedGuestCart = {
+      items: remainingGuestItems,
+      subtotal: Math.round(
+        remainingGuestItems.reduce((sum, item) => sum + (typeof item.subtotal === 'number' ? item.subtotal : parseFloat(item.subtotal)), 0)
+      ),
+      itemCount: remainingGuestItems.length,
+      totalQuantity: remainingGuestItems.reduce((sum, item) => sum + item.quantity, 0),
+    };
+    saveGuestCart(updatedGuestCart);
+
+    const mergedCount = successfullyMergedIds.length;
+    const failedCount = guestItemsToMerge.length - mergedCount;
 
     let message = `Successfully merged ${mergedCount} items from guest cart`;
-    if (skippedCount > 0) {
-      message += `. ${skippedCount} items could not be merged.`;
+    if (failedCount > 0) {
+      message += `. ${failedCount} items could not be merged.`;
     }
 
     if (mergedCount > 0) {
@@ -303,7 +297,7 @@ export const mergeGuestCartWithUserCart = async () => {
       success: true,
       message,
       mergedItems: mergedCount,
-      skippedItems: skippedCount,
+      skippedItems: failedCount,
     };
   } catch (error) {
     console.error("Error merging guest cart:", error);

@@ -35,7 +35,7 @@ const getImageUrl = (image) => {
 export default function CheckoutPage() {
   const { isAuthenticated, user } = useAuth();
   const router = useRouter();
-  const { cart, coupon, getCartTotals, clearCart } = useCart();
+  const { cart, coupon, getCartTotals, clearCart, loading } = useCart();
   const [addresses, setAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState("");
   const [loadingAddresses, setLoadingAddresses] = useState(true);
@@ -68,12 +68,12 @@ export default function CheckoutPage() {
     }
   }, [isAuthenticated, router]);
 
-  // Redirect if cart is empty (but not if order is already created)
+  // Redirect if cart is empty (but not if order is already created, and not if still loading)
   useEffect(() => {
-    if (isAuthenticated && cart.items?.length === 0 && !orderCreated) {
+    if (!loading && isAuthenticated && cart.items?.length === 0 && !orderCreated) {
       router.push("/cart");
     }
-  }, [isAuthenticated, cart, router, orderCreated]);
+  }, [isAuthenticated, cart, router, orderCreated, loading]);
 
   // Fetch payment settings
   useEffect(() => {
@@ -294,8 +294,8 @@ export default function CheckoutPage() {
             couponCode: coupon?.code || null,
             couponId: coupon?.id || null,
             discountAmount: totals.discount || 0,
-            selectedCourierId: selectedCourierId || null,
-            selectedShippingCharge: selectedShippingRate !== null ? selectedShippingRate : undefined,
+            selectedCourierId: null,
+            selectedShippingCharge: undefined,
           }),
         });
 
@@ -450,8 +450,8 @@ export default function CheckoutPage() {
                   couponId: coupon?.id || null,
                   discountAmount: totals.discount || 0,
                   notes: "",
-                  selectedCourierId: selectedCourierId || null,
-                  selectedShippingCharge: selectedShippingRate !== null ? selectedShippingRate : undefined,
+                  selectedCourierId: null,
+                  selectedShippingCharge: undefined,
                 }),
               });
 

@@ -1438,21 +1438,18 @@ export default function OrderDetailsPage() {
                       {couriers.map((courier) => {
                         const cid = String(courier.courier_company_id ?? "");
                         return (
-                          <div
+                          <Label
                             key={cid}
+                            htmlFor={`courier-${cid}`}
                             className={cn(
-                              "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors",
+                              "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-[var(--bg-secondary)]",
                               selectedCourierId === cid
                                 ? "border-[var(--accent)] bg-[var(--accent)]/5"
-                                : "border-[var(--border-color)] hover:bg-[var(--bg-secondary)]"
+                                : "border-[var(--border-color)]"
                             )}
-                            onClick={() => setSelectedCourierId(cid)}
                           >
                             <RadioGroupItem value={cid} id={`courier-${cid}`} />
-                            <Label
-                              htmlFor={`courier-${cid}`}
-                              className="flex flex-1 items-center justify-between cursor-pointer"
-                            >
+                            <div className="flex flex-1 items-center justify-between">
                               <div>
                                 <p className="font-medium text-[var(--text-primary)] text-sm">
                                   {courier.courier_name || "Unknown Courier"}
@@ -1469,8 +1466,8 @@ export default function OrderDetailsPage() {
                               <span className="font-semibold text-[var(--text-primary)] text-sm">
                                 ₹{courier.rate ?? 0}
                               </span>
-                            </Label>
-                          </div>
+                            </div>
+                          </Label>
                         );
                       })}
                     </RadioGroup>
