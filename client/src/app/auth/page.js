@@ -170,8 +170,13 @@ export default function AuthPage() {
     setVerifySubmitting(true);
     try {
       await verifyOtp(pendingEmail, otpString);
-      toast.success("Email verified. Please login.");
-      setActiveTab("login");
+      toast.success("Email verified and logged in successfully!");
+      
+      // Auto-redirect to checkout or target destination
+      const returnUrl = searchParams.get("returnUrl") || searchParams.get("redirect");
+      setTimeout(() => {
+        window.location.href = returnUrl ? decodeURIComponent(returnUrl) : "/";
+      }, 500);
     } catch (err) {
       toast.error(err.message || "Failed to verify OTP");
     } finally {

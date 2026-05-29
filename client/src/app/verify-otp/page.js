@@ -53,8 +53,13 @@ function VerifyOtpForm() {
     setIsSubmitting(true);
     try {
       await verifyOtp(email, otpString);
-      toast.success("Email verified! You can now login.");
-      setTimeout(() => router.push("/auth"), 600);
+      toast.success("Email verified and logged in successfully!");
+      
+      // Auto-redirect to checkout or target destination
+      const returnUrl = searchParams.get("returnUrl") || searchParams.get("redirect");
+      setTimeout(() => {
+        window.location.href = returnUrl ? decodeURIComponent(returnUrl) : "/";
+      }, 500);
     } catch (err) {
       toast.error(err.message || "Invalid OTP. Try again.");
     } finally {

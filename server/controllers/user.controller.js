@@ -374,7 +374,7 @@ export const verifyOtp = asyncHandler(async (req, res, next) => {
   }
 
   // Mark verified and clear OTP
-  await prisma.user.update({
+  const updatedUser = await prisma.user.update({
     where: { id: user.id },
     data: {
       otpVerified: true,
@@ -383,9 +383,30 @@ export const verifyOtp = asyncHandler(async (req, res, next) => {
     },
   });
 
-  return res
-    .status(200)
-    .json(new ApiResponsive(200, {}, "Email verified successfully"));
+  // Auto-login: Generate tokens
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+    user.id
+  );
+
+  // Set cookies
+  setCookies(res, accessToken, refreshToken);
+
+  // Remove sensitive data from response
+  const userWithoutPassword = { ...updatedUser };
+  delete userWithoutPassword.password;
+  delete userWithoutPassword.otp;
+  delete userWithoutPassword.otpVerifiedExpiry;
+
+  return res.status(200).json(
+    new ApiResponsive(
+      200,
+      {
+        user: userWithoutPassword,
+        accessToken,
+      },
+      "Email verified and logged in successfully"
+    )
+  );
 });
 
 // Forgot password - request reset

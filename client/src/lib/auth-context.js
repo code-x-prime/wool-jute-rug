@@ -281,6 +281,23 @@ export function AuthProvider({ children }) {
         method: "POST",
         body: JSON.stringify({ email, otp }),
       });
+
+      // Automatically set user session if returned by backend (auto-login)
+      if (res.data && res.data.user) {
+        setUser(res.data.user);
+
+        // Save user session to cookie with 1 day expiration
+        if (typeof window !== "undefined") {
+          document.cookie = `user_session=${encodeURIComponent(
+            JSON.stringify({
+              isAuthenticated: true,
+              userId: res.data.user.id,
+              timestamp: new Date().getTime(),
+            })
+          )}; path=/; max-age=86400`;
+        }
+      }
+
       return res;
     } catch (err) {
       setError(err.message || "Failed to verify OTP");
