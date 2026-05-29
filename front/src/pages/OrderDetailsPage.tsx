@@ -911,90 +911,92 @@ export default function OrderDetailsPage() {
           )}
 
           {/* Shiprocket Shipping */}
-          <Card className="bg-[var(--bg-card)] border-[var(--border-color)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] rounded-xl">
-            <CardHeader className="px-6 pt-6 pb-4">
-              <CardTitle className="text-lg font-semibold text-[var(--text-primary)] flex items-center">
-                <Truck className="mr-2 h-5 w-5 text-[var(--accent)]" />
-                Shipping (Shiprocket)
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-6 pb-6">
-              {orderDetails.shiprocket?.orderId || orderDetails.shiprocket?.awbCode ? (
-                <div className="space-y-3">
-                  {orderDetails.shiprocket.orderId && (
-                    <div>
-                      <p className="text-xs text-[var(--text-secondary)] mb-1">Shiprocket Order ID</p>
-                      <p className="font-mono text-sm text-[var(--text-primary)]">{orderDetails.shiprocket.orderId}</p>
-                    </div>
-                  )}
-                  {orderDetails.shiprocket.shipmentId && (
-                    <div>
-                      <p className="text-xs text-[var(--text-secondary)] mb-1">Shipment ID</p>
-                      <p className="font-mono text-sm text-[var(--text-primary)]">{orderDetails.shiprocket.shipmentId}</p>
-                    </div>
-                  )}
-                  {orderDetails.shiprocket.awbCode && (
-                    <div>
-                      <p className="text-xs text-[var(--text-secondary)] mb-1">AWB Number</p>
-                      <p className="font-mono text-sm text-[var(--text-primary)] bg-[var(--bg-secondary)] px-2 py-1 rounded border border-[var(--border-color)]">
-                        {orderDetails.shiprocket.awbCode}
-                      </p>
-                    </div>
-                  )}
-                  {orderDetails.shiprocket.courierName && (
-                    <div>
-                      <p className="text-xs text-[var(--text-secondary)] mb-1">Courier</p>
-                      <p className="font-medium text-[var(--text-primary)]">{orderDetails.shiprocket.courierName}</p>
-                    </div>
-                  )}
-                  {orderDetails.shiprocket.status && (
-                    <div>
-                      <p className="text-xs text-[var(--text-secondary)] mb-1">Status</p>
-                      <Badge className={cn("text-xs font-medium border", getStatusBadgeClass(orderDetails.shiprocket.status))}>
-                        {orderDetails.shiprocket.status}
-                      </Badge>
-                    </div>
-                  )}
-                  {orderDetails.shiprocket.trackingUrl && (
-                    <div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="mt-2"
-                        onClick={() => window.open(orderDetails.shiprocket!.trackingUrl!, "_blank")}
-                      >
-                        Open Tracking
-                      </Button>
-                    </div>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="mt-2"
-                    onClick={async () => {
-                      try {
-                        const res = await orders.syncOrderToShiprocket(id!);
-                        if (res?.data?.success) {
-                          toast.success("Synced with Shiprocket");
-                          fetchOrderDetails();
-                        } else {
-                          toast.error(res?.data?.message || "Sync failed");
+          {(isShiprocketEnabled || orderDetails.shiprocket) && (
+            <Card className="bg-[var(--bg-card)] border-[var(--border-color)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] rounded-xl">
+              <CardHeader className="px-6 pt-6 pb-4">
+                <CardTitle className="text-lg font-semibold text-[var(--text-primary)] flex items-center">
+                  <Truck className="mr-2 h-5 w-5 text-[var(--accent)]" />
+                  Shipping (Shiprocket)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-6 pb-6">
+                {orderDetails.shiprocket?.orderId || orderDetails.shiprocket?.awbCode ? (
+                  <div className="space-y-3">
+                    {orderDetails.shiprocket.orderId && (
+                      <div>
+                        <p className="text-xs text-[var(--text-secondary)] mb-1">Shiprocket Order ID</p>
+                        <p className="font-mono text-sm text-[var(--text-primary)]">{orderDetails.shiprocket.orderId}</p>
+                      </div>
+                    )}
+                    {orderDetails.shiprocket.shipmentId && (
+                      <div>
+                        <p className="text-xs text-[var(--text-secondary)] mb-1">Shipment ID</p>
+                        <p className="font-mono text-sm text-[var(--text-primary)]">{orderDetails.shiprocket.shipmentId}</p>
+                      </div>
+                    )}
+                    {orderDetails.shiprocket.awbCode && (
+                      <div>
+                        <p className="text-xs text-[var(--text-secondary)] mb-1">AWB Number</p>
+                        <p className="font-mono text-sm text-[var(--text-primary)] bg-[var(--bg-secondary)] px-2 py-1 rounded border border-[var(--border-color)]">
+                          {orderDetails.shiprocket.awbCode}
+                        </p>
+                      </div>
+                    )}
+                    {orderDetails.shiprocket.courierName && (
+                      <div>
+                        <p className="text-xs text-[var(--text-secondary)] mb-1">Courier</p>
+                        <p className="font-medium text-[var(--text-primary)]">{orderDetails.shiprocket.courierName}</p>
+                      </div>
+                    )}
+                    {orderDetails.shiprocket.status && (
+                      <div>
+                        <p className="text-xs text-[var(--text-secondary)] mb-1">Status</p>
+                        <Badge className={cn("text-xs font-medium border", getStatusBadgeClass(orderDetails.shiprocket.status))}>
+                          {orderDetails.shiprocket.status}
+                        </Badge>
+                      </div>
+                    )}
+                    {orderDetails.shiprocket.trackingUrl && (
+                      <div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-2"
+                          onClick={() => window.open(orderDetails.shiprocket!.trackingUrl!, "_blank")}
+                        >
+                          Open Tracking
+                        </Button>
+                      </div>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2"
+                      onClick={async () => {
+                        try {
+                          const res = await orders.syncOrderToShiprocket(id!);
+                          if (res?.data?.success) {
+                            toast.success("Synced with Shiprocket");
+                            fetchOrderDetails();
+                          } else {
+                            toast.error(res?.data?.message || "Sync failed");
+                          }
+                        } catch (err: unknown) {
+                          toast.error((err as { response?: { data?: { message?: string } } })?.response?.data?.message || "Sync failed");
                         }
-                      } catch (err: unknown) {
-                        toast.error((err as { response?: { data?: { message?: string } } })?.response?.data?.message || "Sync failed");
-                      }
-                    }}
-                  >
-                    Sync with Shiprocket
-                  </Button>
-                </div>
-              ) : (
-                <p className="text-sm text-[var(--text-secondary)]">
-                  Enable Shiprocket in Site Settings to auto-create shipments for new orders.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                      }}
+                    >
+                      Sync with Shiprocket
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    Enable Shiprocket in Site Settings to auto-create shipments for new orders.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Payment Info */}
           <Card className="bg-[var(--bg-card)] border-[var(--border-color)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] rounded-xl">
@@ -1299,66 +1301,7 @@ export default function OrderDetailsPage() {
             </Card>
           ) : null}
 
-          {/* Shiprocket Information */}
-          {orderDetails.shiprocket && (
-            <Card className="bg-[var(--bg-card)] border-[var(--border-color)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] rounded-xl">
-              <CardHeader className="px-6 pt-6 pb-4">
-                <CardTitle className="text-lg font-semibold text-[var(--text-primary)] flex items-center">
-                  <Truck className="mr-2 h-5 w-5 text-[var(--accent)]" />
-                  Shiprocket Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-6 pb-6">
-                <div className="space-y-3">
-                  {orderDetails.shiprocket.orderId && (
-                    <div>
-                      <p className="text-xs text-[var(--text-secondary)] mb-1">Shiprocket Order ID</p>
-                      <p className="font-mono text-sm text-[var(--text-primary)] bg-[var(--bg-secondary)] px-2 py-1 rounded border border-[var(--border-color)]">
-                        {orderDetails.shiprocket.orderId}
-                      </p>
-                    </div>
-                  )}
-                  {orderDetails.shiprocket.shipmentId && (
-                    <div>
-                      <p className="text-xs text-[var(--text-secondary)] mb-1">Shipment ID</p>
-                      <p className="font-mono text-sm text-[var(--text-primary)] bg-[var(--bg-secondary)] px-2 py-1 rounded border border-[var(--border-color)]">
-                        {orderDetails.shiprocket.shipmentId}
-                      </p>
-                    </div>
-                  )}
-                  {orderDetails.shiprocket.awbCode && (
-                    <div>
-                      <p className="text-xs text-[var(--text-secondary)] mb-1">AWB Code</p>
-                      <p className="font-mono text-sm text-[var(--text-primary)] bg-[var(--bg-secondary)] px-2 py-1 rounded border border-[var(--border-color)]">
-                        {orderDetails.shiprocket.awbCode}
-                      </p>
-                    </div>
-                  )}
-                  {orderDetails.shiprocket.courierName && (
-                    <div>
-                      <p className="text-xs text-[var(--text-secondary)] mb-1">Courier</p>
-                      <p className="font-medium text-[var(--text-primary)]">
-                        {orderDetails.shiprocket.courierName}
-                      </p>
-                    </div>
-                  )}
-                  {orderDetails.shiprocket.status && (
-                    <div>
-                      <p className="text-xs text-[var(--text-secondary)] mb-1">Shiprocket Status</p>
-                      <Badge
-                        className={cn(
-                          "text-xs font-medium border",
-                          getStatusBadgeClass(orderDetails.shiprocket.status)
-                        )}
-                      >
-                        {orderDetails.shiprocket.status}
-                      </Badge>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+
           {/* Shiprocket Courier Assignment */}
           {isShiprocketEnabled &&
             orderDetails.status !== "CANCELLED" &&
