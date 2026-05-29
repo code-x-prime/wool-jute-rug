@@ -5,12 +5,18 @@ import Link from "next/link";
 import Image from "next/image";
 import { fetchApi } from "@/lib/utils";
 
+const getImageUrl = (image) => {
+  if (!image) return "/placeholder.png";
+  if (image.startsWith("http")) return image;
+  return `https://desirediv-storage.blr1.digitaloceanspaces.com/${image}`;
+};
+
 const CategoryCard = ({ category }) => {
   return (
     <div className="flex flex-col items-center group cursor-pointer w-full">
       <div className="relative w-full aspect-[4/5] mb-4 overflow-hidden bg-[#f9f9f9] flex items-center justify-center transition-all duration-300 shadow-sm group-hover:shadow-md">
         <Image
-          src={category.image || "/placeholder.png"}
+          src={getImageUrl(category.image)}
           alt={category.name || "Category"}
           fill
           className="object-cover w-full h-full transition-transform duration-700 group-hover:scale-105"

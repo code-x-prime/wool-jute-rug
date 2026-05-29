@@ -49,6 +49,12 @@ const VerticalCategoriesCarousel = () => {
       category.name?.toLowerCase().includes("offer") ||
       category.slug === "offers";
 
+    const getImageUrl = (image) => {
+      if (!image) return "/placeholder.png";
+      if (image.startsWith("http")) return image;
+      return `https://desirediv-storage.blr1.digitaloceanspaces.com/${image}`;
+    };
+
     return (
       <motion.div
         initial={{ opacity: 0, x: -10 }}
@@ -76,7 +82,7 @@ const VerticalCategoriesCarousel = () => {
           ) : (
             <div className="relative w-full h-full overflow-hidden bg-gray-50 flex items-center justify-center">
               <Image
-                src={category.image || "/placeholder.png"}
+                src={getImageUrl(category.image)}
                 alt={category.name || "Category"}
                 width={200}
                 height={200}

@@ -68,6 +68,12 @@ const CategoriesCarousel = () => {
       category.name?.toLowerCase().includes("offer") ||
       category.slug === "offers";
 
+    const getImageUrl = (image) => {
+      if (!image) return "/placeholder.png";
+      if (image.startsWith("http")) return image;
+      return `https://desirediv-storage.blr1.digitaloceanspaces.com/${image}`;
+    };
+
     return (
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -95,7 +101,7 @@ const CategoriesCarousel = () => {
           ) : (
             <div className="relative w-full h-full overflow-hidden bg-gradient-to-br from-gray-50 to-white rounded-xl flex items-center justify-center group-hover:bg-gradient-to-br group-hover:from-[#136C5B]/5 group-hover:to-white transition-all duration-300">
               <Image
-                src={category.image || "/placeholder.png"}
+                src={getImageUrl(category.image)}
                 alt={category.name || "Category"}
                 width={200}
                 height={200}

@@ -220,11 +220,16 @@ export const getProductsByCategory = asyncHandler(async (req, res) => {
     };
   });
 
+  const formattedCategory = category ? {
+    ...category,
+    image: category.image ? getFileUrl(category.image) : null,
+  } : null;
+
   res.status(200).json(
     new ApiResponsive(
       200,
       {
-        category,
+        category: formattedCategory,
         products: formattedProducts,
         pagination: {
           total: totalProducts,

@@ -452,7 +452,14 @@ export default function ProductContent({ slug }) {
           {/* Main Image — touch/swipe + click to open lightbox */}
           <div
             className="relative aspect-[4/5] lg:h-[700px] w-full bg-[#f6f5f3] flex-1 group overflow-hidden cursor-zoom-in"
-            onClick={() => openLightbox(currentIndex >= 0 ? currentIndex : 0)}
+            style={{ touchAction: "pan-y" }}
+            onClick={(e) => {
+              if (e.currentTarget.__swiped) {
+                e.currentTarget.__swiped = false;
+                return;
+              }
+              openLightbox(currentIndex >= 0 ? currentIndex : 0);
+            }}
             onTouchStart={(e) => {
               // Record touch start X
               if (e.touches && e.touches[0]) {
@@ -466,6 +473,7 @@ export default function ProductContent({ slug }) {
               const delta = startX - endX;
               if (Math.abs(delta) > 50) {
                 // Swipe detected — prevent click/lightbox
+                e.currentTarget.__swiped = true;
                 e.stopPropagation();
                 if (delta > 0) {
                   // Swipe left → next image
@@ -1231,8 +1239,8 @@ export default function ProductContent({ slug }) {
               </div>
             )}
 
-            {/* Subcategory — show only the one(s) assigned to this product */}
-            {product.subCategories && product.subCategories.length > 0 && (
+            {/* Subcategory — show only if there's at least one assigned subcategory */}
+            {product.subCategories && product.subCategories.length > 0 && product.subCategories.some(sc => sc?.subCategory?.name || sc?.name || sc) && (
               <div className="flex flex-wrap gap-y-1">
                 <span className="font-medium w-32 text-gray-700">Sub-Category:</span>
                 <div className="flex flex-wrap gap-1">
@@ -1255,8 +1263,8 @@ export default function ProductContent({ slug }) {
               </div>
             )}
 
-            {/* Fallback: categories array (some APIs return product.categories instead) */}
-            {!product.subCategories && product.categories && product.categories.length > 0 && (
+            {/* Fallback: categories array — show only if at least one category has a subCategory */}
+            {!product.subCategories && product.categories && product.categories.some((c) => c.subCategory) && (
               <div className="flex flex-wrap gap-y-1">
                 <span className="font-medium w-32 text-gray-700">Sub-Category:</span>
                 <div className="flex flex-wrap gap-1">
