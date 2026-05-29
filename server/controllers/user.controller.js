@@ -1590,8 +1590,8 @@ export const resendVerificationEmail = asyncHandler(async (req, res, next) => {
   }
 
   // Find user by email
-  const user = await prisma.user.findUnique({
-    where: { email },
+  const user = await prisma.user.findFirst({
+    where: { email, signupSource: "credentials" },
   });
 
   if (!user) {

@@ -24,38 +24,47 @@ const sendEmail = async (options) => {
     try {
         const config = await getEmailConfig();
 
-        if (!config || !config.emailEnabled) {
-            console.log("Email not sent: Admin has not configured or enabled email delivery");
+        // Determine if email delivery is enabled (via DB setting or fallback env SMTP variables)
+        const emailEnabled = config ? config.emailEnabled : (process.env.SMTP_USER ? true : false);
+
+        if (!emailEnabled) {
+            console.log("Email not sent: Email delivery is not configured or enabled");
             return null;
         }
 
-        if (!config.smtpHost || !config.smtpUser || !config.smtpPassword) {
-            console.log("Email not sent: SMTP credentials not configured in Email Delivery settings");
+        // Host, user, password, port fallback to env variables
+        const host = config?.smtpHost || process.env.SMTP_HOST;
+        const user = config?.smtpUser || process.env.SMTP_USER;
+        let rawPassword = config?.smtpPassword || process.env.SMTP_PASSWORD;
+
+        if (!host || !user || !rawPassword) {
+            console.log("Email not sent: SMTP host, user, or password is not configured");
             return null;
         }
 
-        let password = config.smtpPassword;
-        if (config.smtpPassword.startsWith("enc:")) {
+        let password = rawPassword;
+        if (rawPassword.startsWith("enc:")) {
             try {
-                password = decrypt(config.smtpPassword.replace("enc:", ""));
+                password = decrypt(rawPassword.replace("enc:", ""));
             } catch (e) {
                 console.error("Failed to decrypt SMTP password:", e.message);
                 return null;
             }
         }
 
+        const port = config?.smtpPort || parseInt(process.env.SMTP_PORT || "587");
         const transporter = nodemailer.createTransport({
-            host: config.smtpHost,
-            port: config.smtpPort || 587,
-            secure: config.smtpPort === 465,
+            host: host,
+            port: port,
+            secure: port === 465,
             auth: {
-                user: config.smtpUser,
+                user: user,
                 pass: password,
             },
         });
 
-        const fromName = config.fromName || "Your Store";
-        const fromEmail = config.fromEmail || config.smtpUser;
+        const fromName = config?.fromName || process.env.FROM_NAME || "Wool Jute Rug";
+        const fromEmail = config?.fromEmail || process.env.FROM_EMAIL || user;
         const fromAddress = `${fromName} <${fromEmail}>`;
 
         const mailOptions = {
