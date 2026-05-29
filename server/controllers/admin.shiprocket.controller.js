@@ -20,6 +20,8 @@ import {
     printInvoice,
     getPickupLocations,
     addPickupLocation,
+    assignAWB,
+    schedulePickup,
 } from "../utils/shiprocket.js";
 
 // Get Shiprocket settings
@@ -244,7 +246,55 @@ export const deletePickupAddress = asyncHandler(async (req, res) => {
 
 // Check serviceability for an order
 export const checkOrderServiceability = asyncHandler(async (req, res) => {
-    const { pickupPincode, deliveryPincode, weight, cod } = req.body;
+    let { pickupPincode, deliveryPincode, weight, cod } = req.body;
+    const { orderId } = req.params;
+
+    // If orderId is provided, resolve details from database
+    if (orderId) {
+        const order = await prisma.order.findUnique({
+            where: { id: orderId },
+            include: {
+                shippingAddress: true,
+                items: {
+                    include: {
+                        variant: true,
+                    },
+                },
+            },
+        });
+
+        if (!order) {
+            throw new ApiError(404, "Order not found");
+        }
+
+        const shippingAddress = order.shippingAddress;
+        if (!shippingAddress) {
+            throw new ApiError(400, "Order does not have a shipping address");
+        }
+
+        const pickupAddress = await prisma.shiprocketPickupAddress.findFirst({
+            where: { isDefault: true },
+        });
+
+        if (!pickupAddress) {
+            throw new ApiError(400, "Default pickup address not configured");
+        }
+
+        const settings = await getShiprocketSettings();
+
+        // Calculate total weight
+        let totalWeight = 0;
+        for (const item of order.items) {
+            const variant = item.variant;
+            const itemWeight = variant?.shippingWeight || settings?.defaultWeight || 0.5;
+            totalWeight += itemWeight * item.quantity;
+        }
+
+        pickupPincode = pickupAddress.pincode;
+        deliveryPincode = shippingAddress.postalCode;
+        weight = totalWeight;
+        cod = order.paymentMethod === "CASH";
+    }
 
     if (!pickupPincode || !deliveryPincode || !weight) {
         throw new ApiError(400, "Pickup pincode, delivery pincode, and weight are required");
@@ -259,6 +309,75 @@ export const checkOrderServiceability = asyncHandler(async (req, res) => {
 
     res.status(200).json(
         new ApiResponsive(200, { serviceability: result }, "Serviceability checked successfully")
+    );
+});
+
+// Book shipment for an order (assign AWB and schedule pickup)
+export const bookOrderShipment = asyncHandler(async (req, res) => {
+    const { orderId } = req.params;
+    const { courierId } = req.body;
+
+    if (!courierId) {
+        throw new ApiError(400, "Courier ID is required");
+    }
+
+    const order = await prisma.order.findUnique({
+        where: { id: orderId },
+    });
+
+    if (!order) {
+        throw new ApiError(404, "Order not found");
+    }
+
+    if (!order.shiprocketShipmentId) {
+        throw new ApiError(400, "Order is not synced to Shiprocket yet. Please sync the order first.");
+    }
+
+    // Assign AWB to shipment
+    const awbResponse = await assignAWB(order.shiprocketShipmentId, Number(courierId));
+
+    const awbCode = awbResponse.response?.data?.awb_code || null;
+    const courierName = awbResponse.response?.data?.courier_name || null;
+
+    if (!awbCode) {
+        throw new ApiError(400, awbResponse.message || "Failed to assign AWB from Shiprocket");
+    }
+
+    // Update order status and AWB details
+    const updatedOrder = await prisma.order.update({
+        where: { id: orderId },
+        data: {
+            awbCode,
+            courierName,
+            shiprocketStatus: "AWB_ASSIGNED",
+        },
+    });
+
+    // Try to schedule pickup
+    try {
+        await schedulePickup(order.shiprocketShipmentId);
+        await prisma.order.update({
+            where: { id: orderId },
+            data: {
+                shiprocketStatus: "PICKUP_SCHEDULED",
+            },
+        });
+    } catch (pickupError) {
+        console.error("Failed to schedule pickup:", pickupError.message);
+        // Non-critical, AWB is already assigned successfully
+    }
+
+    res.status(200).json(
+        new ApiResponsive(
+            200,
+            {
+                success: true,
+                awb_code: awbCode,
+                courier_name: courierName,
+                order: updatedOrder,
+            },
+            "Shipment booked successfully"
+        )
     );
 });
 

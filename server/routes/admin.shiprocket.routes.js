@@ -13,6 +13,7 @@ import {
     updatePickupAddress,
     deletePickupAddress,
     checkOrderServiceability,
+    bookOrderShipment,
     syncOrderToShiprocket,
     getOrderTracking,
     cancelShipment,
@@ -36,9 +37,11 @@ router.delete("/pickup-addresses/:id", isAdmin, deletePickupAddress);
 
 // Serviceability check
 router.post("/serviceability", isAdmin, checkOrderServiceability);
+router.post("/orders/:orderId/serviceability", isAdmin, checkOrderServiceability);
 
 // Order operations
 router.post("/orders/:orderId/sync", isAdmin, syncOrderToShiprocket);
+router.post("/orders/:orderId/book", isAdmin, bookOrderShipment);
 router.get("/orders/:orderId/tracking", isAdmin, getOrderTracking);
 router.post("/orders/:orderId/cancel", isAdmin, cancelShipment);
 router.get("/orders/:orderId/label", isAdmin, getShippingLabel);
