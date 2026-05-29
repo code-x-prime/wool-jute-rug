@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { orders } from "@/api/adminService";
+import api from "@/api/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -108,6 +109,7 @@ export default function OrderDetailsPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Shiprocket Courier Assignment state
+  const [isShiprocketEnabled, setIsShiprocketEnabled] = useState<boolean>(false);
   const [couriers, setCouriers] = useState<ShiprocketCourier[]>([]);
   const [selectedCourierId, setSelectedCourierId] = useState<string>("");
   const [isFetchingCouriers, setIsFetchingCouriers] = useState(false);
@@ -206,11 +208,25 @@ export default function OrderDetailsPage() {
 
   useEffect(() => {
     fetchOrderDetails();
+
+    const fetchShiprocketSettings = async () => {
+      try {
+        const response = await api.get("/api/admin/shiprocket/settings");
+        if (response.data?.success) {
+          setIsShiprocketEnabled(response.data.data?.settings?.isEnabled || false);
+        }
+      } catch (error) {
+        console.error("Error fetching Shiprocket settings:", error);
+        setIsShiprocketEnabled(false);
+      }
+    };
+    fetchShiprocketSettings();
   }, [id, fetchOrderDetails]);
 
   // Fetch courier serviceability — stable callback that reads orderDetails via ref
   // Using ref instead of putting orderDetails in deps prevents infinite re-render
   const fetchCouriers = useCallback(async () => {
+    if (!isShiprocketEnabled) return;
     if (!id) return;
     const od = orderDetailsRef.current;
     if (!od) return;
@@ -237,18 +253,18 @@ export default function OrderDetailsPage() {
     } finally {
       setIsFetchingCouriers(false);
     }
-  }, [id]); // stable — does NOT depend on orderDetails state
+  }, [id, isShiprocketEnabled]); // stable — does NOT depend on orderDetails state
 
   useEffect(() => {
     if (orderDetails) {
       // Keep ref in sync
       orderDetailsRef.current = orderDetails;
-      // Only fetch couriers once when order first loads
-      if (!hasFetchedCouriers.current && !orderDetails.shiprocket?.awbCode) {
+      // Only fetch couriers once when order first loads and Shiprocket is enabled
+      if (isShiprocketEnabled && !hasFetchedCouriers.current && !orderDetails.shiprocket?.awbCode) {
         fetchCouriers();
       }
     }
-  }, [orderDetails, fetchCouriers]);
+  }, [orderDetails, fetchCouriers, isShiprocketEnabled]);
 
   // Format date
   const formatDate = (dateString: string) => {
@@ -1344,7 +1360,8 @@ export default function OrderDetailsPage() {
             </Card>
           )}
           {/* Shiprocket Courier Assignment */}
-          {orderDetails.status !== "CANCELLED" &&
+          {isShiprocketEnabled &&
+            orderDetails.status !== "CANCELLED" &&
             orderDetails.status !== "DELIVERED" && (
             <Card className="bg-[var(--bg-card)] border-[var(--border-color)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] rounded-xl">
               <CardHeader className="px-6 pt-6 pb-4">
