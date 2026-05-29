@@ -853,13 +853,13 @@ export default function OrderDetailsPage() {
             <CardContent className="px-6 pb-6">
               <div className="space-y-3">
                 <div>
-                  <p className="text-xs text-[var(--text-secondary)] mb-1">{t('return_requests.common.name')}</p>
+                  <p className="text-xs text-[var(--text-secondary)] mb-1">{t('partners_tab.common.name')}</p>
                   <p className="font-medium text-[var(--text-primary)]">
                     {orderDetails.user?.name || "Guest"}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-[var(--text-secondary)] mb-1">{t('return_requests.common.email')}</p>
+                  <p className="text-xs text-[var(--text-secondary)] mb-1">{t('partners_tab.common.email')}</p>
                   <p className="font-medium text-[var(--text-primary)]">
                     {orderDetails.user?.email || t('orders.details.not_available')}
                   </p>
