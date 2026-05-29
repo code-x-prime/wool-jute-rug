@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
@@ -449,10 +449,36 @@ export default function ProductContent({ slug }) {
             </div>
           )}
 
-          {/* Main Image — click to open lightbox */}
+          {/* Main Image — touch/swipe + click to open lightbox */}
           <div
             className="relative aspect-[4/5] lg:h-[700px] w-full bg-[#f6f5f3] flex-1 group overflow-hidden cursor-zoom-in"
             onClick={() => openLightbox(currentIndex >= 0 ? currentIndex : 0)}
+            onTouchStart={(e) => {
+              // Record touch start X
+              if (e.touches && e.touches[0]) {
+                e.currentTarget.__touchStartX = e.touches[0].clientX;
+              }
+            }}
+            onTouchEnd={(e) => {
+              const startX = e.currentTarget.__touchStartX;
+              if (startX == null) return;
+              const endX = e.changedTouches?.[0]?.clientX ?? startX;
+              const delta = startX - endX;
+              if (Math.abs(delta) > 50) {
+                // Swipe detected — prevent click/lightbox
+                e.stopPropagation();
+                if (delta > 0) {
+                  // Swipe left → next image
+                  const next = (currentIndex + 1) % imagesToShow.length;
+                  setMainImage(imagesToShow[next]);
+                } else {
+                  // Swipe right → previous image
+                  const prev = (currentIndex - 1 + imagesToShow.length) % imagesToShow.length;
+                  setMainImage(imagesToShow[prev]);
+                }
+              }
+              e.currentTarget.__touchStartX = null;
+            }}
           >
             <Image
               src={getImageUrl(currentMainImage?.url)}
@@ -1202,6 +1228,56 @@ export default function ProductContent({ slug }) {
                 >
                   {product.category?.name}
                 </Link>
+              </div>
+            )}
+
+            {/* Subcategory — show only the one(s) assigned to this product */}
+            {product.subCategories && product.subCategories.length > 0 && (
+              <div className="flex flex-wrap gap-y-1">
+                <span className="font-medium w-32 text-gray-700">Sub-Category:</span>
+                <div className="flex flex-wrap gap-1">
+                  {product.subCategories.map((sc, idx) => {
+                    const name = sc?.subCategory?.name || sc?.name || sc;
+                    const slug = sc?.subCategory?.slug || sc?.slug || "";
+                    return slug ? (
+                      <Link
+                        key={idx}
+                        href={`/products?category=${product.category?.slug || ""}&subcategory=${slug}`}
+                        className="text-primary hover:underline"
+                      >
+                        {name}{idx < product.subCategories.length - 1 ? "," : ""}
+                      </Link>
+                    ) : (
+                      <span key={idx} className="text-gray-600">{name}{idx < product.subCategories.length - 1 ? ", " : ""}</span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Fallback: categories array (some APIs return product.categories instead) */}
+            {!product.subCategories && product.categories && product.categories.length > 0 && (
+              <div className="flex flex-wrap gap-y-1">
+                <span className="font-medium w-32 text-gray-700">Sub-Category:</span>
+                <div className="flex flex-wrap gap-1">
+                  {product.categories
+                    .filter((c) => c.subCategory)
+                    .map((c, idx, arr) => {
+                      const name = c.subCategory?.name;
+                      const slug = c.subCategory?.slug;
+                      return slug ? (
+                        <Link
+                          key={idx}
+                          href={`/products?category=${product.category?.slug || ""}&subcategory=${slug}`}
+                          className="text-primary hover:underline"
+                        >
+                          {name}{idx < arr.length - 1 ? "," : ""}
+                        </Link>
+                      ) : (
+                        <span key={idx} className="text-gray-600">{name}{idx < arr.length - 1 ? ", " : ""}</span>
+                      );
+                    })}
+                </div>
               </div>
             )}
           </div>

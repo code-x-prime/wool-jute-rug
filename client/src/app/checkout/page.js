@@ -19,7 +19,6 @@ import {
   PartyPopper,
   Gift,
   Wallet,
-  Truck,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -58,17 +57,9 @@ export default function CheckoutPage() {
   const [successAnimation, setSuccessAnimation] = useState(false);
   const [redirectCountdown, setRedirectCountdown] = useState(2); // Reduced from 3 to 2 seconds
   const [confettiCannon, setConfettiCannon] = useState(false);
-  const [shippingOptions, setShippingOptions] = useState([]);
-  const [selectedCourierId, setSelectedCourierId] = useState(null);
-  const [selectedShippingRate, setSelectedShippingRate] = useState(null);
-  const [loadingShipping, setLoadingShipping] = useState(false);
 
   const rawTotals = getCartTotals();
-  const totals = {
-    ...rawTotals,
-    shipping: selectedShippingRate !== null ? selectedShippingRate : rawTotals.shipping,
-    total: rawTotals.subtotal - rawTotals.discount + (selectedShippingRate !== null ? selectedShippingRate : rawTotals.shipping) + rawTotals.tax,
-  };
+  const totals = rawTotals;
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -113,30 +104,6 @@ export default function CheckoutPage() {
     fetchPaymentSettings();
   }, []);
 
-  // Fetch shipping rates for a given address
-  const fetchShippingRates = useCallback(async (addressId) => {
-    if (!addressId) return;
-    setLoadingShipping(true);
-    setShippingOptions([]);
-    setSelectedCourierId(null);
-    setSelectedShippingRate(null);
-    try {
-      const response = await fetchApi("/shipping/rates", {
-        method: "POST",
-        credentials: "include",
-        body: JSON.stringify({ addressId }),
-      });
-      if (response.success && response.data?.couriers?.length > 0) {
-        setShippingOptions(response.data.couriers);
-        setSelectedCourierId(response.data.couriers[0].courierId);
-        setSelectedShippingRate(response.data.couriers[0].rate);
-      }
-    } catch (err) {
-      console.error("Failed to fetch shipping rates:", err);
-    } finally {
-      setLoadingShipping(false);
-    }
-  }, []);
 
   // Fetch addresses
   const fetchAddresses = useCallback(async () => {
@@ -159,7 +126,6 @@ export default function CheckoutPage() {
           const chosenAddress = defaultAddress || response.data.addresses[0];
           if (chosenAddress) {
             setSelectedAddressId(chosenAddress.id);
-            fetchShippingRates(chosenAddress.id);
           }
         }
       }
@@ -169,7 +135,7 @@ export default function CheckoutPage() {
     } finally {
       setLoadingAddresses(false);
     }
-  }, [isAuthenticated, fetchShippingRates]);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     fetchAddresses();
@@ -209,7 +175,6 @@ export default function CheckoutPage() {
   // Handle address selection
   const handleAddressSelect = (id) => {
     setSelectedAddressId(id);
-    fetchShippingRates(id);
   };
 
   // Handle payment method selection
@@ -848,69 +813,6 @@ export default function CheckoutPage() {
             )}
           </div>
 
-          {/* Delivery Options */}
-          <div className="bg-white rounded-lg shadow-sm border p-6">
-            <h2 className="text-lg font-semibold flex items-center mb-4">
-              <Truck className="h-5 w-5 mr-2 text-brand-brown" />
-              Delivery Options
-            </h2>
-
-            {loadingShipping ? (
-              <div className="flex items-center gap-2 text-gray-500 text-sm py-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Fetching delivery rates...
-              </div>
-            ) : shippingOptions.length === 0 ? (
-              <div className="text-sm text-gray-500 py-2">
-                Select a shipping address to see delivery options.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {shippingOptions.map((option) => (
-                  <div
-                    key={option.courierId ?? "fixed"}
-                    className={`border rounded-md p-4 cursor-pointer transition-all ${selectedCourierId === option.courierId
-                        ? "border-brand-brown bg-brand-brown/5"
-                        : "hover:border-gray-400"
-                      }`}
-                    onClick={() => {
-                      setSelectedCourierId(option.courierId);
-                      setSelectedShippingRate(option.rate);
-                    }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="radio"
-                          name="courierSelection"
-                          checked={selectedCourierId === option.courierId}
-                          onChange={() => {
-                            setSelectedCourierId(option.courierId);
-                            setSelectedShippingRate(option.rate);
-                          }}
-                          className="h-4 w-4 text-brand-brown border-gray-300 focus:ring-brand-brown"
-                        />
-                        <div>
-                          <p className="font-medium text-sm">{option.courierName}</p>
-                          <p className="text-xs text-gray-500">{option.estimatedDays}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        {option.isFreeShipping || option.rate === 0 ? (
-                          <span className="text-brand-brown font-semibold text-sm">FREE</span>
-                        ) : (
-                          <span className="font-semibold text-sm">{formatCurrency(option.rate)}</span>
-                        )}
-                        {option.isFreeShipping && option.originalRate > 0 && (
-                          <p className="text-xs text-gray-400 line-through">{formatCurrency(option.originalRate)}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
 
           {/* Payment Method */}
           <div className="bg-white rounded-lg shadow-sm border p-6">

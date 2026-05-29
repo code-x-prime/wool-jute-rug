@@ -44,6 +44,7 @@ function ProductsContent() {
   const decodePlus = (str) => (str ? str.replace(/\+/g, " ") : "");
   const searchQuery = decodePlus(searchParams.get("search") || "");
   const categorySlug = searchParams.get("category") || "";
+  const subcategorySlug = searchParams.get("subcategory") || "";
   const productType = searchParams.get("productType") || "";
   const colorId = searchParams.get("color") || "";
   const sizeId = searchParams.get("size") || "";
@@ -85,6 +86,7 @@ function ProductsContent() {
   const [filters, setFilters] = useState({
     search: searchQuery,
     category: categorySlug,
+    subcategory: subcategorySlug,
     productType: productType,
     color: colorId,
     size: sizeId,
@@ -136,6 +138,7 @@ function ProductsContent() {
     const newFiltersFromURL = {
       search: searchQuery,
       category: categorySlug,
+      subcategory: subcategorySlug,
       productType: productType,
       color: colorId,
       size: sizeId,
@@ -148,6 +151,7 @@ function ProductsContent() {
     const isSame =
       filters.search === newFiltersFromURL.search &&
       filters.category === newFiltersFromURL.category &&
+      filters.subcategory === newFiltersFromURL.subcategory &&
       filters.productType === newFiltersFromURL.productType &&
       filters.color === newFiltersFromURL.color &&
       filters.size === newFiltersFromURL.size &&
@@ -168,6 +172,7 @@ function ProductsContent() {
   }, [
     searchQuery,
     categorySlug,
+    subcategorySlug,
     productType,
     colorId,
     sizeId,
@@ -262,6 +267,9 @@ function ProductsContent() {
           if (filters.search) queryParams.append("search", filters.search);
           if (filters.category)
             queryParams.append("category", filters.category);
+          // Pass subcategory if present (for subcategory-filtered product pages)
+          if (filters.subcategory)
+            queryParams.append("subcategory", filters.subcategory);
           if (filters.minPrice)
             queryParams.append("minPrice", filters.minPrice);
           if (filters.maxPrice)
@@ -615,16 +623,19 @@ function ProductsContent() {
 
         {/* Header Section */}
         <div className="mb-10 text-center font-jost mt-4 pb-6 border-b border-gray-100">
-          {/* <div className="text-xs text-gray-500 mb-2 font-medium">
-            Home / {categories.find(c => c.slug === filters.category)?.name || "Rugs"} / <span className="text-gray-900">{categories.find(c => c.slug === filters.category)?.name || "New Arrivals"}</span>
-          </div> */}
           <h1 className="text-3xl md:text-4xl text-gray-900 mb-4 font-normal tracking-wide">
-            {categories.find(c => c.slug === filters.category)?.name || "New Arrivals"}
+            {filters.subcategory
+              ? (categories
+                  .flatMap((c) => c.children || [])
+                  .find((s) => s.slug === filters.subcategory)?.name
+                  || filters.subcategory)
+              : (categories.find((c) => c.slug === filters.category)?.name || "New Arrivals")}
           </h1>
-          <p className="text-gray-500 text-sm md:text-base max-w-3xl mx-auto font-light leading-relaxed">
-            Discover our stunning collection of new arrival rugs and handmade carpets. From the latest carpet designs to unique patterns, we offer a variety of rug sizes and colors to suit any space. Crafted with care, each rug adds luxury, durability, and style to your home. Shop now for timeless designs that transform your living space.
-          </p>
-
+          {!filters.category && !filters.subcategory && (
+            <p className="text-gray-500 text-sm md:text-base max-w-2xl mx-auto font-light leading-relaxed">
+              Discover our stunning collection of new arrival products.
+            </p>
+          )}
         </div>
 
         {/* Mobile filter toggle */}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { orders } from "@/api/adminService";
 import { Button } from "@/components/ui/button";
@@ -17,9 +17,21 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { formatCurrency, debugData, cn } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/context/LanguageContext";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// Interface declared outside component to prevent unstable re-renders
+interface ShiprocketCourier {
+  courier_company_id: number;
+  courier_name: string;
+  etd: string;
+  rate: number;
+  cod: number;
+}
 
 export default function OrderDetailsPage() {
   const { id } = useParams<{ id: string }>();
@@ -95,6 +107,17 @@ export default function OrderDetailsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Shiprocket Courier Assignment state
+  const [couriers, setCouriers] = useState<ShiprocketCourier[]>([]);
+  const [selectedCourierId, setSelectedCourierId] = useState<string>("");
+  const [isFetchingCouriers, setIsFetchingCouriers] = useState(false);
+  const [courierError, setCourierError] = useState<string | null>(null);
+  const [isBooking, setIsBooking] = useState(false);
+  const [bookingResult, setBookingResult] = useState<{ awb: string; trackingUrl?: string } | null>(null);
+  // Ref to prevent re-fetching couriers when other state changes
+  const hasFetchedCouriers = useRef(false);
+  const orderDetailsRef = useRef<OrderDetails | null>(null);
+
   interface OrderItem {
     id: string;
     productId: string;
@@ -154,10 +177,6 @@ export default function OrderDetailsPage() {
       setIsLoading(true);
       const response = await orders.getOrderById(id);
 
-      // Use the debug utility
-      debugData("Order API Response", response, true);
-      debugData("Order Data", response?.data?.data, true);
-
       if (response?.data?.success && response?.data?.data?.order) {
         // Fix: Access the order data correctly from response.data.data.order
         setOrderDetails(response.data.data.order);
@@ -170,13 +189,10 @@ export default function OrderDetailsPage() {
       // Handle axios error properly
       if (error && typeof error === 'object' && 'response' in error) {
         const axiosError = error as { response: { status: number; data?: { message?: string } } };
-        debugData("Error Response", axiosError.response, true);
         setError(
           `API Error (${axiosError.response.status}): ${axiosError.response.data?.message || "Unknown error"}`
         );
       } else if (error && typeof error === 'object' && 'request' in error) {
-        const requestError = error as { request: unknown };
-        debugData("Error Request", requestError.request, true);
         setError("Network error: No response received from server");
       } else if (error instanceof Error) {
         setError(`Error: ${error.message}`);
@@ -191,6 +207,48 @@ export default function OrderDetailsPage() {
   useEffect(() => {
     fetchOrderDetails();
   }, [id, fetchOrderDetails]);
+
+  // Fetch courier serviceability — stable callback that reads orderDetails via ref
+  // Using ref instead of putting orderDetails in deps prevents infinite re-render
+  const fetchCouriers = useCallback(async () => {
+    if (!id) return;
+    const od = orderDetailsRef.current;
+    if (!od) return;
+    if (od.shiprocket?.awbCode) return; // already shipped
+    if (od.status === "CANCELLED" || od.status === "DELIVERED") return;
+    if (hasFetchedCouriers.current) return; // already fetched
+
+    try {
+      hasFetchedCouriers.current = true;
+      setIsFetchingCouriers(true);
+      setCourierError(null);
+      const res = await orders.getCourierServiceability(id);
+      const data = res?.data?.data;
+      const courierList =
+        data?.available_courier_companies ??
+        data?.couriers ??
+        data?.courier_companies ??
+        [];
+      setCouriers(Array.isArray(courierList) ? courierList : []);
+    } catch (err: unknown) {
+      hasFetchedCouriers.current = false; // allow retry
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setCourierError(msg || "Failed to fetch courier options");
+    } finally {
+      setIsFetchingCouriers(false);
+    }
+  }, [id]); // stable — does NOT depend on orderDetails state
+
+  useEffect(() => {
+    if (orderDetails) {
+      // Keep ref in sync
+      orderDetailsRef.current = orderDetails;
+      // Only fetch couriers once when order first loads
+      if (!hasFetchedCouriers.current && !orderDetails.shiprocket?.awbCode) {
+        fetchCouriers();
+      }
+    }
+  }, [orderDetails, fetchCouriers]);
 
   // Format date
   const formatDate = (dateString: string) => {
@@ -395,15 +453,61 @@ export default function OrderDetailsPage() {
     return "/images/product-placeholder.png";
   };
 
-  // Loading state
+  // Loading state — structured skeleton matching page layout
   if (isLoading && !orderDetails) {
     return (
-      <div className="flex h-full w-full items-center justify-center py-20">
-        <div className="flex flex-col items-center">
-          <Loader2 className="h-10 w-10 animate-spin text-[var(--accent)]" />
-          <p className="mt-4 text-base text-[var(--text-secondary)]">
-            {t('partners_tab.common.loading').replace('Partners', 'Order details').replace('partners', 'order details').replace('Partner', 'Order').replace('partner', 'order')}
-          </p>
+      <div className="space-y-8">
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-36" />
+          <Skeleton className="h-10 w-72" />
+          <Skeleton className="h-4 w-56" />
+          <div className="h-px bg-[var(--border-color)]" />
+        </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-3">
+            <Card className="rounded-xl border-[var(--border-color)]">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="flex flex-col items-center flex-1 gap-2">
+                      <Skeleton className="w-10 h-10 rounded-full" />
+                      <Skeleton className="h-3 w-16" />
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="lg:col-span-2">
+            <Card className="rounded-xl border-[var(--border-color)]">
+              <CardContent className="p-6 space-y-4">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="flex items-center gap-4 py-4 border-b border-[var(--border-color)]">
+                    <Skeleton className="h-16 w-16 rounded-lg flex-shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-48" />
+                      <Skeleton className="h-3 w-32" />
+                    </div>
+                    <div className="space-y-2 text-right">
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-16" />
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+          <div className="space-y-6">
+            {[0, 1, 2].map((i) => (
+              <Card key={i} className="rounded-xl border-[var(--border-color)]">
+                <CardContent className="p-6 space-y-3">
+                  <Skeleton className="h-5 w-32" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -1236,6 +1340,185 @@ export default function OrderDetailsPage() {
                     </div>
                   )}
                 </div>
+              </CardContent>
+            </Card>
+          )}
+          {/* Shiprocket Courier Assignment */}
+          {orderDetails.status !== "CANCELLED" &&
+            orderDetails.status !== "DELIVERED" && (
+            <Card className="bg-[var(--bg-card)] border-[var(--border-color)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] rounded-xl">
+              <CardHeader className="px-6 pt-6 pb-4">
+                <CardTitle className="text-lg font-semibold text-[var(--text-primary)] flex items-center">
+                  <Truck className="mr-2 h-5 w-5 text-[var(--accent)]" />
+                  Shiprocket Courier Assignment
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-6 pb-6">
+                {orderDetails.shiprocket?.awbCode || bookingResult ? (
+                  /* Already booked — show AWB success box */
+                  <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-4 space-y-2">
+                    <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold">
+                      <CheckCircle className="h-5 w-5" />
+                      Shipment Booked Successfully
+                    </div>
+                    <div className="text-sm text-[var(--text-primary)]">
+                      <span className="text-[var(--text-secondary)]">AWB Number: </span>
+                      <span className="font-mono font-semibold">
+                        {bookingResult?.awb || orderDetails.shiprocket?.awbCode}
+                      </span>
+                    </div>
+                    {orderDetails.shiprocket?.courierName && (
+                      <div className="text-sm text-[var(--text-primary)]">
+                        <span className="text-[var(--text-secondary)]">Courier: </span>
+                        {orderDetails.shiprocket.courierName}
+                      </div>
+                    )}
+                    {(bookingResult?.trackingUrl || orderDetails.shiprocket?.trackingUrl) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-2 border-emerald-500/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
+                        onClick={() =>
+                          window.open(
+                            bookingResult?.trackingUrl || orderDetails.shiprocket!.trackingUrl!,
+                            "_blank"
+                          )
+                        }
+                      >
+                        Track Shipment
+                      </Button>
+                    )}
+                  </div>
+                ) : isFetchingCouriers ? (
+                  /* Loading couriers */
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Fetching available couriers…
+                    </div>
+                    {[0, 1, 2].map((i) => (
+                      <Skeleton key={i} className="h-14 w-full rounded-lg" />
+                    ))}
+                  </div>
+                ) : courierError ? (
+                  /* Error state */
+                  <div className="rounded-lg border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-[var(--destructive)] text-sm font-medium">
+                      <AlertTriangle className="h-4 w-4" />
+                      {courierError}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-[var(--border-color)]"
+                      onClick={fetchCouriers}
+                    >
+                      Retry
+                    </Button>
+                  </div>
+                ) : couriers.length === 0 ? (
+                  /* No couriers available */
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    No courier options available for this order. Ensure Shiprocket is configured in Site Settings.
+                  </p>
+                ) : (
+                  /* Courier selection + booking */
+                  <div className="space-y-4">
+                    <RadioGroup
+                      value={selectedCourierId}
+                      onValueChange={(val) => {
+                        try {
+                          setSelectedCourierId(val ?? "");
+                        } catch {
+                          /* guard against unexpected errors */
+                        }
+                      }}
+                      className="space-y-2"
+                    >
+                      {couriers.map((courier) => {
+                        const cid = String(courier.courier_company_id ?? "");
+                        return (
+                          <div
+                            key={cid}
+                            className={cn(
+                              "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors",
+                              selectedCourierId === cid
+                                ? "border-[var(--accent)] bg-[var(--accent)]/5"
+                                : "border-[var(--border-color)] hover:bg-[var(--bg-secondary)]"
+                            )}
+                            onClick={() => setSelectedCourierId(cid)}
+                          >
+                            <RadioGroupItem value={cid} id={`courier-${cid}`} />
+                            <Label
+                              htmlFor={`courier-${cid}`}
+                              className="flex flex-1 items-center justify-between cursor-pointer"
+                            >
+                              <div>
+                                <p className="font-medium text-[var(--text-primary)] text-sm">
+                                  {courier.courier_name || "Unknown Courier"}
+                                </p>
+                                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                                  ETA: {courier.etd || "N/A"}
+                                  {courier.cod === 1 && (
+                                    <span className="ml-2 text-emerald-600 dark:text-emerald-400">
+                                      • COD
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                              <span className="font-semibold text-[var(--text-primary)] text-sm">
+                                ₹{courier.rate ?? 0}
+                              </span>
+                            </Label>
+                          </div>
+                        );
+                      })}
+                    </RadioGroup>
+
+                    <Button
+                      className="w-full"
+                      disabled={!selectedCourierId || isBooking}
+                      onClick={async () => {
+                        if (!selectedCourierId || !id) return;
+                        try {
+                          setIsBooking(true);
+                          const res = await orders.bookShipment(id, Number(selectedCourierId));
+                          if (res?.data?.success) {
+                            const d = res.data.data;
+                            const awb =
+                              d?.awb_code ??
+                              d?.awbCode ??
+                              d?.awb ??
+                              "";
+                            const trackingUrl =
+                              d?.tracking_url ??
+                              d?.trackingUrl ??
+                              (awb ? `https://shiprocket.co/tracking/${awb}` : undefined);
+                            setBookingResult({ awb, trackingUrl });
+                            toast.success("Shipment booked successfully!");
+                            fetchOrderDetails();
+                          } else {
+                            toast.error(res?.data?.message || "Booking failed. Please try again.");
+                          }
+                        } catch (err: unknown) {
+                          const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+                          toast.error(msg || "Failed to book shipment");
+                        } finally {
+                          setIsBooking(false);
+                        }
+                      }}
+                    >
+                      {isBooking ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Booking…
+                        </>
+                      ) : (
+                        "Book Shipment"
+                      )}
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
