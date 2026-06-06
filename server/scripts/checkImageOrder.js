@@ -37,7 +37,7 @@ async function checkImageOrder() {
       );
 
       if (primaryCount !== 1) {
-        console.log(`  ❌ Issue: ${primaryCount} primary images (should be 1)`);
+        console.log(`  ❌ Issue: ${primaryCount} primary images(should be 1)`);
       }
       if (orderIssues) {
         console.log(`  ❌ Issue: Order values are not sequential`);
