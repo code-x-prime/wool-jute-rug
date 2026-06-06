@@ -1,42 +1,30 @@
-name: Deploy Server (Carpet)
+name: Deploy Server
 
 on:
-push:
-branches:
-- main
-paths:
-- "server/**"
-- ".github/workflows/deploy-server.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - 'server/**'
 
 jobs:
-deploy:
-runs-on: ubuntu-latest
+  deploy:
+    runs-on: ubuntu-latest
 
+    steps:
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /root/wool-jute-rug
+            git fetch origin main
+            git reset --hard origin/main
 
-steps:
-  - name: Deploy server to VPS
-    uses: appleboy/ssh-action@v1.0.3
+            cd server
+            npm ci
+            npx prisma generate
 
-    with:
-      host: ${{ secrets.SERVER_HOST }}
-      username: ${{ secrets.SERVER_USER }}
-      key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      script: |
-        set -e
-
-        cd ${{ secrets.REPO_PATH }}
-
-        git remote prune origin
-        git fetch origin main
-        git reset --hard origin/main
-
-        cd server
-
-        rm -rf node_modules
-
-        npm ci
-
-        npx prisma generate
-
-        pm2 reload carpet-server --update-env || pm2 restart carpet-server
+            pm2 restart carpet-server
