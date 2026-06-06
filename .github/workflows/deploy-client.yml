@@ -2,7 +2,8 @@ name: Deploy Client (Carpet)
 
 on:
 push:
-branches: [main]
+branches:
+- main
 paths:
 - "client/**"
 - ".github/workflows/deploy-client.yml"
@@ -37,5 +38,4 @@ steps:
         npm ci
         npm run build
 
-        pm2 reload carpet-client --update-env || pm2 start npm --name "carpet-client" -- start
-
+        pm2 reload carpet-client --update-env || pm2 restart carpet-client

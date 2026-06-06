@@ -2,7 +2,8 @@ name: Deploy Front (Carpet)
 
 on:
 push:
-branches: [main]
+branches:
+- main
 paths:
 - "front/**"
 - ".github/workflows/deploy-front.yml"
@@ -38,5 +39,5 @@ steps:
 
         npm run build
 
-        pm2 reload carpet-front --update-env || pm2 start npm --name "carpet-front" -- run preview
+        pm2 reload carpet-front --update-env || pm2 restart carpet-front
 

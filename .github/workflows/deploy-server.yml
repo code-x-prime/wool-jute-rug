@@ -2,7 +2,8 @@ name: Deploy Server (Carpet)
 
 on:
 push:
-branches: [main]
+branches:
+- main
 paths:
 - "server/**"
 - ".github/workflows/deploy-server.yml"
@@ -38,4 +39,4 @@ steps:
 
         npx prisma generate
 
-        pm2 reload carpet-server --update-env || pm2 start npm --name "carpet-server" -- start
+        pm2 reload carpet-server --update-env || pm2 restart carpet-server
