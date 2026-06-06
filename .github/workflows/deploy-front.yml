@@ -1,0 +1,42 @@
+name: Deploy Front (Carpet)
+
+on:
+push:
+branches: [main]
+paths:
+- "front/**"
+- ".github/workflows/deploy-front.yml"
+
+jobs:
+deploy:
+runs-on: ubuntu-latest
+
+```
+steps:
+  - name: Deploy front to VPS
+    uses: appleboy/ssh-action@v1.0.3
+
+    with:
+      host: ${{ secrets.SERVER_HOST }}
+      username: ${{ secrets.SERVER_USER }}
+      key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      script: |
+        set -e
+
+        cd ${{ secrets.REPO_PATH }}
+
+        git remote prune origin
+        git fetch origin main
+        git reset --hard origin/main
+
+        cd front
+
+        rm -rf dist node_modules
+
+        npm ci
+
+        npm run build
+
+        pm2 reload carpet-front --update-env || pm2 start npm --name "carpet-front" -- run preview
+
