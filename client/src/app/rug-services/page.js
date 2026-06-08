@@ -8,10 +8,7 @@ import {
   X,
   ChevronDown,
   ChevronUp,
-  AlertCircle,
-  ArrowRight,
   Maximize2,
-  Lock,
   Award,
   Calendar
 } from "lucide-react";
@@ -138,12 +135,12 @@ export default function RugServicesPage() {
   };
 
   return (
-    <div className="bg-[#FAF8F5] pt-20">
+    <div className="bg-[#FAF8F5]">
       {/* ── HERO SECTION ── */}
       <section
         className="relative h-[75vh] min-h-[500px] w-full flex items-end justify-center pb-20 bg-cover bg-center text-white"
         style={{
-          backgroundImage: `linear-gradient(to bottom, rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.65)), url('https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1600&q=80')`,
+          backgroundImage: `linear-gradient(to bottom, rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.65)), url('/rug-services.jpg')`,
         }}
       >
         <div className="max-w-[1400px] mx-auto px-6 text-center z-10 w-full mb-8">
@@ -188,22 +185,22 @@ export default function RugServicesPage() {
             {
               title: "Deep Cleaning",
               description: "Removes dust, grime, and allergens with gentle, effective care.",
-              image: "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=600&q=80",
+              image: "/deep-cleaning.jpg",
             },
             {
               title: "Stain & Odor Removal",
               description: "Targeted treatment for spills and tough spots without harming fibers.",
-              image: "https://images.unsplash.com/photo-1563161402-8b11cf7009ba?auto=format&fit=crop&w=600&q=80",
+              image: "/stain-odor-removal.jpg",
             },
             {
               title: "Vintage Wash",
               description: "Rejuvenates old rugs while preserving their vintage charm.",
-              image: "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=600&q=80",
+              image: "/vintage-wash.jpg",
             },
             {
               title: "Repairs & Reweaving",
               description: "Restore damaged fringes, edges, or patterns by our expert artisans.",
-              image: "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&q=80",
+              image: "/repairs-reweaving.jpg",
             },
           ].map((item, idx) => (
             <div key={idx} className="bg-white border border-[#e8e0d5] flex flex-col h-full group">
@@ -233,7 +230,7 @@ export default function RugServicesPage() {
       <section
         className="relative py-20 bg-cover bg-center text-white"
         style={{
-          backgroundImage: `linear-gradient(to bottom, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.8)), url('https://images.unsplash.com/photo-1540518614846-7eded433c457?auto=format&fit=crop&w=1600&q=80')`,
+          backgroundImage: `linear-gradient(to bottom, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.8)), url('/rug-services-2.jpg')`,
         }}
       >
         <div className="max-w-[1400px] mx-auto px-6 text-center relative z-10">
