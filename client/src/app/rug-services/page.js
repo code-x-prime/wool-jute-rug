@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { 
-  Phone, 
-  Mail, 
-  Check, 
+import {
+  Phone,
+  Mail,
+  Check,
   X,
-  ChevronDown, 
-  ChevronUp, 
+  ChevronDown,
+  ChevronUp,
   AlertCircle,
   ArrowRight,
   Maximize2,
@@ -140,7 +140,7 @@ export default function RugServicesPage() {
   return (
     <div className="bg-[#FAF8F5] pt-20">
       {/* ── HERO SECTION ── */}
-      <section 
+      <section
         className="relative h-[75vh] min-h-[500px] w-full flex items-end justify-center pb-20 bg-cover bg-center text-white"
         style={{
           backgroundImage: `linear-gradient(to bottom, rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.65)), url('https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1600&q=80')`,
@@ -154,15 +154,15 @@ export default function RugServicesPage() {
             Handled by Experts who know carpets best!
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
-            <a 
-              href="tel:+918053210008" 
+            <a
+              href="tel:+918053210008"
               className="px-8 py-3.5 bg-black text-white hover:bg-neutral-900 font-jost text-[10px] tracking-widest uppercase font-semibold transition-all border border-black flex items-center gap-2 rounded-none"
             >
               <Phone className="h-3 w-3" />
               Call Us
             </a>
-            <a 
-              href="mailto:connect.wooljuterug@gmail.com" 
+            <a
+              href="mailto:connect.wooljuterug@gmail.com"
               className="px-8 py-3.5 bg-transparent text-white hover:bg-white/10 font-jost text-[10px] tracking-widest uppercase font-semibold transition-all border border-white flex items-center gap-2 rounded-none"
             >
               <Mail className="h-3 w-3" />
@@ -208,8 +208,8 @@ export default function RugServicesPage() {
           ].map((item, idx) => (
             <div key={idx} className="bg-white border border-[#e8e0d5] flex flex-col h-full group">
               <div className="relative aspect-[4/3] w-full overflow-hidden bg-neutral-100 shrink-0">
-                <img 
-                  src={item.image} 
+                <img
+                  src={item.image}
                   alt={item.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
@@ -230,7 +230,7 @@ export default function RugServicesPage() {
       </section>
 
       {/* ── 6-STEP PROCESS SECTION ── */}
-      <section 
+      <section
         className="relative py-20 bg-cover bg-center text-white"
         style={{
           backgroundImage: `linear-gradient(to bottom, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.8)), url('https://images.unsplash.com/photo-1540518614846-7eded433c457?auto=format&fit=crop&w=1600&q=80')`,
@@ -271,15 +271,15 @@ export default function RugServicesPage() {
               Bring your rug back to life with specialized repair, reweaving, and restoration services. We also offer resizing, trimming, and color balancing to fit your interiors perfectly.
             </p>
             <div className="flex flex-wrap items-center gap-4">
-              <a 
-                href="tel:+918053210008" 
+              <a
+                href="tel:+918053210008"
                 className="px-6 py-3 bg-black text-white hover:bg-neutral-900 font-jost text-[10px] tracking-widest uppercase font-semibold transition-all border border-black flex items-center gap-2"
               >
                 <Phone className="h-3.5 w-3.5" />
                 Call Us
               </a>
-              <a 
-                href="mailto:connect.wooljuterug@gmail.com" 
+              <a
+                href="mailto:connect.wooljuterug@gmail.com"
                 className="px-6 py-3 bg-transparent text-black hover:bg-neutral-100 font-jost text-[10px] tracking-widest uppercase font-semibold transition-all border border-black flex items-center gap-2"
               >
                 <Mail className="h-3.5 w-3.5" />
@@ -295,14 +295,14 @@ export default function RugServicesPage() {
               "Color Restoration",
               "Resizing"
             ].map((item, idx) => (
-              <div 
-                key={idx} 
+              <div
+                key={idx}
                 className="bg-white border border-[#e8e0d5] py-12 px-6 rounded flex flex-col items-center text-center justify-center group hover:shadow-md transition-shadow"
               >
                 <div className="w-8 h-8 flex items-center justify-center mb-4 text-[#C9A84C]">
-                  <svg 
-                    viewBox="0 0 24 24" 
-                    fill="currentColor" 
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
                     className="w-7 h-7 transition-transform duration-300 group-hover:scale-110"
                   >
                     <path d="M12 0L14.7 9.3L24 12L14.7 14.7L12 24L9.3 14.7L0 12L9.3 9.3Z" />
@@ -320,7 +320,7 @@ export default function RugServicesPage() {
       {/* ── PRICING STRUCTURE SECTIONS ── */}
       <section className="bg-[#FAF6F0] border-t border-b border-[#e8e0d5] py-16 md:py-24">
         <div className="max-w-[1400px] mx-auto px-6">
-          
+
           {/* Brand Customers Pricing */}
           <div className="text-center mb-16">
             <h2 className="text-2xl md:text-3xl font-light font-jost tracking-wide text-[#3D1C02] mb-3">
@@ -439,16 +439,16 @@ export default function RugServicesPage() {
                 </tbody>
               </table>
             </div>
-            
+
             <div className="flex justify-center items-center gap-4">
-              <a 
-                href="tel:+918053210008" 
+              <a
+                href="tel:+918053210008"
                 className="px-6 py-2.5 bg-black text-white hover:bg-neutral-900 font-jost text-[10px] tracking-widest uppercase font-semibold transition-all border border-black rounded-none flex items-center gap-1.5"
               >
                 <Phone className="h-3 w-3" /> Call Us
               </a>
-              <a 
-                href="mailto:connect.wooljuterug@gmail.com" 
+              <a
+                href="mailto:connect.wooljuterug@gmail.com"
                 className="px-6 py-2.5 bg-transparent text-black hover:bg-neutral-200/50 font-jost text-[10px] tracking-widest uppercase font-semibold transition-all border border-black rounded-none flex items-center gap-1.5"
               >
                 <Mail className="h-3 w-3" /> Email Us
@@ -494,7 +494,7 @@ export default function RugServicesPage() {
               </span>
             </div>
           </div>
-          <button 
+          <button
             onClick={() => setIsAmcModalOpen(true)}
             className="px-6 py-3 bg-black hover:bg-neutral-900 text-white font-jost text-[10px] tracking-widest uppercase font-semibold transition-all rounded-none"
           >
@@ -510,8 +510,8 @@ export default function RugServicesPage() {
             { title: "Rug Appraisal Services", desc: "Contact for assessment pricing" },
             { title: "Installation Services", desc: "Contact for quote based on rug size and location" }
           ].map((item, idx) => (
-            <div 
-              key={idx} 
+            <div
+              key={idx}
               className="bg-white border border-[#e8e0d5] py-10 px-6 rounded flex flex-col items-center text-center justify-center shadow-sm hover:shadow-md transition-shadow group"
             >
               <div className="w-8 h-8 flex items-center justify-center mb-4 text-[#C9A84C]">
@@ -543,7 +543,7 @@ export default function RugServicesPage() {
           </div>
 
           {/* Interactive Image Slider */}
-          <div 
+          <div
             ref={sliderRef}
             onMouseMove={handleMouseMove}
             onTouchMove={handleTouchMove}
@@ -551,9 +551,9 @@ export default function RugServicesPage() {
           >
             {/* Unwashed / Dirty Side (Background) */}
             <div className="absolute inset-0 w-full h-full">
-              <img 
-                src="https://images.unsplash.com/photo-1600121848594-d8644e57abab?auto=format&fit=crop&w=1200&q=80" 
-                alt="Dirty Rug" 
+              <img
+                src="https://images.unsplash.com/photo-1600121848594-d8644e57abab?auto=format&fit=crop&w=1200&q=80"
+                alt="Dirty Rug"
                 className="w-full h-full object-cover filter saturate-[0.5] brightness-[0.75] contrast-[1.15] blur-[1px]"
                 draggable="false"
               />
@@ -563,15 +563,15 @@ export default function RugServicesPage() {
             </div>
 
             {/* Washed / Clean Side (Foreground, clipped) */}
-            <div 
+            <div
               className="absolute inset-0 w-full h-full pointer-events-none"
               style={{
                 clipPath: `polygon(0 0, ${sliderPosition}% 0, ${sliderPosition}% 100%, 0 100%)`,
               }}
             >
-              <img 
-                src="https://images.unsplash.com/photo-1600121848594-d8644e57abab?auto=format&fit=crop&w=1200&q=80" 
-                alt="Clean Rug" 
+              <img
+                src="https://images.unsplash.com/photo-1600121848594-d8644e57abab?auto=format&fit=crop&w=1200&q=80"
+                alt="Clean Rug"
                 className="w-full h-full object-cover"
                 draggable="false"
               />
@@ -581,7 +581,7 @@ export default function RugServicesPage() {
             </div>
 
             {/* Slider bar & handle */}
-            <div 
+            <div
               className="absolute top-0 bottom-0 w-1 bg-white cursor-ew-resize z-10 flex items-center justify-center"
               style={{ left: `${sliderPosition}%` }}
               onMouseDown={() => setIsDragging(true)}
@@ -608,8 +608,8 @@ export default function RugServicesPage() {
               <label className="block text-xs font-semibold text-[#3D1C02] uppercase tracking-wider mb-2">
                 *Name
               </label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 name="name"
                 value={formData.name}
                 onChange={handleInputChange}
@@ -622,8 +622,8 @@ export default function RugServicesPage() {
               <label className="block text-xs font-semibold text-[#3D1C02] uppercase tracking-wider mb-2">
                 Email Address
               </label>
-              <input 
-                type="email" 
+              <input
+                type="email"
                 name="email"
                 value={formData.email}
                 onChange={handleInputChange}
@@ -638,8 +638,8 @@ export default function RugServicesPage() {
               <label className="block text-xs font-semibold text-[#3D1C02] uppercase tracking-wider mb-2">
                 *Mobile No.
               </label>
-              <input 
-                type="tel" 
+              <input
+                type="tel"
                 name="phone"
                 value={formData.phone}
                 onChange={handleInputChange}
@@ -652,8 +652,8 @@ export default function RugServicesPage() {
               <label className="block text-xs font-semibold text-[#3D1C02] uppercase tracking-wider mb-2">
                 *Pin code
               </label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 name="pincode"
                 value={formData.pincode}
                 onChange={handleInputChange}
@@ -668,7 +668,7 @@ export default function RugServicesPage() {
             <label className="block text-xs font-semibold text-[#3D1C02] uppercase tracking-wider mb-2">
               Description of service / comment
             </label>
-            <textarea 
+            <textarea
               name="description"
               value={formData.description}
               onChange={handleInputChange}
@@ -679,8 +679,8 @@ export default function RugServicesPage() {
           </div>
 
           <div className="text-center pt-2">
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={isSubmitting}
               className="px-10 py-3.5 bg-[#b2948c] text-white hover:bg-[#a18178] font-jost text-xs tracking-widest uppercase font-bold transition-all disabled:opacity-50"
             >
@@ -693,10 +693,10 @@ export default function RugServicesPage() {
       {/* ── ACCORDION TERMS SECTION ── */}
       <section className="max-w-4xl mx-auto px-6 py-8 md:py-12 font-roboto">
         <div className="space-y-4">
-          
+
           {/* Important Terms and Conditions */}
           <div className="border border-[#e8e0d5] bg-white rounded overflow-hidden shadow-sm">
-            <button 
+            <button
               onClick={() => toggleTermsSection("terms")}
               className="w-full flex items-center justify-between px-6 py-4 bg-[#3D1C02] text-white font-jost text-sm md:text-base font-medium tracking-wide text-left"
             >
@@ -717,7 +717,7 @@ export default function RugServicesPage() {
 
           {/* Logistics and Service Terms */}
           <div className="border border-[#e8e0d5] bg-white rounded overflow-hidden shadow-sm">
-            <button 
+            <button
               onClick={() => toggleTermsSection("logistics")}
               className="w-full flex items-center justify-between px-6 py-4 text-[#3D1C02] font-jost text-sm md:text-base font-medium tracking-wide text-left"
             >
@@ -738,7 +738,7 @@ export default function RugServicesPage() {
 
           {/* Logistics Cost Sharing */}
           <div className="border border-[#e8e0d5] bg-white rounded overflow-hidden shadow-sm">
-            <button 
+            <button
               onClick={() => toggleTermsSection("cost-sharing")}
               className="w-full flex items-center justify-between px-6 py-4 text-[#3D1C02] font-jost text-sm md:text-base font-medium tracking-wide text-left"
             >
@@ -788,12 +788,11 @@ export default function RugServicesPage() {
           ].map((item, idx) => {
             const isOpen = activeFaq === idx;
             return (
-              <div key={idx} className="border border-[#e8e0d5] bg-white rounded overflow-hidden shadow-sm">
-                <button 
+              <div key={idx} className="border border-[#e8e0d5] bg-white  rounded overflow-hidden shadow-sm">
+                <button
                   onClick={() => toggleFaq(idx)}
-                  className={`w-full flex items-center justify-between px-6 py-4.5 text-left font-jost text-sm md:text-base font-medium transition-colors ${
-                    isOpen ? "bg-[#3D1C02] text-white" : "text-[#3D1C02] hover:bg-neutral-50"
-                  }`}
+                  className={`w-full flex items-center justify-between px-6 py-4 text-left font-jost text-sm md:text-base font-medium transition-colors ${isOpen ? "bg-[#3D1C02] text-white" : "text-[#3D1C02] hover:bg-neutral-50"
+                    }`}
                 >
                   <span>{item.q}</span>
                   {isOpen ? <ChevronUp className="h-4 w-4 text-white" /> : <ChevronDown className="h-4 w-4 text-[#C9A84C]" />}
@@ -813,7 +812,7 @@ export default function RugServicesPage() {
       {isAmcModalOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
           {/* Backdrop */}
-          <div 
+          <div
             className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
             onClick={() => setIsAmcModalOpen(false)}
           />
@@ -822,7 +821,7 @@ export default function RugServicesPage() {
           <div className="relative bg-white max-w-4xl w-full max-h-[90vh] overflow-y-auto rounded-lg shadow-2xl z-10 border border-[#e8e0d5] flex flex-col animate-in fade-in zoom-in-95 duration-250">
             {/* Header */}
             <div className="p-6 md:p-8 text-center relative border-b border-neutral-100 shrink-0">
-              <button 
+              <button
                 onClick={() => setIsAmcModalOpen(false)}
                 className="absolute right-4 top-4 text-neutral-400 hover:text-neutral-600 p-1 transition-colors"
                 aria-label="Close"
@@ -838,23 +837,21 @@ export default function RugServicesPage() {
 
               {/* Tabs selector */}
               <div className="inline-flex rounded-full bg-neutral-100 p-1 mt-6 border border-neutral-200">
-                <button 
+                <button
                   onClick={() => setAmcTab("residential")}
-                  className={`px-8 py-2 text-xs font-semibold tracking-wider font-jost uppercase transition-all rounded-full ${
-                    amcTab === "residential" 
-                      ? "bg-white text-[#3D1C02] shadow-sm" 
-                      : "text-neutral-500 hover:text-neutral-800"
-                  }`}
+                  className={`px-8 py-2 text-xs font-semibold tracking-wider font-jost uppercase transition-all rounded-full ${amcTab === "residential"
+                    ? "bg-white text-[#3D1C02] shadow-sm"
+                    : "text-neutral-500 hover:text-neutral-800"
+                    }`}
                 >
                   Residential
                 </button>
-                <button 
+                <button
                   onClick={() => setAmcTab("commercial")}
-                  className={`px-8 py-2 text-xs font-semibold tracking-wider font-jost uppercase transition-all rounded-full ${
-                    amcTab === "commercial" 
-                      ? "bg-white text-[#3D1C02] shadow-sm" 
-                      : "text-neutral-500 hover:text-neutral-800"
-                  }`}
+                  className={`px-8 py-2 text-xs font-semibold tracking-wider font-jost uppercase transition-all rounded-full ${amcTab === "commercial"
+                    ? "bg-white text-[#3D1C02] shadow-sm"
+                    : "text-neutral-500 hover:text-neutral-800"
+                    }`}
                 >
                   Commercial
                 </button>
@@ -987,11 +984,10 @@ export default function RugServicesPage() {
                       { plan: "2 Year Plan", details: "4 Cleanings", price: "₹56,000", sub: "As per Min 80 Rs PSFT · 20% off" },
                       { plan: "3 Year Plan", details: "6 Cleanings", price: "₹72,000", sub: "As per Min 80 Rs PSFT · 20% off", tag: "Best Value" }
                     ].map((planItem, idx) => (
-                      <div 
-                        key={idx} 
-                        className={`flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 border rounded-lg transition-all ${
-                          planItem.tag ? "bg-[#FAF2EB] border-amber-300" : "bg-white border-[#e8e0d5]"
-                        }`}
+                      <div
+                        key={idx}
+                        className={`flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 border rounded-lg transition-all ${planItem.tag ? "bg-[#FAF2EB] border-amber-300" : "bg-white border-[#e8e0d5]"
+                          }`}
                       >
                         <div className="mb-2 sm:mb-0">
                           <div className="flex items-center gap-2">
@@ -1020,11 +1016,10 @@ export default function RugServicesPage() {
                       { plan: "2 Year Plan", details: "8 Cleanings", price: "₹1,40,000", sub: "As per Min 280 Rs PSFT · 30% off" },
                       { plan: "3 Year Plan", details: "12 Cleanings", price: "₹1,80,000", sub: "As per Min 360 Rs PSFT · 40% off", tag: "Best Value" }
                     ].map((planItem, idx) => (
-                      <div 
-                        key={idx} 
-                        className={`flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 border rounded-lg transition-all ${
-                          planItem.tag ? "bg-[#FAF2EB] border-amber-300" : "bg-white border-[#e8e0d5]"
-                        }`}
+                      <div
+                        key={idx}
+                        className={`flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 border rounded-lg transition-all ${planItem.tag ? "bg-[#FAF2EB] border-amber-300" : "bg-white border-[#e8e0d5]"
+                          }`}
                       >
                         <div className="mb-2 sm:mb-0">
                           <div className="flex items-center gap-2">
@@ -1071,7 +1066,7 @@ export default function RugServicesPage() {
                 </div>
               </div>
 
-              <button 
+              <button
                 onClick={handleScrollToForm}
                 className="w-full py-4 bg-black hover:bg-neutral-900 text-white font-jost text-xs tracking-widest uppercase font-semibold transition-all"
               >
