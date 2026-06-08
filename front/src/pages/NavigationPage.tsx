@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
 import { menus, categories } from "@/api/adminService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,18 +24,15 @@ import {
   ImageIcon,
   Link2,
   Layers,
-  ArrowRight,
-  Eye,
-  Settings,
+
 } from "lucide-react";
-import { useLanguage } from "@/context/LanguageContext";
 
 export default function NavigationPage() {
   const [navbarItems, setNavbarItems] = useState<any[]>([]);
   const [categoriesList, setCategoriesList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { t } = useLanguage();
+
 
   // Dialog states
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
