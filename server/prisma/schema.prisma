@@ -189,6 +189,7 @@ model Category {
   products      ProductCategory[]
   coupons       CouponCategory[]
   subCategories SubCategory[]
+  navbarColumns NavbarColumn[]
 }
 
 model SubCategory {
@@ -207,6 +208,64 @@ model SubCategory {
   @@unique([categoryId, slug])
   @@index([categoryId])
 }
+
+// -----------------------
+// Mega Menu & Navigation
+// -----------------------
+enum MegaMenuLayout {
+  SIMPLE
+  SHOP_TABS
+  COLUMNS_WITH_BANNER
+  IMAGE_GRID
+}
+
+model NavbarItem {
+  id             String          @id @default(uuid())
+  label          String          @unique
+  slug           String?
+  order          Int             @default(0)
+  isActive       Boolean         @default(true)
+  layout         MegaMenuLayout  @default(SIMPLE)
+  bannerImage    String?
+  bannerTitle    String?
+  bannerSubtitle String?
+  bannerLink     String?
+  columns        NavbarColumn[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model NavbarColumn {
+  id           String       @id @default(uuid())
+  navbarItemId String
+  title        String
+  order        Int          @default(0)
+  categoryId   String?      // Optional: link to a Category (for SHOP_TABS layout)
+  category     Category?    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  navbarItem   NavbarItem   @relation(fields: [navbarItemId], references: [id], onDelete: Cascade)
+  links        NavbarLink[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([navbarItemId])
+  @@index([categoryId])
+}
+
+model NavbarLink {
+  id        String       @id @default(uuid())
+  columnId  String
+  label     String
+  url       String
+  image     String?      // Optional image (e.g. for IMAGE_GRID cards or thumbnails)
+  badge     String?      // Optional badge like "NEW" or "HOT"
+  order     Int          @default(0)
+  column    NavbarColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([columnId])
+}
+
 
 // -----------------------
 // Universal Attribute System
@@ -734,10 +793,12 @@ model CustomRugRequest {
   name         String
   email        String
   phone        String?
+  pincode      String?
   dimensions   String?
   material     String?
   colors       String?
   designNotes  String?
+  type         String   @default("CUSTOM_RUG") // CUSTOM_RUG, RUG_SERVICE, CONTACT_ENQUIRY
   status       String   @default("NEW")
   adminNotes   String?
   createdAt    DateTime @default(now())

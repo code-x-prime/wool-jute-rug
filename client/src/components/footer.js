@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import {
   Instagram,
   Facebook,
@@ -49,6 +50,7 @@ const FooterHeading = ({ children }) => (
 export function Footer() {
   const [email, setEmail] = useState("");
   const [subscribed, setSubscribed] = useState(false);
+  const pathname = usePathname();
 
   const handleSubscribe = (e) => {
     e.preventDefault();
@@ -58,6 +60,31 @@ export function Footer() {
       setTimeout(() => setSubscribed(false), 4000);
     }
   };
+
+  // Render simplified checkout footer to avoid distractions and spacing clutter
+  if (pathname === "/checkout") {
+    return (
+      <footer className="py-8 border-t font-jost" style={{ backgroundColor: BG_WHITE, borderColor: BORDER }}>
+        <div className="max-w-[1400px] mx-auto px-6 text-center space-y-4">
+          <p className="text-xs tracking-wide leading-relaxed text-gray-500 max-w-3xl mx-auto font-roboto">
+            Your privacy matters to us. Wool Jute Rug Co. collects only the information necessary to process orders, improve customer experience, and comply with legal requirements. We never sell customer data and take reasonable measures to protect your information in accordance with international privacy standards.
+          </p>
+          <p className="text-xs tracking-widest leading-relaxed uppercase" style={{ color: TEXT_MED }}>
+            By using this website, you agree to our{" "}
+            <Link href="/terms-conditions" className="underline hover:text-[#C9A84C] transition-colors">Terms</Link>,{" "}
+            <Link href="/privacy-policy" className="underline hover:text-[#C9A84C] transition-colors">Privacy Policy</Link>, and{" "}
+            <Link href="/refund-policy" className="underline hover:text-[#C9A84C] transition-colors">Return Policy</Link>.
+          </p>
+          <p className="text-[10px] mt-2 tracking-wider" style={{ color: TEXT_MUTED }}>
+            &copy; {new Date().getFullYear()} Wool Jute Rug Co. All Rights Reserved. | Designed &amp; Developed by{" "}
+            <a href="https://groxmedia.in/" target="_blank" rel="noopener noreferrer" className="hover:text-[#C9A84C] font-semibold transition-colors">
+              Grox Media LLP
+            </a>
+          </p>
+        </div>
+      </footer>
+    );
+  }
 
 
 
@@ -81,7 +108,9 @@ export function Footer() {
   ];
 
   const serviceLinks = [
-    { label: "Custom Rug Orders", href: "/contact" },
+    { label: "Rug Washing & Repair", href: "/rug-services" },
+    { label: "AMC Plans", href: "/rug-services#amc" },
+    { label: "Custom Rug Orders", href: "/custom-rugs" },
     { label: "Track Order", href: "/account/orders" },
     { label: "Contact Support", href: "/contact" },
     { label: "About Us", href: "/about" },
@@ -142,7 +171,7 @@ export function Footer() {
               <FooterHeading>Guides &amp; Policies</FooterHeading>
               <ul className="space-y-1">
                 {policyLinks.map((l) => (
-                  <FooterLink key={l.href} href={l.href}>{l.label}</FooterLink>
+                  <FooterLink key={l.label} href={l.href}>{l.label}</FooterLink>
                 ))}
               </ul>
 
@@ -150,7 +179,7 @@ export function Footer() {
                 <FooterHeading>Services</FooterHeading>
                 <ul className="space-y-1">
                   {serviceLinks.map((l) => (
-                    <FooterLink key={l.href} href={l.href}>{l.label}</FooterLink>
+                    <FooterLink key={l.label} href={l.href}>{l.label}</FooterLink>
                   ))}
                 </ul>
               </div>
@@ -161,7 +190,7 @@ export function Footer() {
               <FooterHeading>Shop</FooterHeading>
               <ul className="space-y-1">
                 {shopLinks.map((l) => (
-                  <FooterLink key={l.href} href={l.href}>{l.label}</FooterLink>
+                  <FooterLink key={l.label} href={l.href}>{l.label}</FooterLink>
                 ))}
               </ul>
             </div>
@@ -263,15 +292,27 @@ export function Footer() {
                 >
                   Secure Payments
                 </p>
-                <div className="flex flex-wrap gap-1.5 items-center">
-                  {["VISA", "Mastercard", "UPI", "RuPay", "Amex", "G Pay"].map((p) => (
-                    <span
-                      key={p}
-                      className="text-[10px] font-bold px-2 py-1 rounded font-jost"
-                      style={{ border: `1px solid ${BORDER}`, color: TEXT_MED, backgroundColor: BG_LIGHT }}
+                <div className="flex flex-wrap gap-2 items-center">
+                  {[
+                    { name: "Visa", src: "/visa.svg", height: "h-4.5" },
+                    { name: "Mastercard", src: "/mastercard.svg", height: "h-6.5" },
+                    { name: "G Pay", src: "/gpay.png", height: "h-5" },
+                    { name: "PhonePe", src: "/phonepe.svg", height: "h-5" },
+                    { name: "Paytm", src: "/paytm.svg", height: "h-4.5" },
+                    { name: "PayPal", src: "/paypal.svg", height: "h-4.5" },
+                    { name: "Payoneer", src: "/payoneer.svg", height: "h-3.5" }
+                  ].map((p) => (
+                    <div
+                      key={p.name}
+                      className="px-3 py-2 rounded flex items-center justify-center bg-white border border-[#e5e0da] h-10 min-w-[56px]"
+                      title={p.name}
                     >
-                      {p}
-                    </span>
+                      <img
+                        src={p.src}
+                        alt={p.name}
+                        className={`${p.height} w-auto object-contain opacity-80 hover:opacity-100 transition-opacity duration-200`}
+                      />
+                    </div>
                   ))}
                 </div>
               </div>
@@ -285,7 +326,10 @@ export function Footer() {
             <p className="text-xs font-roboto text-center md:text-left" style={{ color: TEXT_MUTED }}>
               &copy; {new Date().getFullYear()}{" "}
               <span className="font-semibold" style={{ color: TEXT_DARK }}>Wool Jute Rug Co</span>
-              . All Rights Reserved. Handcrafted with ❤️
+              . All Rights Reserved. Handcrafted with ❤️ | Designed &amp; Developed by{" "}
+              <a href="https://groxmedia.in/" target="_blank" rel="noopener noreferrer" className="hover:text-[#C9A84C] font-semibold transition-colors" style={{ color: TEXT_DARK }}>
+                Grox Media LLP
+              </a>
             </p>
             <div className="flex items-center gap-5">
               {[

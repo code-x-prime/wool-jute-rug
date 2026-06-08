@@ -16,6 +16,8 @@ import {
   MapPin,
   Phone,
   Truck,
+  ArrowRight,
+  Image as ImageIcon,
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import { fetchApi } from "@/lib/utils";
@@ -32,18 +34,22 @@ export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
   const { getCartItemCount } = useCart();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [categories, setCategories] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [activeMenu, setActiveMenu] = useState(null);
   const [expandedMobileMenu, setExpandedMobileMenu] = useState(null);
+  const [activeCategoryTab, setActiveCategoryTab] = useState(null);
+  const [expandedCategoryMobile, setExpandedCategoryMobile] = useState(null);
   const [announcementVisible, setAnnouncementVisible] = useState(true);
   const [scrolled, setScrolled] = useState(false);
   const navbarRef = useRef(null);
   const router = useRouter();
   const pathname = usePathname();
   const isHome = pathname === "/";
-  const isTransparent = isHome && !scrolled;
+  const isTransparent = isHome && !scrolled && !activeMenu;
 
   // Scroll detection for transparent → white navbar
   useEffect(() => {
@@ -56,80 +62,95 @@ export function Navbar() {
   useEffect(() => {
     setIsMenuOpen(false);
     setActiveMenu(null);
+    setShowSearchDropdown(false);
   }, [pathname]);
 
-  // Handle click outside navbar (for desktop dropdowns)
+  // Handle click outside navbar (for desktop dropdowns and search)
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (navbarRef.current && !navbarRef.current.contains(event.target)) {
         setActiveMenu(null);
+        setShowSearchDropdown(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fetch categories from API
+  // Debounced search fetching
   useEffect(() => {
-    const fetchCategories = async () => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setIsSearching(false);
+      setShowSearchDropdown(false);
+      return;
+    }
+
+    const delayDebounceFn = setTimeout(async () => {
+      setIsSearching(true);
+      setShowSearchDropdown(true);
       try {
-        const response = await fetchApi("/public/categories-with-subcategories");
-        if (response?.data?.categories && response.data.categories.length > 0) {
-          setCategories(response.data.categories);
-
-          const dynamicMenuItems = [
-            {
-              name: "NEW ARRIVALS",
-              href: "/products?productType=new",
-              highlight: "new",
-            },
-          ];
-
-          response.data.categories.forEach((category) => {
-            const menuItem = {
-              name: category.name.toUpperCase(),
-              href: `/products?category=${category.slug}`,
-            };
-
-            if (category.subCategories && category.subCategories.length > 0) {
-              menuItem.megaMenu = {
-                categories: [
-                  {
-                    name: `Shop All ${category.name}`,
-                    href: `/products?category=${category.slug}`,
-                    bold: true,
-                  },
-                  ...category.subCategories.map((subCat) => ({
-                    name: subCat.name,
-                    href: `/products?category=${category.slug}&subCategory=${subCat.slug}`,
-                  })),
-                ],
-              };
-            }
-
-            dynamicMenuItems.push(menuItem);
-          });
-
-          dynamicMenuItems.push({
-            name: "SALE",
-            href: "/products?sale=true",
-            highlight: "sale",
-          });
-
-          setMenuItems(dynamicMenuItems);
+        const response = await fetchApi(`/public/products?search=${encodeURIComponent(searchQuery)}&limit=6`);
+        if (response?.data?.products) {
+          setSearchResults(response.data.products);
+        } else {
+          setSearchResults([]);
         }
       } catch (error) {
-        console.log("Categories API failed, using fallback");
+        console.error("Error searching products:", error);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery]);
+
+  // Fetch navigation menu from API
+  useEffect(() => {
+    const fetchMenus = async () => {
+      try {
+        const response = await fetchApi("/public/menus");
+        if (response?.data?.navbarItems && response.data.navbarItems.length > 0) {
+          setMenuItems(response.data.navbarItems);
+
+          // Initialize first category tab as active for SHOP_TABS layout
+          const shopTab = response.data.navbarItems.find((item) => item.layout === "SHOP_TABS");
+          if (shopTab && shopTab.categories && shopTab.categories.length > 0) {
+            setActiveCategoryTab(shopTab.categories[0].id);
+          }
+        }
+      } catch (error) {
+        console.log("Menus API failed, using fallback:", error);
         setMenuItems([
-          { name: "NEW ARRIVALS", href: "/products?productType=new", highlight: "new" },
-          { name: "RUGS & CARPETS", href: "/products" },
-          { name: "WOOL RUGS", href: "/products?category=wool" },
-          { name: "JUTE RUGS", href: "/products?category=jute" },
-          { name: "SALE", href: "/products?sale=true", highlight: "sale" },
+          {
+            id: "fallback-shop",
+            label: "SHOP",
+            layout: "SHOP_TABS",
+            isActive: true,
+            categories: [
+              {
+                id: "fb-rugs",
+                name: "RUGS",
+                slug: "rugs",
+                columns: [
+                  {
+                    id: "fb-col-size",
+                    title: "SIZE",
+                    links: [
+                      { id: "s1", label: "2x3 Ft", url: "/products?size=2x3" },
+                      { id: "s2", label: "3x5 Ft", url: "/products?size=3x5" },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
         ]);
       }
     };
-    fetchCategories();
+    fetchMenus();
   }, []);
 
   // Prevent body scroll when mobile menu open
@@ -142,9 +163,98 @@ export function Navbar() {
     e.preventDefault();
     if (searchQuery.trim()) {
       router.push(`/products?search=${encodeURIComponent(searchQuery)}`);
-      setSearchQuery("");
+      setShowSearchDropdown(false);
       setIsMenuOpen(false);
     }
+  };
+
+  const renderSearchDropdown = () => {
+    if (!showSearchDropdown) return null;
+
+    return (
+      <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-[#e8e0d5] rounded shadow-2xl z-[100] max-h-[420px] overflow-y-auto no-scrollbar font-roboto">
+        {isSearching ? (
+          <div className="flex items-center justify-center py-6 px-4 gap-2 text-sm text-gray-500">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#3D1C02] border-t-transparent"></div>
+            <span>Searching for &ldquo;{searchQuery}&rdquo;...</span>
+          </div>
+        ) : searchResults.length > 0 ? (
+          <div className="py-2">
+            <div className="px-4 py-1.5 text-[11px] font-semibold text-gray-400 tracking-wider border-b border-gray-100 uppercase">
+              Products Found ({searchResults.length})
+            </div>
+            <div className="divide-y divide-gray-100">
+              {searchResults.map((product) => (
+                <Link
+                  key={product.id}
+                  href={`/products/${product.slug}`}
+                  onClick={() => {
+                    setShowSearchDropdown(false);
+                    setSearchQuery("");
+                  }}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-[#F5ECD7]/40 transition-colors group"
+                >
+                  <div className="relative h-12 w-12 rounded border border-gray-100 overflow-hidden bg-gray-50 shrink-0">
+                    {product.image ? (
+                      <img
+                        src={product.image}
+                        alt={product.name}
+                        className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                      />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center bg-gray-100">
+                        <ImageIcon className="h-5 w-5 text-gray-300" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0 text-left">
+                    <h4 className="text-sm font-medium text-gray-800 truncate group-hover:text-[#3D1C02]">
+                      {product.name}
+                    </h4>
+                    <p className="text-xs text-gray-400 truncate mt-0.5">
+                      {product.category?.name || "Rugs"}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    {product.hasSale ? (
+                      <div className="flex items-center gap-1.5 justify-end">
+                        <span className="text-xs text-gray-400 line-through">
+                          ₹{product.regularPrice}
+                        </span>
+                        <span className="text-sm font-semibold text-[#CC0000]">
+                          ₹{product.basePrice}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-sm font-semibold text-gray-700">
+                        ₹{product.basePrice}
+                      </span>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+            <div className="border-t border-gray-100 px-4 py-2.5 bg-gray-50 flex justify-between items-center text-xs">
+              <span className="text-gray-500">Showing top results</span>
+              <button
+                onClick={(e) => {
+                  handleSearch(e);
+                  setShowSearchDropdown(false);
+                }}
+                className="font-semibold text-[#3D1C02] hover:text-[#C9A84C] transition-colors flex items-center gap-0.5"
+              >
+                <span>View all results</span>
+                <ArrowRight className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="py-8 text-center text-sm text-gray-500 font-roboto">
+            No products found matching &ldquo;{searchQuery}&rdquo;
+          </div>
+        )}
+      </div>
+    );
   };
 
   const handleLogout = async () => {
@@ -206,36 +316,43 @@ export function Navbar() {
             </div>
 
             {/* Search Bar — hidden on homepage top, visible when scrolled or on other pages */}
-            <form
-              onSubmit={handleSearch}
-              className="flex-1 max-w-[560px] w-full flex items-center border rounded-sm overflow-hidden mx-auto transition-all duration-300"
-
-            >
-              <input
-                type="text"
-                placeholder="Search rugs, carpets, styles..."
-                className={cn(
-                  "flex-1 px-5 py-3 text-sm outline-none font-roboto bg-white",
-                  scrolled
-                    ? "placeholder:text-gray-400 text-gray-700"
-                    : "placeholder:text-white/70 text-white bg-transparent"
-                )}
-
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <button
-                type="submit"
-                className="px-4 py-3 border-l transition-colors"
-                style={{
-                  borderColor: isTransparent ? "rgba(255,255,255,0.5)" : "#d0c8b8",
-                  color: isTransparent ? "white" : BRAND_BROWN,
-                }}
-                aria-label="Search"
+            <div className="relative flex-1 max-w-[560px] w-full mx-auto">
+              <form
+                onSubmit={handleSearch}
+                className="w-full flex items-center border rounded-sm overflow-hidden transition-all duration-300"
               >
-                <Search className="h-5 w-5" />
-              </button>
-            </form>
+                <input
+                  type="text"
+                  placeholder="Search rugs, carpets, styles..."
+                  className={cn(
+                    "flex-1 px-5 py-3 text-sm outline-none font-roboto",
+                    !isTransparent
+                      ? "placeholder:text-gray-400 text-gray-700 bg-white"
+                      : "placeholder:text-white/70 text-white bg-transparent"
+                  )}
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setShowSearchDropdown(true);
+                  }}
+                  onFocus={() => {
+                    if (searchQuery.trim()) setShowSearchDropdown(true);
+                  }}
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-3 border-l transition-colors"
+                  style={{
+                    borderColor: isTransparent ? "rgba(255,255,255,0.5)" : "#d0c8b8",
+                    color: isTransparent ? "white" : BRAND_BROWN,
+                  }}
+                  aria-label="Search"
+                >
+                  <Search className="h-5 w-5" />
+                </button>
+              </form>
+              {renderSearchDropdown()}
+            </div>
 
             {/* Right Icons */}
             <div className="flex-1 flex justify-end items-center gap-6">
@@ -397,7 +514,7 @@ export function Navbar() {
 
         {/* ── MOBILE SEARCH BAR ── */}
         <div
-          className="lg:hidden w-full px-3 py-2 border-b transition-all duration-300"
+          className="lg:hidden w-full px-3 py-2 border-b transition-all duration-300 relative"
           style={{
             backgroundColor: isTransparent ? "transparent" : "white",
             borderColor: isTransparent ? "transparent" : "#e8e0d5",
@@ -414,7 +531,13 @@ export function Navbar() {
               className="flex-1 px-4 py-2 text-sm outline-none font-roboto bg-transparent"
               style={{ color: isTransparent ? "white" : BRAND_BROWN }}
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setShowSearchDropdown(true);
+              }}
+              onFocus={() => {
+                if (searchQuery.trim()) setShowSearchDropdown(true);
+              }}
             />
             <button
               type="submit"
@@ -427,6 +550,7 @@ export function Navbar() {
               <Search className="h-4 w-4" />
             </button>
           </form>
+          {renderSearchDropdown()}
         </div>
 
         {/* ── DESKTOP CATEGORY NAV ── */}
@@ -438,107 +562,265 @@ export function Navbar() {
           }}
         >
           <div className="max-w-[1400px] mx-auto px-6">
-            <ul className="flex items-center">
-              {menuItems.map((item) => (
-                <li
-                  key={item.name}
-                  className="relative"
-                  onMouseEnter={() => item.megaMenu && setActiveMenu(item.name)}
-                  onMouseLeave={() => setActiveMenu(null)}
-                >
-                  {item.highlight === "new" ? (
-                    <Link
-                      href={item.href}
-                      className="block px-5 py-4 text-sm font-jost tracking-wider transition-colors duration-300"
-                      style={{ color: isTransparent ? "rgba(255,255,255,0.9)" : BRAND_GOLD }}
-                    >
-                      {item.name}
-                    </Link>
-                  ) : item.highlight === "sale" ? (
-                    <Link
-                      href={item.href}
-                      className="block px-5 py-4 text-sm font-jost tracking-wider transition-colors duration-300"
-                      style={{ color: isTransparent ? "rgba(255,255,255,0.9)" : "#CC0000" }}
-                    >
-                      {item.name}
-                    </Link>
-                  ) : (
-                    <Link
-                      href={item.href}
-                      className={cn(
-                        "flex items-center gap-1 px-5 py-4 text-sm font-jost tracking-wide transition-all duration-300 border-b-2",
-                        activeMenu === item.name ? "border-current" : "border-transparent"
-                      )}
-                      style={{
-                        color: activeMenu === item.name
-                          ? (isTransparent ? "white" : BRAND_GOLD)
-                          : (isTransparent ? "rgba(255,255,255,0.85)" : BRAND_BROWN),
-                        borderColor: activeMenu === item.name
-                          ? (isTransparent ? "white" : BRAND_GOLD)
-                          : "transparent",
-                      }}
-                    >
-                      {item.name}
-                      {item.megaMenu && (
-                        <ChevronDown
-                          className={cn(
-                            "h-3.5 w-3.5 transition-transform",
-                            activeMenu === item.name && "rotate-180"
-                          )}
-                        />
-                      )}
-                    </Link>
-                  )}
+            <ul className="flex items-center justify-center gap-6">
+              {menuItems.map((item) => {
+                const hasMega = item.layout !== "SIMPLE" || (item.columns && item.columns.length > 0);
+                const isItemActive = activeMenu === item.label;
 
-                  {/* Mega Dropdown */}
-                  {item.megaMenu && (
-                    <div
-                      className={cn(
-                        "absolute left-0 top-full w-52 bg-white shadow-2xl border-t-2 transition-all duration-200 z-50",
-                        activeMenu === item.name
-                          ? "opacity-100 visible translate-y-0"
-                          : "opacity-0 invisible -translate-y-1 pointer-events-none"
-                      )}
-                      style={{ borderTopColor: BRAND_GOLD }}
-                    >
-                      <ul className="py-2">
-                        {item.megaMenu.categories.map((cat) => (
-                          <li key={cat.href}>
-                            <Link
-                              href={cat.href}
-                              className={cn(
-                                "block px-5 py-2.5 text-sm transition-colors hover:bg-[#F5ECD7] font-roboto",
-                                cat.bold && "font-semibold font-jost"
-                              )}
-                              style={{ color: BRAND_BROWN }}
-                              onClick={() => setActiveMenu(null)}
-                            >
-                              {cat.name}
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </li>
-              ))}
-
-              {/* Extra links */}
-              <li className="ml-auto flex items-center gap-0">
-                {[
-                  { label: "About", href: "/about" },
-                  { label: "Custom Rugs", href: "/custom-rugs" },
-                ].map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className="px-4 py-4 text-sm font-jost tracking-wide transition-colors"
-                    style={{ color: isTransparent ? "rgba(255,255,255,0.8)" : "#8a7a6a" }}
+                return (
+                  <li
+                    key={item.id}
+                    className={cn(item.layout === "SIMPLE" ? "relative" : "static")}
+                    onMouseEnter={() => hasMega && setActiveMenu(item.label)}
+                    onMouseLeave={() => setActiveMenu(null)}
                   >
-                    {link.label}
-                  </Link>
-                ))}
-              </li>
+                    {item.slug ? (
+                      <Link
+                        href={item.slug}
+                        className={cn(
+                          "flex items-center gap-1 px-4 py-4 text-xs font-jost tracking-[0.2em] font-medium uppercase transition-all duration-300 border-b-2",
+                          isItemActive ? "border-current" : "border-transparent"
+                        )}
+                        style={{
+                          color: isTransparent ? "rgba(255,255,255,0.85)" : BRAND_BROWN,
+                        }}
+                      >
+                        {item.label}
+                      </Link>
+                    ) : (
+                      <span
+                        className={cn(
+                          "flex items-center gap-1 px-4 py-4 text-xs font-jost tracking-[0.2em] font-medium uppercase transition-all duration-300 border-b-2 cursor-pointer select-none",
+                          isItemActive ? "border-current" : "border-transparent"
+                        )}
+                        style={{
+                          color: isItemActive
+                            ? (isTransparent ? "white" : BRAND_GOLD)
+                            : (isTransparent ? "rgba(255,255,255,0.85)" : BRAND_BROWN),
+                          borderColor: isItemActive
+                            ? (isTransparent ? "white" : BRAND_GOLD)
+                            : "transparent",
+                        }}
+                      >
+                        {item.label}
+                        {hasMega && (
+                          <ChevronDown
+                            className={cn(
+                              "h-3.5 w-3.5 transition-transform duration-300",
+                              isItemActive && "rotate-180"
+                            )}
+                          />
+                        )}
+                      </span>
+                    )}
+
+                    {/* Mega Dropdown */}
+                    {hasMega && (
+                      <div
+                        className={cn(
+                          "bg-white shadow-2xl border-t transition-all duration-300 z-50 py-8 text-black left-0 right-0",
+                          item.layout === "SIMPLE"
+                            ? "absolute top-full w-56 px-0"
+                            : "absolute top-full w-full px-6 border-b"
+                        )}
+                        style={{
+                          opacity: isItemActive ? 1 : 0,
+                          visibility: isItemActive ? "visible" : "hidden",
+                          transform: isItemActive ? "translateY(0)" : "translateY(-4px)",
+                          borderColor: "#e8e0d5"
+                        }}
+                      >
+                        {/* 1. SHOP_TABS LAYOUT */}
+                        {item.layout === "SHOP_TABS" && (
+                          <div className="max-w-[1400px] mx-auto grid grid-cols-[260px_1fr] gap-8">
+                            {/* Left Category Sidebar */}
+                            <div className="border-r border-[#e8e0d5] pr-6 flex flex-col gap-1 max-h-[480px] overflow-y-auto no-scrollbar">
+                              {item.categories?.map((cat) => (
+                                <button
+                                  key={cat.id}
+                                  className={cn(
+                                    "w-full text-left px-3 py-2 text-xs font-semibold tracking-widest font-jost transition-all duration-150 rounded-sm flex items-center justify-between border-l-2",
+                                    activeCategoryTab === cat.id
+                                      ? "bg-[#F5ECD7] text-[#3D1C02] border-[#C9A84C]"
+                                      : "text-gray-700 hover:bg-gray-50 border-transparent"
+                                  )}
+                                  onMouseEnter={() => setActiveCategoryTab(cat.id)}
+                                >
+                                  {cat.name.toUpperCase()}
+                                  <ChevronRight className="h-3.5 w-3.5 opacity-50" />
+                                </button>
+                              ))}
+                            </div>
+
+                            {/* Right Columns Content */}
+                            <div className="min-h-[350px] max-h-[480px] overflow-y-auto no-scrollbar flex-1">
+                              {(() => {
+                                const activeCat = item.categories?.find(c => c.id === activeCategoryTab);
+                                if (!activeCat || !activeCat.columns || activeCat.columns.length === 0) {
+                                  return (
+                                    <div className="flex h-full items-center justify-center text-sm text-gray-400">
+                                      No columns configured.
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div className="flex flex-wrap gap-8 justify-between w-full">
+                                    {activeCat.columns.map((col) => (
+                                      <div key={col.id} className="flex-1 min-w-[150px] max-w-[240px] flex flex-col gap-2">
+                                        <h4 className="font-medium text-xs text-gray-400 uppercase tracking-widest border-b pb-2 mb-2">
+                                          {col.title}
+                                        </h4>
+                                        <ul className="flex flex-col gap-2">
+                                          {col.links?.map((lnk) => (
+                                            <li key={lnk.id}>
+                                              <Link
+                                                href={lnk.url}
+                                                className="text-sm text-gray-700 hover:text-amber-700 transition-colors inline-block font-roboto"
+                                                onClick={() => setActiveMenu(null)}
+                                              >
+                                                {lnk.label}
+                                                {lnk.badge && (
+                                                  <span className="ml-1 text-[8px] bg-red-100 text-red-600 font-bold px-1 rounded">
+                                                    {lnk.badge}
+                                                  </span>
+                                                )}
+                                              </Link>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 2. COLUMNS_WITH_BANNER LAYOUT */}
+                        {item.layout === "COLUMNS_WITH_BANNER" && (
+                          <div className="max-w-[1400px] mx-auto grid grid-cols-[1fr_320px] gap-8">
+                            <div className="flex flex-wrap gap-8 justify-start flex-1">
+                              {item.columns?.map((col) => (
+                                <div key={col.id} className="flex-1 min-w-[150px] max-w-[240px] flex flex-col gap-2">
+                                  <h4 className="font-medium text-xs text-gray-400 uppercase tracking-widest border-b pb-2 mb-2">
+                                    {col.title}
+                                  </h4>
+                                  <ul className="flex flex-col gap-2">
+                                    {col.links?.map((lnk) => (
+                                      <li key={lnk.id}>
+                                        <Link
+                                          href={lnk.url}
+                                          className="text-sm text-gray-700 hover:text-amber-700 transition-colors inline-block font-roboto"
+                                          onClick={() => setActiveMenu(null)}
+                                        >
+                                          {lnk.label}
+                                          {lnk.badge && (
+                                            <span className="ml-1 text-[8px] bg-red-100 text-red-600 font-bold px-1 rounded">
+                                              {lnk.badge}
+                                            </span>
+                                          )}
+                                        </Link>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="bg-[#F8F4EE] border border-[#e8e0d5] p-5 rounded flex flex-col justify-between items-center text-center shadow-inner relative overflow-hidden group min-h-[300px]">
+                              {item.bannerImage ? (
+                                <>
+                                  <img
+                                    src={item.bannerImage}
+                                    alt={item.bannerTitle || "Banner"}
+                                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                  />
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                                  <div className="absolute bottom-6 left-6 right-6 text-white flex flex-col items-center z-10">
+                                    <p className="font-jost text-base font-bold tracking-widest uppercase mb-3 text-center">
+                                      {item.bannerTitle}
+                                    </p>
+                                    <Link
+                                      href={item.bannerLink || "/products"}
+                                      className="px-6 py-2.5 bg-white text-black font-semibold text-[10px] tracking-widest uppercase rounded hover:bg-[#F5ECD7] hover:text-[#3D1C02] transition-colors"
+                                      onClick={() => setActiveMenu(null)}
+                                    >
+                                      {item.bannerSubtitle || "SHOP NOW"}
+                                    </Link>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="flex h-full flex-col justify-center items-center p-4">
+                                  <ImageIcon className="h-10 w-10 text-gray-300 mb-2" />
+                                  <p className="text-xs font-semibold text-gray-500">{item.bannerTitle || "Trending Bestsellers"}</p>
+                                  <Link
+                                    href={item.bannerLink || "/products"}
+                                    className="mt-4 px-4 py-2 bg-[#3D1C02] text-white rounded text-[10px] uppercase tracking-widest font-semibold"
+                                    onClick={() => setActiveMenu(null)}
+                                  >
+                                    {item.bannerSubtitle || "Shop Now"}
+                                  </Link>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 3. IMAGE_GRID LAYOUT */}
+                        {item.layout === "IMAGE_GRID" && (
+                          <div className="max-w-[1400px] mx-auto">
+                            <div className="grid grid-cols-6 gap-6">
+                              {item.columns?.[0]?.links?.map((lnk) => (
+                                <Link
+                                  key={lnk.id}
+                                  href={lnk.url}
+                                  className="relative block aspect-[4/5] rounded overflow-hidden shadow group"
+                                  onClick={() => setActiveMenu(null)}
+                                >
+                                  {lnk.image ? (
+                                    <img
+                                      src={lnk.image}
+                                      alt={lnk.label}
+                                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                    />
+                                  ) : (
+                                    <div className="absolute inset-0 bg-gray-100 flex items-center justify-center">
+                                      <ImageIcon className="h-8 w-8 text-gray-300" />
+                                    </div>
+                                  )}
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent group-hover:from-black/90 transition-colors" />
+                                  <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between text-white z-10">
+                                    <span className="font-jost text-xs tracking-widest font-semibold uppercase">{lnk.label}</span>
+                                    <ArrowRight className="h-4 w-4 transform -translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all" />
+                                  </div>
+                                </Link>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 4. SIMPLE / FALLBACK */}
+                        {item.layout === "SIMPLE" && (
+                          <ul className="py-2">
+                            {item.columns?.[0]?.links?.map((lnk) => (
+                              <li key={lnk.id}>
+                                <Link
+                                  href={lnk.url}
+                                  className="block px-5 py-2.5 text-sm transition-colors hover:bg-[#F5ECD7] font-roboto text-gray-700"
+                                  onClick={() => setActiveMenu(null)}
+                                >
+                                  {lnk.label}
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </nav>
@@ -614,68 +896,121 @@ export function Navbar() {
             </Link>
 
             {/* Dynamic categories */}
-            {menuItems
-              .filter((item) => !item.highlight)
-              .map((item) => (
-                <div key={item.name} className="border-b" style={{ borderColor: "#e8e0d5" }}>
-                  {item.megaMenu ? (
-                    <>
-                      <button
-                        onClick={() =>
-                          setExpandedMobileMenu(
-                            expandedMobileMenu === item.name ? null : item.name
-                          )
-                        }
-                        className="flex items-center justify-between w-full px-4 py-3.5 text-sm hover:bg-[#F5ECD7] transition-colors"
-                        style={{ color: BRAND_BROWN }}
-                      >
-                        <span className="font-medium font-jost">{item.name}</span>
-                        <ChevronRight
-                          className={cn(
-                            "h-4 w-4 transition-transform duration-200",
-                            expandedMobileMenu === item.name && "rotate-90"
-                          )}
-                          style={{ color: BRAND_GOLD }}
-                        />
-                      </button>
-                      <div
-                        className={cn(
-                          "overflow-hidden transition-all duration-300",
-                          expandedMobileMenu === item.name
-                            ? "max-h-[500px] opacity-100"
-                            : "max-h-0 opacity-0"
-                        )}
-                        style={{ backgroundColor: "#F8F4EE" }}
-                      >
-                        {item.megaMenu.categories.map((cat) => (
-                          <Link
-                            key={cat.href}
-                            href={cat.href}
-                            onClick={() => setIsMenuOpen(false)}
-                            className={cn(
-                              "block px-6 py-2.5 text-sm transition-colors hover:bg-[#F5ECD7]",
-                              cat.bold ? "font-semibold font-jost" : "font-roboto"
-                            )}
-                            style={{ color: BRAND_BROWN }}
-                          >
-                            {cat.name}
-                          </Link>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
+            {menuItems.map((item) => {
+              const hasSubmenu = item.layout !== "SIMPLE" || (item.columns && item.columns.length > 0);
+              const isExpanded = expandedMobileMenu === item.id;
+
+              if (!hasSubmenu) {
+                return (
+                  <div key={item.id} className="border-b" style={{ borderColor: "#e8e0d5" }}>
                     <Link
-                      href={item.href}
+                      href={item.slug || "/products"}
                       onClick={() => setIsMenuOpen(false)}
                       className="flex items-center justify-between px-4 py-3.5 text-sm hover:bg-[#F5ECD7] transition-colors"
                       style={{ color: BRAND_BROWN }}
                     >
-                      <span className="font-medium font-jost">{item.name}</span>
+                      <span className="font-medium font-jost">{item.label}</span>
                       <ChevronRight className="h-4 w-4" style={{ color: BRAND_GOLD }} />
                     </Link>
-                  )}
+                  </div>
+                );
+              }
+
+              return (
+                <div key={item.id} className="border-b" style={{ borderColor: "#e8e0d5" }}>
+                  <button
+                    onClick={() => setExpandedMobileMenu(isExpanded ? null : item.id)}
+                    className="flex items-center justify-between w-full px-4 py-3.5 text-sm hover:bg-[#F5ECD7] transition-colors"
+                    style={{ color: BRAND_BROWN }}
+                  >
+                    <span className="font-medium font-jost">{item.label}</span>
+                    <ChevronRight
+                      className={cn(
+                        "h-4 w-4 transition-transform duration-200",
+                        isExpanded && "rotate-90"
+                      )}
+                      style={{ color: BRAND_GOLD }}
+                    />
+                  </button>
+
+                  <div
+                    className={cn(
+                      "overflow-hidden transition-all duration-300",
+                      isExpanded ? "max-h-[1200px] opacity-100" : "max-h-0 opacity-0"
+                    )}
+                    style={{ backgroundColor: "#F8F4EE" }}
+                  >
+                    {item.layout === "SHOP_TABS" ? (
+                      <div className="pl-4">
+                        {item.categories?.map((cat) => {
+                          const isCatExpanded = expandedCategoryMobile === cat.id;
+                          return (
+                            <div key={cat.id} className="border-b border-[#e8e0d5]/40">
+                              <button
+                                onClick={() => setExpandedCategoryMobile(isCatExpanded ? null : cat.id)}
+                                className="flex items-center justify-between w-full py-2.5 pr-4 text-xs font-semibold text-gray-700 font-jost"
+                              >
+                                {cat.name.toUpperCase()}
+                                <ChevronRight
+                                  className={cn("h-3.5 w-3.5 transition-transform duration-200", isCatExpanded && "rotate-90")}
+                                />
+                              </button>
+
+                              <div
+                                className={cn(
+                                  "overflow-hidden transition-all duration-200 pl-4 space-y-3 bg-white/40",
+                                  isCatExpanded ? "max-h-[500px] py-2" : "max-h-0 opacity-0"
+                                )}
+                              >
+                                {cat.columns?.map((col) => (
+                                  <div key={col.id} className="py-1">
+                                    <div className="text-[10px] font-bold text-gray-400 tracking-wider uppercase">{col.title}</div>
+                                    <div className="flex flex-wrap gap-2 mt-1.5">
+                                      {col.links?.map((lnk) => (
+                                        <Link
+                                          key={lnk.id}
+                                          href={lnk.url}
+                                          onClick={() => setIsMenuOpen(false)}
+                                          className="text-xs text-gray-600 hover:text-amber-700 px-2.5 py-1 bg-white border border-[#e8e0d5] rounded-full"
+                                        >
+                                          {lnk.label}
+                                        </Link>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="py-3 px-4 space-y-4">
+                        {item.columns?.map((col) => (
+                          <div key={col.id}>
+                            <h5 className="font-bold text-[10px] text-gray-400 tracking-widest uppercase border-b pb-1 mb-2">
+                              {col.title}
+                            </h5>
+                            <div className="grid grid-cols-2 gap-2">
+                              {col.links?.map((lnk) => (
+                                <Link
+                                  key={lnk.id}
+                                  href={lnk.url}
+                                  onClick={() => setIsMenuOpen(false)}
+                                  className="text-xs text-gray-600 hover:text-amber-700 py-1.5 inline-block truncate"
+                                >
+                                  {lnk.label}
+                                </Link>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              ))}
+              );
+            })}
 
             {/* SALE */}
             <Link

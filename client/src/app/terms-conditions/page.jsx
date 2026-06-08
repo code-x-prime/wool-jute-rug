@@ -2,92 +2,112 @@ import { Card, CardContent } from "@/components/ui/card";
 
 export default function TermsAndConditions() {
   return (
-    <div className="max-w-4xl mx-auto py-10 px-4">
-      <Card>
-        <CardContent className="space-y-5 pt-6 text-gray-800">
-          <p>
-            For the purpose of these Terms and Conditions, The term
-            &quot;we&quot;, &quot;us&quot;, &quot;our&quot; used anywhere on
-            this page shall mean Morris Enterprises, whose
-            registered/operational office is plot no 928 khat no 516, badhsa,
-            Indospace Industrial & Logistics Park Badli, Jhajjar, Haryana,
-            124105 Sondhi BO HARYANA 124105 . &quot;you&quot;, &quot;your&quot;,
-            &quot;user&quot;, &quot;visitor&quot; shall mean any natural or
-            legal person who is visiting our website and/or agreed to purchase
-            from us.
+    <div className="max-w-4xl mx-auto py-16 px-6 font-jost">
+      <div className="text-center mb-12">
+        <h1 className="text-3xl md:text-4xl tracking-widest uppercase font-normal text-[#3D1C02] mb-3">
+          Terms &amp; Conditions
+        </h1>
+        <div className="h-0.5 w-16 bg-[#C9A84C] mx-auto mb-6"></div>
+        <p className="text-sm text-gray-500 uppercase tracking-widest">
+          Last Updated: June 2026
+        </p>
+      </div>
+
+      <Card className="border border-[#e5e0da] shadow-none bg-white rounded-none">
+        <CardContent className="space-y-8 p-8 md:p-12 text-gray-800 leading-relaxed font-roboto">
+          <p className="text-base font-jost tracking-wide text-gray-600">
+            Welcome to Wool Jute Rug Co. By using our website or placing an order, you agree to these Terms.
           </p>
 
-          <p>
-            Your use of the website and/or purchase from us are governed by
-            following Terms and Conditions:
-          </p>
+          <hr className="border-[#e5e0da]" />
 
-          <p>
-            The content of the pages of this website is subject to change
-            without notice.
-          </p>
+          {/* Section 1 */}
+          <div className="space-y-3">
+            <h2 className="font-jost text-sm font-bold uppercase tracking-widest text-[#3D1C02]">
+              Handmade Products
+            </h2>
+            <p className="text-sm text-gray-600">
+              All rugs are handcrafted. Slight variations in color, size, texture, weave, pattern, and finish are natural characteristics of handmade products and are not considered defects.
+            </p>
+            <blockquote className="border-l-2 border-[#C9A84C] pl-4 italic text-sm text-gray-500 my-2">
+              &ldquo;Variation is the beauty of handmade rugs.&rdquo;
+            </blockquote>
+          </div>
 
-          <p>
-            Neither we nor any third parties provide any warranty or guarantee
-            as to the accuracy, timeliness, performance, completeness or
-            suitability of the information and materials found or offered on
-            this website for any particular purpose. You acknowledge that such
-            information and materials may contain inaccuracies or errors and we
-            expressly exclude liability for any such inaccuracies or errors to
-            the fullest extent permitted by law.
-          </p>
+          {/* Section 2 */}
+          <div className="space-y-3">
+            <h2 className="font-jost text-sm font-bold uppercase tracking-widest text-[#3D1C02]">
+              Orders &amp; Pricing
+            </h2>
+            <p className="text-sm text-gray-600">
+              We reserve the right to refuse, cancel, or modify any order due to pricing errors, product availability, suspected fraud, or other legitimate business reasons.
+            </p>
+          </div>
 
-          <p>
-            Your use of any information or materials on our website and/or
-            product pages is entirely at your own risk, for which we shall not
-            be liable. It shall be your own responsibility to ensure that any
-            products, services or information available through our website
-            and/or product pages meet your specific requirements.
-          </p>
+          {/* Section 3 */}
+          <div className="space-y-3">
+            <h2 className="font-jost text-sm font-bold uppercase tracking-widest text-[#3D1C02]">
+              Custom Rugs
+            </h2>
+            <p className="text-sm text-gray-600">
+              Custom, personalized, and made-to-order rugs are final sale and cannot be cancelled, returned, or refunded once production has begun.
+            </p>
+          </div>
 
-          <p>
-            Our website contains material which is owned by or licensed to us.
-            This material includes, but are not limited to, the design, layout,
-            look, appearance and graphics. Reproduction is prohibited other than
-            in accordance with the copyright notice, which forms part of these
-            terms and conditions.
-          </p>
+          {/* Section 4 */}
+          <div className="space-y-3">
+            <h2 className="font-jost text-sm font-bold uppercase tracking-widest text-[#3D1C02]">
+              Shipping
+            </h2>
+            <p className="text-sm text-gray-600">
+              Delivery dates are estimates only. We are not responsible for delays caused by shipping carriers, customs, weather conditions, or events beyond our control.
+            </p>
+          </div>
 
-          <p>
-            All trademarks reproduced in our website which are not the property
-            of, or licensed to, the operator are acknowledged on the website.
-          </p>
+          {/* Section 5 */}
+          <div className="space-y-3">
+            <h2 className="font-jost text-sm font-bold uppercase tracking-widest text-[#3D1C02]">
+              Intellectual Property
+            </h2>
+            <p className="text-sm text-gray-600">
+              All content, images, designs, logos, and product information on this website are the property of Wool Jute Rug Co. and may not be copied, reproduced, or used without permission.
+            </p>
+          </div>
 
-          <p>
-            Unauthorized use of information provided by us shall give rise to a
-            claim for damages and/or be a criminal offense.
-          </p>
+          {/* Section 6 */}
+          <div className="space-y-3">
+            <h2 className="font-jost text-sm font-bold uppercase tracking-widest text-[#3D1C02]">
+              Liability
+            </h2>
+            <p className="text-sm text-gray-600">
+              Wool Jute Rug Co. shall not be liable for indirect, incidental, or consequential damages arising from the use of our website, products, or services.
+            </p>
+          </div>
 
-          <p>
-            From time to time our website may also include links to other
-            websites. These links are provided for your convenience to provide
-            further information.
-          </p>
+          {/* Section 7 */}
+          <div className="space-y-3">
+            <h2 className="font-jost text-sm font-bold uppercase tracking-widest text-[#3D1C02]">
+              Updates
+            </h2>
+            <p className="text-sm text-gray-600">
+              We may update these Terms at any time. Continued use of the website constitutes acceptance of any changes.
+            </p>
+          </div>
 
-          <p>
-            You may not create a link to our website from another website or
-            document without Morris Enterprises&apos;s prior written consent.
-          </p>
+          <hr className="border-[#e5e0da]" />
 
-          <p>
-            Any dispute arising out of use of our website and/or purchase with
-            us and/or any engagement with us is subject to the laws of India.
-          </p>
-
-          <p>
-            We, shall be under no liability whatsoever in respect of any loss or
-            damage arising directly or indirectly out of the decline of
-            authorization for any Transaction, on Account of the Cardholder
-            having exceeded the preset limit mutually agreed by us with our
-            acquiring bank from time to time
-          </p>
-
-          <p className="text-sm">Last updated on Jul 14 2025</p>
+          {/* Contact */}
+          <div className="text-center pt-4">
+            <p className="text-sm text-gray-500 font-jost tracking-wide">
+              Have questions? Contact Support at
+            </p>
+            <a 
+              href="mailto:support@wooljuterugco.com" 
+              className="text-base font-semibold text-[#C9A84C] hover:text-[#3D1C02] transition-colors font-jost mt-1 inline-block"
+            >
+              support@wooljuterugco.com
+            </a>
+          </div>
         </CardContent>
       </Card>
     </div>

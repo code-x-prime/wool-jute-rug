@@ -46,6 +46,7 @@ import SettingsPage from "./pages/SettingsPage";
 import MarketingSettingsPage from "./pages/MarketingSettingsPage";
 import TawkToSettingsPage from "./pages/TawkToSettingsPage";
 import SiteSettingsPage from "./pages/SiteSettingsPage";
+import NavigationPage from "./pages/NavigationPage";
 import { LanguageProvider } from "./context/LanguageContext";
 
 // Protected Route Component
@@ -450,6 +451,18 @@ const App = () => {
                   action={Action.UPDATE}
                 >
                   <SettingsPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="navigation-settings"
+              element={
+                <ProtectedRoute
+                  resource={Resource.SETTINGS}
+                  action={Action.UPDATE}
+                >
+                  <NavigationPage />
                 </ProtectedRoute>
               }
             />

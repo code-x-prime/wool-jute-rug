@@ -55,6 +55,38 @@ export const getAllProducts = asyncHandler(async (req, res) => {
             name: { contains: normalizedSearch, mode: "insensitive" },
           },
         },
+        // Also allow searching by subcategory name
+        {
+          subCategories: {
+            some: {
+              subCategory: {
+                name: { contains: normalizedSearch, mode: "insensitive" },
+              },
+            },
+          },
+        },
+        // Also allow searching by variant attributes (style, design, size, color, etc.)
+        {
+          variants: {
+            some: {
+              isActive: true,
+              attributes: {
+                some: {
+                  attributeValue: {
+                    OR: [
+                      { value: { contains: normalizedSearch, mode: "insensitive" } },
+                      {
+                        attribute: {
+                          name: { contains: normalizedSearch, mode: "insensitive" },
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
       ],
     }),
     // Filter by category

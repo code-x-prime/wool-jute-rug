@@ -1311,3 +1311,59 @@ export const pricingSlabs = {
     });
   },
 };
+
+// Menu Navigation Management
+export const menus = {
+  getNavbarItems: () => {
+    return api.get("/api/admin/menus");
+  },
+  getNavbarItemById: (id: string) => {
+    return api.get(`/api/admin/menus/${id}`);
+  },
+  createNavbarItem: (data: FormData) => {
+    return api.post("/api/admin/menus", data, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  },
+  updateNavbarItem: (id: string, data: FormData) => {
+    return api.patch(`/api/admin/menus/${id}`, data, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  },
+  deleteNavbarItem: (id: string) => {
+    return api.delete(`/api/admin/menus/${id}`);
+  },
+  // Column endpoints
+  createColumn: (navbarItemId: string, data: { title: string; order: number; categoryId?: string }) => {
+    return api.post(`/api/admin/menus/${navbarItemId}/columns`, data);
+  },
+  updateColumn: (navbarItemId: string, columnId: string, data: { title?: string; order?: number; categoryId?: string | null }) => {
+    return api.patch(`/api/admin/menus/${navbarItemId}/columns/${columnId}`, data);
+  },
+  deleteColumn: (navbarItemId: string, columnId: string) => {
+    return api.delete(`/api/admin/menus/${navbarItemId}/columns/${columnId}`);
+  },
+  // Link endpoints
+  createLink: (columnId: string, data: FormData) => {
+    return api.post(`/api/admin/menus/columns/${columnId}/links`, data, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  },
+  updateLink: (columnId: string, linkId: string, data: FormData) => {
+    return api.patch(`/api/admin/menus/columns/${columnId}/links/${linkId}`, data, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  },
+  deleteLink: (columnId: string, linkId: string) => {
+    return api.delete(`/api/admin/menus/columns/${columnId}/links/${linkId}`);
+  },
+};
+

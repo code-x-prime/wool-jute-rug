@@ -820,12 +820,16 @@ const getCustomRugRequests = asyncHandler(async (req, res) => {
   const limitNumber = parseInt(req.query.limit, 10) || 10;
   const skip = (pageNumber - 1) * limitNumber;
   const status = req.query.status;
+  const type = req.query.type;
 
   try {
     // Build where clause based on filters
     const where = {};
     if (status) {
       where.status = status;
+    }
+    if (type) {
+      where.type = type;
     }
 
     // Get total count for pagination

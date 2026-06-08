@@ -742,3 +742,125 @@ export const getShoppableVideoCarousel = asyncHandler(async (req, res) => {
     )
   );
 });
+
+export const getPublicMenus = asyncHandler(async (req, res) => {
+  const navbarItems = await prisma.navbarItem.findMany({
+    where: { isActive: true },
+    include: {
+      columns: {
+        include: {
+          links: true,
+        },
+        orderBy: { order: "asc" },
+      },
+    },
+    orderBy: { order: "asc" },
+  });
+
+  const categories = await prisma.category.findMany({
+    include: {
+      subCategories: {
+        where: { isActive: true },
+        orderBy: { name: "asc" },
+      },
+      navbarColumns: {
+        include: {
+          links: {
+            orderBy: { order: "asc" },
+          },
+        },
+        orderBy: { order: "asc" },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const formattedCategories = categories.map((cat) => {
+    let columns = cat.navbarColumns.map((col) => ({
+      id: col.id,
+      title: col.title,
+      order: col.order,
+      links: col.links.map((lnk) => ({
+        id: lnk.id,
+        label: lnk.label,
+        url: lnk.url,
+        image: lnk.image ? getFileUrl(lnk.image) : null,
+        badge: lnk.badge,
+        order: lnk.order,
+      })),
+    }));
+
+    // Fallback: If no columns are defined, automatically create a "SUBCATEGORIES" or "COLLECTION" column
+    if (columns.length === 0) {
+      if (cat.subCategories.length > 0) {
+        columns = [
+          {
+            id: `fallback-subcat-${cat.id}`,
+            title: "SUBCATEGORIES",
+            order: 0,
+            links: cat.subCategories.map((sub, idx) => ({
+              id: sub.id,
+              label: sub.name,
+              url: `/products?category=${cat.slug}&subcategory=${sub.slug}`,
+              image: sub.image ? getFileUrl(sub.image) : null,
+              badge: null,
+              order: idx,
+            })),
+          },
+        ];
+      } else {
+        columns = [
+          {
+            id: `fallback-shop-all-${cat.id}`,
+            title: "COLLECTION",
+            order: 0,
+            links: [
+              {
+                id: `fallback-link-${cat.id}`,
+                label: `Shop All ${cat.name}`,
+                url: `/products?category=${cat.slug}`,
+                image: null,
+                badge: null,
+                order: 0,
+              },
+            ],
+          },
+        ];
+      }
+    }
+
+    return {
+      id: cat.id,
+      name: cat.name,
+      slug: cat.slug,
+      image: cat.image ? getFileUrl(cat.image) : null,
+      columns,
+    };
+  });
+
+  const formattedNavbarItems = navbarItems.map((item) => {
+    const copy = { ...item };
+    if (copy.bannerImage) {
+      copy.bannerImage = getFileUrl(copy.bannerImage);
+    }
+    
+    // Attach dynamically populated categories to SHOP_TABS layout
+    if (copy.layout === "SHOP_TABS") {
+      copy.categories = formattedCategories;
+    } else {
+      copy.columns = copy.columns.map((col) => ({
+        ...col,
+        links: col.links.map((lnk) => ({
+          ...lnk,
+          image: lnk.image ? getFileUrl(lnk.image) : null,
+        })),
+      }));
+    }
+    return copy;
+  });
+
+  res.status(200).json(
+    new ApiResponsive(200, { navbarItems: formattedNavbarItems }, "Navbar menus fetched successfully")
+  );
+});
+

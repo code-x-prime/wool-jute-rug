@@ -43,6 +43,7 @@ import adminMarketingRoutes from "./routes/admin.marketing.routes.js";
 import adminSiteSettingsRoutes from "./routes/admin.site-settings.routes.js";
 import adminShoppableCarouselRoutes from "./routes/admin.shoppableCarousel.routes.js";
 import adminOAuthRoutes from "./routes/admin.oauth.routes.js";
+import adminMenuRoutes from "./routes/admin.menu.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 
 const app = express();
@@ -167,6 +168,7 @@ app.use("/api/admin/marketing", adminMarketingRoutes);
 app.use("/api/admin", adminSiteSettingsRoutes);
 app.use("/api/admin", adminShoppableCarouselRoutes);
 app.use("/api/admin", adminOAuthRoutes);
+app.use("/api/admin", adminMenuRoutes);
 
 // Shiprocket webhook (public endpoint)
 app.use("/api/webhooks/shiprocket", adminShiprocketRoutes);

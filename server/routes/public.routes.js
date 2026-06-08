@@ -22,8 +22,12 @@ import {
   getOAuthProviders,
 } from "../controllers/public.controller.js";
 import { getPublishedBanners } from "../controllers/admin.banner.controller.js";
-import { getActiveFlashSales, getActiveProductSections, getShoppableVideoCarousel } from "../controllers/public.controller.js";
+import { getActiveFlashSales, getActiveProductSections, getShoppableVideoCarousel, getPublicMenus } from "../controllers/public.controller.js";
 import { getPublicTawkToConfig } from "../controllers/tawkto.controller.js";
+import {
+  submitRugServiceRequest,
+  submitContactEnquiry,
+} from "../controllers/content.controller.js";
 
 const router = express.Router();
 
@@ -70,5 +74,12 @@ router.get("/tawkto-settings", getPublicTawkToConfig);
 
 // Public Site Settings (for client checkout - site name, Razorpay key)
 router.get("/settings", getPublicSettings);
+
+// Public Menu Navigation
+router.get("/menus", getPublicMenus);
+
+// Public submissions
+router.post("/rug-services", submitRugServiceRequest);
+router.post("/contact-enquiry", submitContactEnquiry);
 
 export default router;

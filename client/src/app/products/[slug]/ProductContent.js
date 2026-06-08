@@ -1202,18 +1202,25 @@ export default function ProductContent({ slug }) {
 
             <Button
               variant="outline"
-              className={`rounded-none py-7 px-6 border border-gray-300 transition-all ${isInWishlist
+              className={`rounded-none h-auto py-2 px-4 border border-gray-300 transition-all ${isInWishlist
                 ? "text-red-600 border-red-600 hover:bg-red-50"
-                : "hover:border-black hover:text-black"
+                : "hover:border-black hover:text-black "
                 }`}
-              size="icon"
               onClick={handleAddToWishlist}
               disabled={isAddingToWishlist}
             >
               <Heart
-                className={`h-5 w-5 ${isInWishlist ? "fill-current" : ""}`}
+                className={`h-6 w-6 text-black ${isInWishlist ? "fill-current text-red-600" : ""}`}
               />
             </Button>
+          </div>
+
+          {/* Handcrafted Product Disclaimer */}
+          <div className="mb-6 p-4 border border-[#e5e0da] bg-[#FDFBF7] text-gray-700 text-xs leading-relaxed font-roboto">
+            <p className="font-semibold text-[10px] uppercase tracking-wider text-[#3D1C02] mb-1.5 font-jost flex items-center gap-1.5">
+              <AlertCircle size={12} className="text-[#C9A84C]" /> Handcrafted Product Notice
+            </p>
+            Every Wool Jute Rug Co. rug is individually handcrafted. Slight variations in color, size, texture, weave and pattern are natural characteristics of handmade rugs and enhance their uniqueness and authenticity. These variations are not defects and are not eligible for return or refund.
           </div>
 
           {/* Product Metadata */}

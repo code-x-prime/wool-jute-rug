@@ -27,6 +27,7 @@ import {
   LayoutGrid,
   Globe,
   Cloud,
+  Layers,
 } from "lucide-react";
 import { HiVideoCamera } from "react-icons/hi";
 import { useTheme } from "@/hooks/useTheme";
@@ -584,16 +585,18 @@ export default function DashboardLayout() {
                       Action.UPDATE
                     ),
                   },
-
                   {
-                    href: "/pricing-slabs",
-                    title: t("nav.pricing_slabs"),
+                    href: "/navigation-settings",
+                    title: "Navigation Menu",
+                    icon: <Layers className="h-3 w-3" />,
                     hasPermission: hasPermissionFor(
                       admin,
-                      Resource.PRODUCTS,
+                      Resource.SETTINGS,
                       Action.UPDATE
                     ),
                   },
+
+
                   {
                     href: "/email-delivery-settings",
                     title: t("nav.email_delivery"),
@@ -924,6 +927,16 @@ export default function DashboardLayout() {
                     ),
                   },
                   {
+                    href: "/navigation-settings",
+                    title: "Navigation Menu",
+                    icon: <Layers className="h-3 w-3" />,
+                    hasPermission: hasPermissionFor(
+                      admin,
+                      Resource.SETTINGS,
+                      Action.UPDATE
+                    ),
+                  },
+                  {
                     href: "/site-settings?tab=media",
                     title: "Media Storage (Images)",
                     icon: <Cloud className="h-3 w-3" />,
@@ -942,15 +955,7 @@ export default function DashboardLayout() {
                       Action.UPDATE
                     ),
                   },
-                  {
-                    href: "/pricing-slabs",
-                    title: t("nav.pricing_slabs"),
-                    hasPermission: hasPermissionFor(
-                      admin,
-                      Resource.PRODUCTS,
-                      Action.UPDATE
-                    ),
-                  },
+
                   {
                     href: "/payment-settings",
                     title: t("nav.payment"),

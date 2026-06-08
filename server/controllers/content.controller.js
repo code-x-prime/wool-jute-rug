@@ -3,6 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponsive } from "../utils/ApiResponsive.js";
 import { prisma } from "../config/db.js";
 import { getFileUrl } from "../utils/deleteFromS3.js";
+import sendEmail from "../utils/sendEmail.js";
 
 /**
  * Get blog posts with pagination
@@ -335,9 +336,67 @@ const submitCustomRugRequest = asyncHandler(async (req, res) => {
         material,
         colors,
         designNotes,
+        type: "CUSTOM_RUG",
         status: "NEW",
       },
     });
+
+    // Try to send emails
+    try {
+      const adminEmail = process.env.ADMIN_EMAIL || "connect.wooljuterug@gmail.com";
+      // Send to Admin
+      await sendEmail({
+        email: adminEmail,
+        subject: "New Custom Rug Request Received - Wool Jute Rug Co.",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e8e0d5; padding: 20px;">
+            <div style="background-color: #3D1C02; color: #fff; padding: 15px; text-align: center;">
+              <h2 style="margin: 0; font-weight: normal; letter-spacing: 1px;">Custom Rug Request</h2>
+            </div>
+            <div style="padding: 20px; color: #333;">
+              <p>Hello Admin,</p>
+              <p>You have received a new custom rug request. Here are the details:</p>
+              <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                <tr><td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold; width: 35%;">Name:</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${name}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;">Email:</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${email}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;">Phone:</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${phone || "N/A"}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;">Dimensions:</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${dimensions || "N/A"}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;">Material:</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${material || "N/A"}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;">Colors:</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${colors || "N/A"}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;">Design Notes:</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${designNotes || "N/A"}</td></tr>
+              </table>
+            </div>
+          </div>
+        `
+      });
+
+      // Send to Customer
+      await sendEmail({
+        email: email,
+        subject: "We've Received Your Custom Rug Inquiry - Wool Jute Rug Co.",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e8e0d5; padding: 20px;">
+            <div style="background-color: #3D1C02; color: #fff; padding: 15px; text-align: center;">
+              <h2 style="margin: 0; font-weight: normal; letter-spacing: 1px;">Wool Jute Rug Co.</h2>
+            </div>
+            <div style="padding: 20px; color: #333; line-height: 1.6;">
+              <p>Dear ${name},</p>
+              <p>Thank you for reaching out to us with your custom rug requirements. We have received your inquiry and our design specialists are reviewing the specifications.</p>
+              <p><strong>Summary of details submitted:</strong></p>
+              <ul>
+                <li><strong>Dimensions:</strong> ${dimensions || "N/A"}</li>
+                <li><strong>Material:</strong> ${material || "N/A"}</li>
+                <li><strong>Colors:</strong> ${colors || "N/A"}</li>
+              </ul>
+              <p>We will get back to you within 24-48 business hours with an initial design consultation.</p>
+              <p>Warm regards,<br/>Team Wool Jute Rug Co.</p>
+            </div>
+          </div>
+        `
+      });
+    } catch (emailErr) {
+      console.error("Error sending custom rug emails:", emailErr);
+    }
 
     return res
       .status(201)
@@ -350,6 +409,185 @@ const submitCustomRugRequest = asyncHandler(async (req, res) => {
   } catch (error) {
     console.error("Error submitting custom rug request:", error);
     throw new ApiError(500, "Failed to submit custom rug request");
+  }
+});
+
+/**
+ * @desc    Submit rug services (washing & repair) request
+ * @route   POST /api/public/rug-services
+ * @access  Public
+ */
+const submitRugServiceRequest = asyncHandler(async (req, res) => {
+  const { name, email, phone, pincode, designNotes } = req.body;
+
+  if (!name || !phone || !pincode) {
+    throw new ApiError(400, "Name, phone, and pincode are required");
+  }
+
+  try {
+    const dbEmail = email || `no-email-${Date.now()}@wooljuterug.com`;
+    // Create service request in database
+    await prisma.customRugRequest.create({
+      data: {
+        name,
+        email: dbEmail,
+        phone,
+        pincode,
+        designNotes,
+        type: "RUG_SERVICE",
+        status: "NEW",
+      },
+    });
+
+    // Send email notifications
+    try {
+      const adminEmail = process.env.ADMIN_EMAIL || "connect.wooljuterug@gmail.com";
+      // Send to Admin
+      await sendEmail({
+        email: adminEmail,
+        subject: "New Rug Wash & Repair Request - Wool Jute Rug Co.",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e8e0d5; padding: 20px;">
+            <div style="background-color: #3D1C02; color: #fff; padding: 15px; text-align: center;">
+              <h2 style="margin: 0; font-weight: normal; letter-spacing: 1px;">Rug Wash & Repair Request</h2>
+            </div>
+            <div style="padding: 20px; color: #333;">
+              <p>Hello Admin,</p>
+              <p>A new washing and repair request has been submitted:</p>
+              <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                <tr><td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold; width: 35%;">Customer Name:</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${name}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;">Phone:</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${phone}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;">Pincode:</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${pincode}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;">Email:</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${email || "N/A"}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;">Description/Notes:</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${designNotes || "N/A"}</td></tr>
+              </table>
+            </div>
+          </div>
+        `
+      });
+
+      // Send to Customer (if valid email provided)
+      if (email) {
+        await sendEmail({
+          email: email,
+          subject: "We've Received Your Rug Service Request - Wool Jute Rug Co.",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e8e0d5; padding: 20px;">
+              <div style="background-color: #3D1C02; color: #fff; padding: 15px; text-align: center;">
+                <h2 style="margin: 0; font-weight: normal; letter-spacing: 1px;">Wool Jute Rug Co.</h2>
+              </div>
+              <div style="padding: 20px; color: #333; line-height: 1.6;">
+                <p>Dear ${name},</p>
+                <p>Thank you for requesting our professional rug washing and care services. We have registered your request for pincode <strong>${pincode}</strong>.</p>
+                <p>One of our rug care specialists will contact you at <strong>${phone}</strong> shortly to discuss the pickup options, service charges, and logistics details.</p>
+                <p>Warm regards,<br/>Team Wool Jute Rug Co.</p>
+              </div>
+            </div>
+          `
+        });
+      }
+    } catch (emailErr) {
+      console.error("Error sending rug service emails:", emailErr);
+    }
+
+    return res
+      .status(201)
+      .json(
+        new ApiResponsive(
+          201,
+          "Your service request has been received. Our rug specialists will contact you shortly."
+        )
+      );
+  } catch (error) {
+    console.error("Error submitting rug service request:", error);
+    throw new ApiError(500, "Failed to submit service request");
+  }
+});
+
+/**
+ * @desc    Submit general contact enquiry
+ * @route   POST /api/public/contact-enquiry
+ * @access  Public
+ */
+const submitContactEnquiry = asyncHandler(async (req, res) => {
+  const { name, email, phone, designNotes } = req.body;
+
+  if (!name || !email || !designNotes) {
+    throw new ApiError(400, "Name, email, and message are required");
+  }
+
+  try {
+    // Create contact request in database
+    await prisma.customRugRequest.create({
+      data: {
+        name,
+        email,
+        phone,
+        designNotes,
+        type: "CONTACT_ENQUIRY",
+        status: "NEW",
+      },
+    });
+
+    // Send email notifications
+    try {
+      const adminEmail = process.env.ADMIN_EMAIL || "connect.wooljuterug@gmail.com";
+      // Send to Admin
+      await sendEmail({
+        email: adminEmail,
+        subject: "New General Contact Enquiry - Wool Jute Rug Co.",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e8e0d5; padding: 20px;">
+            <div style="background-color: #3D1C02; color: #fff; padding: 15px; text-align: center;">
+              <h2 style="margin: 0; font-weight: normal; letter-spacing: 1px;">General Contact Enquiry</h2>
+            </div>
+            <div style="padding: 20px; color: #333;">
+              <p>Hello Admin,</p>
+              <p>You have received a new message from the contact page:</p>
+              <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                <tr><td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold; width: 35%;">Name:</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${name}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;">Email:</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${email}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;">Phone:</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${phone || "N/A"}</td></tr>
+                <tr><td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;">Message:</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${designNotes}</td></tr>
+              </table>
+            </div>
+          </div>
+        `
+      });
+
+      // Send to Customer
+      await sendEmail({
+        email: email,
+        subject: "Thank You for Contacting Us - Wool Jute Rug Co.",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e8e0d5; padding: 20px;">
+            <div style="background-color: #3D1C02; color: #fff; padding: 15px; text-align: center;">
+              <h2 style="margin: 0; font-weight: normal; letter-spacing: 1px;">Wool Jute Rug Co.</h2>
+            </div>
+            <div style="padding: 20px; color: #333; line-height: 1.6;">
+              <p>Dear ${name},</p>
+              <p>Thank you for getting in touch with us. We have received your message and our customer support team is looking into it.</p>
+              <p>We will get back to you as soon as possible, typically within 24 hours.</p>
+              <p>Warm regards,<br/>Team Wool Jute Rug Co.</p>
+            </div>
+          </div>
+        `
+      });
+    } catch (emailErr) {
+      console.error("Error sending contact enquiry emails:", emailErr);
+    }
+
+    return res
+      .status(201)
+      .json(
+        new ApiResponsive(
+          201,
+          "Your enquiry has been submitted. We will contact you soon."
+        )
+      );
+  } catch (error) {
+    console.error("Error submitting contact enquiry:", error);
+    throw new ApiError(500, "Failed to submit contact enquiry");
   }
 });
 
@@ -417,5 +655,7 @@ export {
   getShippingPolicy,
   getFaqs,
   submitCustomRugRequest,
+  submitRugServiceRequest,
+  submitContactEnquiry,
   getContactInfo,
 };

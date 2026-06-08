@@ -59,10 +59,12 @@ interface CustomRugRequest {
   name: string;
   email: string;
   phone: string | null;
+  pincode: string | null;
   dimensions: string | null;
   material: string | null;
   colors: string | null;
   designNotes: string | null;
+  type: "CUSTOM_RUG" | "RUG_SERVICE" | "CONTACT_ENQUIRY";
   status: "NEW" | "IN_PROGRESS" | "RESOLVED" | "SPAM";
   adminNotes: string | null;
   createdAt: string;
@@ -90,6 +92,7 @@ const CustomRugsManagementPage = () => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  const [selectedType, setSelectedType] = useState<string>("CUSTOM_RUG");
   const [searchQuery, setSearchQuery] = useState("");
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
@@ -117,7 +120,7 @@ const CustomRugsManagementPage = () => {
   const fetchSubmissions = async () => {
     setIsLoading(true);
     try {
-      let url = `${API_URL}/admin/custom-rugs?page=${page}&limit=10`;
+      let url = `${API_URL}/admin/custom-rugs?page=${page}&limit=10&type=${selectedType}`;
       if (selectedStatus) {
         url += `&status=${selectedStatus}`;
       }
@@ -145,7 +148,7 @@ const CustomRugsManagementPage = () => {
 
   useEffect(() => {
     fetchSubmissions();
-  }, [page, selectedStatus]);
+  }, [page, selectedStatus, selectedType]);
 
   const handleStatusChange = (value: string) => {
     setSelectedStatus(value === "ALL" ? null : value);
@@ -235,13 +238,37 @@ const CustomRugsManagementPage = () => {
       <div className="space-y-4">
         <div>
           <h1 className="text-3xl font-semibold text-[var(--text-primary)] tracking-tight">
-            Custom Rug Requests
+            Customer Inquiries & Requests
           </h1>
           <p className="text-[var(--text-secondary)] text-sm mt-1.5">
-            Manage bespoke rug inquiries from customers
+            Manage custom rugs, washing & repair requests, and general contact enquiries
           </p>
         </div>
         <div className="h-px bg-[var(--border-color)]" />
+      </div>
+
+      {/* Tabs Selector */}
+      <div className="flex border-b border-[var(--border-color)] gap-6">
+        {[
+          { label: "Custom Rugs", value: "CUSTOM_RUG" },
+          { label: "Washing & Repairs", value: "RUG_SERVICE" },
+          { label: "Contact Enquiries", value: "CONTACT_ENQUIRY" }
+        ].map((tab) => (
+          <button
+            key={tab.value}
+            onClick={() => {
+              setSelectedType(tab.value);
+              setPage(1);
+            }}
+            className={`pb-4 text-sm font-semibold border-b-2 transition-all ${
+              selectedType === tab.value
+                ? "border-[var(--accent)] text-[var(--accent)]"
+                : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Filters Bar */}
@@ -320,9 +347,19 @@ const CustomRugsManagementPage = () => {
                           <p className="text-sm text-[var(--text-secondary)] truncate">
                             {submission.email}
                           </p>
-                          {submission.dimensions && (
+                          {selectedType === "CUSTOM_RUG" && (
                             <p className="text-xs text-[var(--text-secondary)] truncate mt-1">
-                              Size: {submission.dimensions} | Mat: {submission.material}
+                              Size: {submission.dimensions || "N/A"} | Mat: {submission.material || "N/A"} | Colors: {submission.colors || "N/A"}
+                            </p>
+                          )}
+                          {selectedType === "RUG_SERVICE" && (
+                            <p className="text-xs text-[var(--text-secondary)] truncate mt-1">
+                              Pincode: {submission.pincode || "N/A"}
+                            </p>
+                          )}
+                          {selectedType === "CONTACT_ENQUIRY" && (
+                            <p className="text-xs text-[var(--text-secondary)] truncate mt-1">
+                              Message: {submission.designNotes || "No details"}
                             </p>
                           )}
                         </div>
@@ -472,6 +509,12 @@ const CustomRugsManagementPage = () => {
                     <p className="text-xs text-[var(--text-secondary)] mb-1 uppercase tracking-wider font-semibold">Phone</p>
                     <p className="font-medium text-[var(--text-primary)]">{selectedSubmission.phone || "Not provided"}</p>
                   </div>
+                  {selectedSubmission.type === "RUG_SERVICE" && (
+                    <div>
+                      <p className="text-xs text-[var(--text-secondary)] mb-1 uppercase tracking-wider font-semibold">Pincode</p>
+                      <p className="font-medium text-[var(--text-primary)]">{selectedSubmission.pincode || "Not provided"}</p>
+                    </div>
+                  )}
                   <div>
                     <p className="text-xs text-[var(--text-secondary)] mb-1 uppercase tracking-wider font-semibold">Status</p>
                     <Badge
@@ -492,33 +535,38 @@ const CustomRugsManagementPage = () => {
               </div>
 
               {/* Rug Specifications Card */}
-              <div className="bg-[var(--bg-secondary)] p-5 rounded-xl border border-[var(--border-color)]">
-                <h4 className="text-sm font-semibold text-[var(--text-primary)] mb-4 border-b border-[var(--border-color)] pb-2 flex items-center gap-2">
-                  <span className="text-[var(--accent)]">●</span> Rug Specifications
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-y-4 gap-x-6">
-                  <div>
-                    <p className="text-xs text-[var(--text-secondary)] mb-1 uppercase tracking-wider font-semibold">Dimensions</p>
-                    <p className="font-medium text-[var(--text-primary)]">{selectedSubmission.dimensions || "Not specified"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--text-secondary)] mb-1 uppercase tracking-wider font-semibold">Material</p>
-                    <p className="font-medium text-[var(--text-primary)]">{selectedSubmission.material || "Not specified"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--text-secondary)] mb-1 uppercase tracking-wider font-semibold">Colors</p>
-                    <p className="font-medium text-[var(--text-primary)]">{selectedSubmission.colors || "Not specified"}</p>
+              {selectedSubmission.type === "CUSTOM_RUG" && (
+                <div className="bg-[var(--bg-secondary)] p-5 rounded-xl border border-[var(--border-color)]">
+                  <h4 className="text-sm font-semibold text-[var(--text-primary)] mb-4 border-b border-[var(--border-color)] pb-2 flex items-center gap-2">
+                    <span className="text-[var(--accent)]">●</span> Rug Specifications
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-y-4 gap-x-6">
+                    <div>
+                      <p className="text-xs text-[var(--text-secondary)] mb-1 uppercase tracking-wider font-semibold">Dimensions</p>
+                      <p className="font-medium text-[var(--text-primary)]">{selectedSubmission.dimensions || "Not specified"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--text-secondary)] mb-1 uppercase tracking-wider font-semibold">Material</p>
+                      <p className="font-medium text-[var(--text-primary)]">{selectedSubmission.material || "Not specified"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--text-secondary)] mb-1 uppercase tracking-wider font-semibold">Colors</p>
+                      <p className="font-medium text-[var(--text-primary)]">{selectedSubmission.colors || "Not specified"}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Design Notes */}
               <div>
                 <h4 className="text-sm font-semibold text-[var(--text-primary)] mb-2 flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-[var(--accent)]" /> Design Notes & Inspiration
+                  <MessageSquare className="w-4 h-4 text-[var(--accent)]" /> 
+                  {selectedSubmission.type === "CUSTOM_RUG" && "Design Notes & Inspiration"}
+                  {selectedSubmission.type === "RUG_SERVICE" && "Washing & Repair Description"}
+                  {selectedSubmission.type === "CONTACT_ENQUIRY" && "Enquiry Message"}
                 </h4>
                 <div className="p-4 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)] whitespace-pre-wrap text-sm text-[var(--text-primary)] min-h-[80px]">
-                  {selectedSubmission.designNotes || <span className="text-muted-foreground italic">No design notes provided.</span>}
+                  {selectedSubmission.designNotes || <span className="text-muted-foreground italic">No notes or details provided.</span>}
                 </div>
               </div>
 
