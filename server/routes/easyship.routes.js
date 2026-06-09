@@ -1,15 +1,16 @@
 import express from "express";
-import { verifyAdminJWT } from "../middlewares/auth.middleware.js";
+
 import {
   getEasyshipRates,
   createEasyshipShipment,
   trackEasyshipShipment,
   getEasyshipStatus,
 } from "../controllers/easyship.controller.js";
+import { verifyJWTToken } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-router.use(verifyAdminJWT);
+router.use(verifyJWTToken);
 
 router.get("/status", getEasyshipStatus);
 router.post("/rates", getEasyshipRates);
