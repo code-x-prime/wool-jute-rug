@@ -16,6 +16,12 @@ import {
   createPayPalOrder,
   capturePayPalPayment,
 } from "../controllers/paypal.controller.js";
+import {
+  getPayoneerSettings,
+  createPayoneerPayment,
+  verifyPayoneerPayment,
+  payoneerWebhook,
+} from "../controllers/payoneer.controller.js";
 
 const router = express.Router();
 
@@ -28,6 +34,10 @@ router.post("/phonepe-callback", phonePeCallback);
 // PayPal client ID (public — needed to init PayPal JS SDK on frontend)
 router.get("/paypal/client-id", getPayPalClientId);
 
+// Payoneer public endpoints
+router.get("/payoneer/settings", getPayoneerSettings);
+router.post("/payoneer/webhook", payoneerWebhook);
+
 // All other payment routes require authentication
 router.use(verifyJWTToken);
 
@@ -37,6 +47,10 @@ router.get("/razorpay-key", getRazorpayKey);
 // PayPal
 router.post("/paypal/create-order", createPayPalOrder);
 router.post("/paypal/capture", capturePayPalPayment);
+
+// Payoneer
+router.post("/payoneer/create-payment", createPayoneerPayment);
+router.post("/payoneer/verify", verifyPayoneerPayment);
 
 // Create order (checkout)
 router.post("/checkout", checkout);

@@ -102,6 +102,10 @@ export default function OrderDetailsPage() {
     };
     shippingCost?: string | number;
     total?: string | number;
+    // Top-level shipping fields
+    awbCode?: string;
+    trackingUrl?: string;
+    courierName?: string;
     // International / Easyship fields
     shippingProvider?: string; // "SHIPROCKET" | "EASYSHIP"
     easyshipShipmentId?: string;

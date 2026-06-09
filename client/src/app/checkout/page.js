@@ -92,12 +92,18 @@ export default function CheckoutPage() {
             cashEnabled: response.data.cashEnabled ?? true,
             razorpayEnabled: response.data.razorpayEnabled ?? false,
             codCharge: response.data.codCharge ?? 0,
+            paypalEnabled: response.data.paypalEnabled ?? false,
+            payoneerEnabled: response.data.payoneerEnabled ?? false,
           });
-          // Set default payment method based on settings (priority: Cash > Razorpay)
+          // Default: Cash > Razorpay for Indian; PayPal for international (set after geo-detect)
           if (response.data.cashEnabled) {
             setPaymentMethod("CASH");
           } else if (response.data.razorpayEnabled) {
             setPaymentMethod("RAZORPAY");
+          } else if (response.data.paypalEnabled) {
+            setPaymentMethod("PAYPAL");
+          } else if (response.data.payoneerEnabled) {
+            setPaymentMethod("PAYONEER");
           }
         }
       } catch (error) {
@@ -170,9 +176,13 @@ export default function CheckoutPage() {
         const india = data?.country_code === "IN";
         setIsIndianCustomer(india);
         setGeoDetected(true);
-        // If international, default to PayPal if enabled
-        if (!india && paymentSettings.paypalEnabled) {
-          setPaymentMethod("PAYPAL");
+        // If international, default to PayPal or Payoneer
+        if (!india) {
+          if (paymentSettings.paypalEnabled) {
+            setPaymentMethod("PAYPAL");
+          } else if (paymentSettings.payoneerEnabled) {
+            setPaymentMethod("PAYONEER");
+          }
         }
       } catch {
         setIsIndianCustomer(true); // fallback to India on error
@@ -443,6 +453,37 @@ export default function CheckoutPage() {
           }).render("#paypal-button-container");
         } catch (err) {
           toast.error(err?.message || "PayPal initialization failed");
+          setProcessing(false);
+        }
+        return;
+      } else if (paymentMethod === "PAYONEER") {
+        // Payoneer — create payment session → redirect to Payoneer hosted page
+        try {
+          const payoneerAmount = Math.max(
+            parseFloat(((totals.subtotal - totals.discount) / 83).toFixed(2)),
+            0.01
+          );
+          toast.loading("Creating Payoneer payment...", { id: "payoneer-create" });
+          const createRes = await fetchApi("/payment/payoneer/create-payment", {
+            method: "POST",
+            credentials: "include",
+            body: JSON.stringify({
+              amount: payoneerAmount.toFixed(2),
+              currency: "USD",
+              shippingAddressId: selectedAddressId,
+            }),
+          });
+          toast.dismiss("payoneer-create");
+          if (!createRes?.success) throw new Error(createRes?.message || "Payoneer init failed");
+          if (createRes.data.manualInstructions) {
+            // Payoneer not fully configured — show manual instructions
+            toast.info("Please transfer payment via Payoneer to Program ID: " + createRes.data.programId + ". Contact us after transfer.", { duration: 10000 });
+            setProcessing(false);
+          } else if (createRes.data.redirectUrl) {
+            window.location.href = createRes.data.redirectUrl;
+          }
+        } catch (err) {
+          toast.error(err?.message || "Payoneer payment failed");
           setProcessing(false);
         }
         return;
@@ -1068,6 +1109,38 @@ export default function CheckoutPage() {
                     </div>
                     <p className="text-sm mt-2 ml-6 text-gray-600">
                       Pay securely with your PayPal account or credit/debit card internationally.
+                    </p>
+                  </div>
+                )}
+
+                {/* Payoneer — International */}
+                {paymentSettings.payoneerEnabled && !isIndianCustomer && (
+                  <div
+                    className={`border rounded-md p-4 transition-all ${paymentMethod === "PAYONEER"
+                      ? "border-orange-500 bg-orange-50 cursor-pointer"
+                      : "hover:border-gray-400 cursor-pointer"
+                      }`}
+                    onClick={() => handlePaymentMethodSelect("PAYONEER")}
+                  >
+                    <div className="flex items-center">
+                      <input
+                        type="radio"
+                        id="payoneer"
+                        name="paymentMethod"
+                        checked={paymentMethod === "PAYONEER"}
+                        onChange={() => handlePaymentMethodSelect("PAYONEER")}
+                        className="h-4 w-4 border-gray-300"
+                      />
+                      <label htmlFor="payoneer" className="ml-2 flex items-center flex-1">
+                        <span className="font-medium text-orange-700">Payoneer</span>
+                        {paymentMethod === "PAYONEER" && (
+                          <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded">Selected</span>
+                        )}
+                      </label>
+                      <span className="text-orange-600 font-bold text-xs">PAYONEER</span>
+                    </div>
+                    <p className="text-sm mt-2 ml-6 text-gray-600">
+                      Pay via Payoneer — ideal for international business payments.
                     </p>
                   </div>
                 )}

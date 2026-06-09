@@ -176,6 +176,14 @@ export const getPaymentSettings = asyncHandler(async (req, res) => {
     },
   });
 
+  // Check PayPal + Payoneer from SiteSettings
+  const siteSettings2 = await prisma.siteSettings.findFirst({
+    select: {
+      paypalEnabled: true, paypalClientId: true,
+      payoneerEnabled: true, payoneerApiKey: true,
+    },
+  });
+
   res.status(200).json(
     new ApiResponsive(
       200,
@@ -184,6 +192,8 @@ export const getPaymentSettings = asyncHandler(async (req, res) => {
         razorpayEnabled: paymentSettings.razorpayEnabled && !!razorpaySettings,
         phonepeEnabled: !!phonepeSettings,
         codCharge: parseFloat(paymentSettings.codCharge) || 0,
+        paypalEnabled: !!(siteSettings2?.paypalEnabled && siteSettings2?.paypalClientId),
+        payoneerEnabled: !!(siteSettings2?.payoneerEnabled && siteSettings2?.payoneerApiKey),
       },
       "Payment settings fetched successfully"
     )
@@ -1289,12 +1299,19 @@ export const cancelOrder = asyncHandler(async (req, res) => {
       });
     }
 
-    // 3. Handle payment refund if needed (just mark as refund pending)
+    // 3. Handle payment marking
     if (order.razorpayPayment) {
       await tx.razorpayPayment.update({
         where: { orderId },
+        data: { status: "REFUNDED" },
+      });
+    }
+    // PayPal: mark order note so admin knows to issue refund manually via PayPal dashboard
+    if (order.paymentMethod === "PAYPAL" && order.paypalCaptureId) {
+      await tx.order.update({
+        where: { id: orderId },
         data: {
-          status: "REFUNDED",
+          notes: `${order.notes || ""} [PAYPAL_REFUND_PENDING:${order.paypalCaptureId}]`.trim(),
         },
       });
     }
