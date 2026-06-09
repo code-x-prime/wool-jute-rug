@@ -80,7 +80,7 @@ interface PickupAddress {
 export default function SiteSettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab") || "general";
-  const activeTab = ["general", "payment", "price", "oauth", "shipping", "branding", "media"].includes(tabParam) ? tabParam : "general";
+  const activeTab = ["general", "payment", "price", "oauth", "shipping", "branding", "media", "intl-payment", "intl-shipping"].includes(tabParam) ? tabParam : "general";
 
   const [settings, setSettings] = useState<SiteSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
