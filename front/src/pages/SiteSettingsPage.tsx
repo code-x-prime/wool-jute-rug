@@ -86,6 +86,8 @@ export default function SiteSettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isTestingRazorpay, setIsTestingRazorpay] = useState(false);
+  const [isTestingPayPal, setIsTestingPayPal] = useState(false);
+  const [isTestingEasyship, setIsTestingEasyship] = useState(false);
   const [isConnectingShiprocket, setIsConnectingShiprocket] = useState(false);
   const [showRazorpaySecret, setShowRazorpaySecret] = useState(false);
   const [showShiprocketPassword, setShowShiprocketPassword] = useState(false);
@@ -144,6 +146,31 @@ export default function SiteSettingsPage() {
     shiprocketPassword: "",
     shiprocketEnabled: false,
   });
+
+  // PayPal state
+  const [paypalForm, setPaypalForm] = useState({
+    paypalClientId: "",
+    paypalClientSecret: "",
+    paypalEnabled: false,
+    paypalMode: "sandbox" as "sandbox" | "live",
+  });
+  const [showPaypalSecret, setShowPaypalSecret] = useState(false);
+
+  // Payoneer state
+  const [payoneerForm, setPayoneerForm] = useState({
+    payoneerApiKey: "",
+    payoneerProgramId: "",
+    payoneerEnabled: false,
+  });
+  const [showPayoneerKey, setShowPayoneerKey] = useState(false);
+
+  // Easyship state
+  const [easyshipForm, setEasyshipForm] = useState({
+    easyshipApiKey: "",
+    easyshipEnabled: false,
+    easyshipAccountId: "",
+  });
+  const [showEasyshipKey, setShowEasyshipKey] = useState(false);
 
   const [_storageConfig, setStorageConfig] = useState<{
     activeProvider: string | null;
@@ -347,6 +374,22 @@ export default function SiteSettingsPage() {
           shiprocketPassword: s.shiprocketPassword || "••••••••",
           shiprocketEnabled: s.shiprocketEnabled || false,
         });
+        setPaypalForm({
+          paypalClientId: s.paypalClientId || "",
+          paypalClientSecret: s.paypalClientSecret ? "••••••••" : "",
+          paypalEnabled: s.paypalEnabled || false,
+          paypalMode: (s.paypalMode as "sandbox" | "live") || "sandbox",
+        });
+        setPayoneerForm({
+          payoneerApiKey: s.payoneerApiKey ? "••••••••" : "",
+          payoneerProgramId: s.payoneerProgramId || "",
+          payoneerEnabled: s.payoneerEnabled || false,
+        });
+        setEasyshipForm({
+          easyshipApiKey: s.easyshipApiKey ? "••••••••" : "",
+          easyshipEnabled: s.easyshipEnabled || false,
+          easyshipAccountId: s.easyshipAccountId || "",
+        });
       }
     } catch (err: unknown) {
       toast.error("Failed to load site settings");
@@ -384,6 +427,61 @@ export default function SiteSettingsPage() {
     }
   };
 
+  const handleSavePayPal = async () => {
+    try {
+      setIsSaving(true);
+      await api.put("/api/admin/site-settings", {
+        paypalClientId: paypalForm.paypalClientId || null,
+        paypalClientSecret: paypalForm.paypalClientSecret !== "••••••••" ? paypalForm.paypalClientSecret : undefined,
+        paypalEnabled: paypalForm.paypalEnabled,
+        paypalMode: paypalForm.paypalMode,
+      });
+      toast.success("PayPal settings saved");
+      fetchSettings();
+    } catch (err: unknown) {
+      const msg = err && typeof err === "object" && "response" in err ? (err as { response?: { data?: { message?: string } } }).response?.data?.message : undefined;
+      toast.error(msg || "Failed to save PayPal settings");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSavePayoneer = async () => {
+    try {
+      setIsSaving(true);
+      await api.put("/api/admin/site-settings", {
+        payoneerApiKey: payoneerForm.payoneerApiKey !== "••••••••" ? payoneerForm.payoneerApiKey : undefined,
+        payoneerProgramId: payoneerForm.payoneerProgramId || null,
+        payoneerEnabled: payoneerForm.payoneerEnabled,
+      });
+      toast.success("Payoneer settings saved");
+      fetchSettings();
+    } catch (err: unknown) {
+      const msg = err && typeof err === "object" && "response" in err ? (err as { response?: { data?: { message?: string } } }).response?.data?.message : undefined;
+      toast.error(msg || "Failed to save Payoneer settings");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveEasyship = async () => {
+    try {
+      setIsSaving(true);
+      await api.put("/api/admin/site-settings", {
+        easyshipApiKey: easyshipForm.easyshipApiKey !== "••••••••" ? easyshipForm.easyshipApiKey : undefined,
+        easyshipEnabled: easyshipForm.easyshipEnabled,
+        easyshipAccountId: easyshipForm.easyshipAccountId || null,
+      });
+      toast.success("Easyship settings saved");
+      fetchSettings();
+    } catch (err: unknown) {
+      const msg = err && typeof err === "object" && "response" in err ? (err as { response?: { data?: { message?: string } } }).response?.data?.message : undefined;
+      toast.error(msg || "Failed to save Easyship settings");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSaveRazorpay = async () => {
     try {
       setIsSaving(true);
@@ -412,6 +510,41 @@ export default function SiteSettingsPage() {
       toast.error("Test failed");
     } finally {
       setIsTestingRazorpay(false);
+    }
+  };
+
+  const handleTestPayPal = async () => {
+    if (!paypalForm.paypalClientId) { toast.error("Enter PayPal Client ID first"); return; }
+    setIsTestingPayPal(true);
+    try {
+      const res = await api.get("/api/payment/paypal/client-id");
+      if (res.data?.data?.clientId) {
+        toast.success(`PayPal connected (${paypalForm.paypalMode} mode)`);
+      } else {
+        toast.error("PayPal not accessible — check keys and enable toggle");
+      }
+    } catch {
+      toast.error("PayPal test failed — save keys first, then test");
+    } finally {
+      setIsTestingPayPal(false);
+    }
+  };
+
+  const handleTestEasyship = async () => {
+    setIsTestingEasyship(true);
+    try {
+      const res = await api.get("/api/admin/easyship/status");
+      if (res.data?.data?.enabled && res.data?.data?.hasApiKey) {
+        toast.success("Easyship configured and enabled");
+      } else if (res.data?.data?.hasApiKey) {
+        toast.info("Easyship API key saved but not enabled — toggle Enable");
+      } else {
+        toast.error("Easyship not configured — add API key first");
+      }
+    } catch {
+      toast.error("Easyship test failed");
+    } finally {
+      setIsTestingEasyship(false);
     }
   };
 
@@ -635,6 +768,14 @@ export default function SiteSettingsPage() {
           <TabsTrigger value="media" className="data-[state=active]:bg-[var(--bg-card)]">
             <Cloud className="h-4 w-4 mr-2" />
             Media Storage
+          </TabsTrigger>
+          <TabsTrigger value="intl-payment" className="data-[state=active]:bg-[var(--bg-card)]">
+            <CreditCard className="h-4 w-4 mr-2" />
+            International Payments
+          </TabsTrigger>
+          <TabsTrigger value="intl-shipping" className="data-[state=active]:bg-[var(--bg-card)]">
+            <Truck className="h-4 w-4 mr-2" />
+            International Shipping
           </TabsTrigger>
         </TabsList>
 
@@ -1317,6 +1458,220 @@ export default function SiteSettingsPage() {
                 {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Save Media Storage
               </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── International Payments ─────────────────────────── */}
+        <TabsContent value="intl-payment" className="space-y-6">
+          <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
+            <CardHeader>
+              <CardTitle className="text-[var(--text-primary)]">International Payment Gateways</CardTitle>
+              <p className="text-sm text-[var(--text-secondary)]">
+                For non-Indian customers. Checkout auto-detects location and shows the appropriate gateway.
+                Indian customers see Razorpay/COD. International customers see PayPal and/or Payoneer.
+              </p>
+            </CardHeader>
+          </Card>
+
+          {/* PayPal */}
+          <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
+            <CardHeader>
+              <CardTitle className="text-[var(--text-primary)] flex items-center gap-2">
+                <CreditCard className="h-5 w-5 text-[#0070BA]" />
+                PayPal
+                <Badge variant={paypalForm.paypalEnabled ? "default" : "secondary"}>
+                  {paypalForm.paypalEnabled ? "Enabled" : "Disabled"}
+                </Badge>
+              </CardTitle>
+              <p className="text-xs text-[var(--text-secondary)]">
+                PayPal JS SDK. Get credentials at developer.paypal.com. Use Sandbox for testing, Live for production.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-3 border border-[var(--border-color)] rounded-lg">
+                <Label className="text-[var(--text-primary)]">Enable PayPal at Checkout</Label>
+                <Switch checked={paypalForm.paypalEnabled} onCheckedChange={(v) => setPaypalForm({ ...paypalForm, paypalEnabled: v })} />
+              </div>
+              <div className="flex items-center gap-4">
+                <Label className="text-[var(--text-primary)] w-24 shrink-0">Mode</Label>
+                <div className="flex gap-3">
+                  {(["sandbox", "live"] as const).map((m) => (
+                    <button key={m} type="button"
+                      onClick={() => setPaypalForm({ ...paypalForm, paypalMode: m })}
+                      className={`px-4 py-1.5 rounded-md text-sm font-medium border transition-colors ${paypalForm.paypalMode === m ? "bg-[var(--accent)] text-white border-[var(--accent)]" : "border-[var(--border-color)] text-[var(--text-primary)]"}`}>
+                      {m.charAt(0).toUpperCase() + m.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Label className="text-[var(--text-primary)]">Client ID</Label>
+                <Input
+                  value={paypalForm.paypalClientId}
+                  onChange={(e) => setPaypalForm({ ...paypalForm, paypalClientId: e.target.value })}
+                  className="mt-1"
+                  placeholder="AcxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxY"
+                />
+              </div>
+              <div>
+                <Label className="text-[var(--text-primary)]">Client Secret</Label>
+                <div className="relative mt-1">
+                  <Input
+                    type={showPaypalSecret ? "text" : "password"}
+                    value={paypalForm.paypalClientSecret}
+                    onChange={(e) => setPaypalForm({ ...paypalForm, paypalClientSecret: e.target.value })}
+                    placeholder="••••••••"
+                  />
+                  <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full"
+                    onClick={() => setShowPaypalSecret(!showPaypalSecret)}>
+                    {showPaypalSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <Button onClick={handleSavePayPal} disabled={isSaving}>
+                  {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save PayPal Settings
+                </Button>
+                <Button variant="outline" onClick={handleTestPayPal} disabled={isTestingPayPal || isSaving}>
+                  {isTestingPayPal && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Test Connection
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Payoneer */}
+          <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
+            <CardHeader>
+              <CardTitle className="text-[var(--text-primary)] flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-[#FF4800]" />
+                Payoneer
+                <Badge variant={payoneerForm.payoneerEnabled ? "default" : "secondary"}>
+                  {payoneerForm.payoneerEnabled ? "Enabled" : "Disabled"}
+                </Badge>
+              </CardTitle>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Payoneer Mass Payments / Checkout API. Get API credentials from your Payoneer partner dashboard.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-3 border border-[var(--border-color)] rounded-lg">
+                <Label className="text-[var(--text-primary)]">Enable Payoneer at Checkout</Label>
+                <Switch checked={payoneerForm.payoneerEnabled} onCheckedChange={(v) => setPayoneerForm({ ...payoneerForm, payoneerEnabled: v })} />
+              </div>
+              <div>
+                <Label className="text-[var(--text-primary)]">Program ID</Label>
+                <Input
+                  value={payoneerForm.payoneerProgramId}
+                  onChange={(e) => setPayoneerForm({ ...payoneerForm, payoneerProgramId: e.target.value })}
+                  className="mt-1"
+                  placeholder="100012345"
+                />
+                <p className="text-xs text-[var(--text-secondary)] mt-1">Your Payoneer Program/Partner ID</p>
+              </div>
+              <div>
+                <Label className="text-[var(--text-primary)]">API Key / Partner Username</Label>
+                <div className="relative mt-1">
+                  <Input
+                    type={showPayoneerKey ? "text" : "password"}
+                    value={payoneerForm.payoneerApiKey}
+                    onChange={(e) => setPayoneerForm({ ...payoneerForm, payoneerApiKey: e.target.value })}
+                    placeholder="••••••••"
+                  />
+                  <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full"
+                    onClick={() => setShowPayoneerKey(!showPayoneerKey)}>
+                    {showPayoneerKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+              <Button onClick={handleSavePayoneer} disabled={isSaving}>
+                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Payoneer Settings
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── International Shipping (Easyship) ──────────────── */}
+        <TabsContent value="intl-shipping" className="space-y-6">
+          <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
+            <CardHeader>
+              <CardTitle className="text-[var(--text-primary)]">Easyship — International Shipping</CardTitle>
+              <p className="text-sm text-[var(--text-secondary)]">
+                Easyship connects you to 250+ courier services worldwide. Used for international orders.
+                Indian orders continue to use Shiprocket. Get API key at app.easyship.com → Settings → API.
+              </p>
+            </CardHeader>
+          </Card>
+
+          <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
+            <CardHeader>
+              <CardTitle className="text-[var(--text-primary)] flex items-center gap-2">
+                <Truck className="h-5 w-5 text-[var(--accent)]" />
+                Easyship API
+                <Badge variant={easyshipForm.easyshipEnabled ? "default" : "secondary"}>
+                  {easyshipForm.easyshipEnabled ? "Enabled" : "Disabled"}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-3 border border-[var(--border-color)] rounded-lg">
+                <div>
+                  <Label className="text-[var(--text-primary)]">Enable Easyship</Label>
+                  <p className="text-xs text-[var(--text-secondary)]">Show Easyship courier options for international orders in admin</p>
+                </div>
+                <Switch checked={easyshipForm.easyshipEnabled} onCheckedChange={(v) => setEasyshipForm({ ...easyshipForm, easyshipEnabled: v })} />
+              </div>
+              <div>
+                <Label className="text-[var(--text-primary)]">Easyship Account ID</Label>
+                <Input
+                  value={easyshipForm.easyshipAccountId}
+                  onChange={(e) => setEasyshipForm({ ...easyshipForm, easyshipAccountId: e.target.value })}
+                  className="mt-1"
+                  placeholder="EXXXXXXXXX"
+                />
+                <p className="text-xs text-[var(--text-secondary)] mt-1">Found in Easyship dashboard → Settings → Account</p>
+              </div>
+              <div>
+                <Label className="text-[var(--text-primary)]">API Key</Label>
+                <div className="relative mt-1">
+                  <Input
+                    type={showEasyshipKey ? "text" : "password"}
+                    value={easyshipForm.easyshipApiKey}
+                    onChange={(e) => setEasyshipForm({ ...easyshipForm, easyshipApiKey: e.target.value })}
+                    placeholder="••••••••"
+                  />
+                  <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full"
+                    onClick={() => setShowEasyshipKey(!showEasyshipKey)}>
+                    {showEasyshipKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-[var(--text-secondary)] mt-1">Production API key from Easyship</p>
+              </div>
+
+              <div className="p-4 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)] space-y-2">
+                <p className="text-sm font-medium text-[var(--text-primary)]">How it works</p>
+                <ul className="text-xs text-[var(--text-secondary)] space-y-1 list-disc list-inside">
+                  <li>Admin opens an international order detail page</li>
+                  <li>Click &quot;Get Easyship Rates&quot; → fetches 250+ courier options with pricing</li>
+                  <li>Select courier → click &quot;Book Shipment&quot;</li>
+                  <li>AWB + tracking number auto-saved to order</li>
+                  <li>Customer can track via the tracking URL</li>
+                </ul>
+              </div>
+
+              <div className="flex gap-2 flex-wrap">
+                <Button onClick={handleSaveEasyship} disabled={isSaving}>
+                  {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Easyship Settings
+                </Button>
+                <Button variant="outline" onClick={handleTestEasyship} disabled={isTestingEasyship || isSaving}>
+                  {isTestingEasyship && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Test Connection
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

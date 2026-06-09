@@ -18,6 +18,9 @@ function maskSettings(settings) {
   const masked = { ...settings };
   if (masked.razorpayKeySecret) masked.razorpayKeySecret = "••••••••";
   if (masked.shiprocketPassword) masked.shiprocketPassword = "••••••••";
+  if (masked.paypalClientSecret) masked.paypalClientSecret = "••••••••";
+  if (masked.payoneerApiKey) masked.payoneerApiKey = "••••••••";
+  if (masked.easyshipApiKey) masked.easyshipApiKey = "••••••••";
   return masked;
 }
 
@@ -61,6 +64,19 @@ export const updateSiteSettings = asyncHandler(async (req, res) => {
     shiprocketEmail,
     shiprocketPassword,
     shiprocketEnabled,
+    // PayPal
+    paypalClientId,
+    paypalClientSecret,
+    paypalEnabled,
+    paypalMode,
+    // Payoneer
+    payoneerApiKey,
+    payoneerProgramId,
+    payoneerEnabled,
+    // Easyship
+    easyshipApiKey,
+    easyshipEnabled,
+    easyshipAccountId,
   } = req.body;
 
   let settings = await prisma.siteSettings.findFirst();
@@ -108,6 +124,40 @@ export const updateSiteSettings = asyncHandler(async (req, res) => {
       updateData.shiprocketTokenExpiry = null;
     } catch (e) {
       throw new ApiError(400, "Failed to encrypt Shiprocket password");
+    }
+  }
+
+  // PayPal
+  if (paypalClientId !== undefined) updateData.paypalClientId = paypalClientId;
+  if (typeof paypalEnabled === "boolean") updateData.paypalEnabled = paypalEnabled;
+  if (paypalMode !== undefined) updateData.paypalMode = paypalMode;
+  if (paypalClientSecret && paypalClientSecret !== "••••••••") {
+    try {
+      updateData.paypalClientSecret = "enc:" + encrypt(paypalClientSecret.trim());
+    } catch (e) {
+      throw new ApiError(400, "Failed to encrypt PayPal secret");
+    }
+  }
+
+  // Payoneer
+  if (payoneerProgramId !== undefined) updateData.payoneerProgramId = payoneerProgramId;
+  if (typeof payoneerEnabled === "boolean") updateData.payoneerEnabled = payoneerEnabled;
+  if (payoneerApiKey && payoneerApiKey !== "••••••••") {
+    try {
+      updateData.payoneerApiKey = "enc:" + encrypt(payoneerApiKey.trim());
+    } catch (e) {
+      throw new ApiError(400, "Failed to encrypt Payoneer key");
+    }
+  }
+
+  // Easyship
+  if (typeof easyshipEnabled === "boolean") updateData.easyshipEnabled = easyshipEnabled;
+  if (easyshipAccountId !== undefined) updateData.easyshipAccountId = easyshipAccountId;
+  if (easyshipApiKey && easyshipApiKey !== "••••••••") {
+    try {
+      updateData.easyshipApiKey = "enc:" + encrypt(easyshipApiKey.trim());
+    } catch (e) {
+      throw new ApiError(400, "Failed to encrypt Easyship key");
     }
   }
 

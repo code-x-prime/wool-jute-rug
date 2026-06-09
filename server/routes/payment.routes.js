@@ -11,6 +11,11 @@ import {
   createCashOrder,
   phonePeCallback,
 } from "../controllers/payment.controller.js";
+import {
+  getPayPalClientId,
+  createPayPalOrder,
+  capturePayPalPayment,
+} from "../controllers/paypal.controller.js";
 
 const router = express.Router();
 
@@ -20,11 +25,18 @@ router.get("/settings", getPaymentSettings);
 // PhonePe callback (public route - called by PhonePe)
 router.post("/phonepe-callback", phonePeCallback);
 
+// PayPal client ID (public — needed to init PayPal JS SDK on frontend)
+router.get("/paypal/client-id", getPayPalClientId);
+
 // All other payment routes require authentication
 router.use(verifyJWTToken);
 
 // Get Razorpay key
 router.get("/razorpay-key", getRazorpayKey);
+
+// PayPal
+router.post("/paypal/create-order", createPayPalOrder);
+router.post("/paypal/capture", capturePayPalPayment);
 
 // Create order (checkout)
 router.post("/checkout", checkout);

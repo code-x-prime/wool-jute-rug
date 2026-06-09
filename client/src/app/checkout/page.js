@@ -43,6 +43,8 @@ export default function CheckoutPage() {
     cashEnabled: true,
     razorpayEnabled: false,
     codCharge: 0,
+    paypalEnabled: false,
+    payoneerEnabled: false,
   });
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [processing, setProcessing] = useState(false);
@@ -50,7 +52,10 @@ export default function CheckoutPage() {
   const [orderId, setOrderId] = useState("");
   const [paymentId, setPaymentId] = useState("");
   const [razorpayKey, setRazorpayKey] = useState("");
+  const [paypalClientId, setPaypalClientId] = useState("");
   const [siteName, setSiteName] = useState("");
+  const [isIndianCustomer, setIsIndianCustomer] = useState(true); // default India
+  const [geoDetected, setGeoDetected] = useState(false);
   const [error, setError] = useState("");
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [orderNumber, setOrderNumber] = useState("");
@@ -154,6 +159,43 @@ export default function CheckoutPage() {
       }
     };
     fetchPublicSettings();
+  }, []);
+
+  // Geo-detect: Indian or International customer
+  useEffect(() => {
+    const detect = async () => {
+      try {
+        const res = await fetch("https://ipapi.co/json/");
+        const data = await res.json();
+        const india = data?.country_code === "IN";
+        setIsIndianCustomer(india);
+        setGeoDetected(true);
+        // If international, default to PayPal if enabled
+        if (!india && paymentSettings.paypalEnabled) {
+          setPaymentMethod("PAYPAL");
+        }
+      } catch {
+        setIsIndianCustomer(true); // fallback to India on error
+        setGeoDetected(true);
+      }
+    };
+    detect();
+  }, [paymentSettings.paypalEnabled]);
+
+  // Fetch PayPal client ID
+  useEffect(() => {
+    const fetchPaypalId = async () => {
+      try {
+        const res = await fetchApi("/payment/paypal/client-id");
+        if (res?.success && res?.data?.clientId) {
+          setPaypalClientId(res.data.clientId);
+          setPaymentSettings((prev) => ({ ...prev, paypalEnabled: true }));
+        }
+      } catch {
+        // PayPal not configured — silent
+      }
+    };
+    fetchPaypalId();
   }, []);
 
   // Fetch Razorpay key (from SiteSettings or PaymentGatewaySetting)
@@ -265,6 +307,20 @@ export default function CheckoutPage() {
       return;
     }
 
+    // Re-validate payment method is still enabled
+    if (paymentMethod === "CASH" && !paymentSettings.cashEnabled) {
+      toast.error("Cash on Delivery is no longer available. Please choose another payment method.");
+      return;
+    }
+    if (paymentMethod === "RAZORPAY" && !paymentSettings.razorpayEnabled) {
+      toast.error("Online payment is unavailable. Please choose another payment method.");
+      return;
+    }
+    if (paymentMethod === "PAYPAL" && !paypalClientId) {
+      toast.error("PayPal is not available. Please choose another payment method.");
+      return;
+    }
+
     setProcessing(true);
     setError("");
 
@@ -314,6 +370,81 @@ export default function CheckoutPage() {
         setOrderNumber(orderResponse.data.orderNumber);
         setOrderId(orderResponse.data.orderId || "");
         handleSuccessfulPayment(null, orderData);
+        return;
+      } else if (paymentMethod === "PAYPAL") {
+        // PayPal flow — create PayPal order then open PayPal JS SDK
+        if (!paypalClientId) {
+          toast.error("PayPal is not configured. Please contact support.");
+          setProcessing(false);
+          return;
+        }
+        try {
+          // Load PayPal SDK dynamically
+          if (!window.paypal) {
+            await new Promise((resolve, reject) => {
+              const script = document.createElement("script");
+              script.src = `https://www.paypal.com/sdk/js?client-id=${paypalClientId}&currency=USD`;
+              script.onload = resolve;
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+          }
+          // Create PayPal order on backend
+          const paypalAmount = Math.max(
+            parseFloat(((totals.subtotal - totals.discount) / 83).toFixed(2)), // INR → USD approx
+            0.01
+          );
+          const createRes = await fetchApi("/payment/paypal/create-order", {
+            method: "POST",
+            credentials: "include",
+            body: JSON.stringify({
+              amount: paypalAmount.toFixed(2),
+              currency: "USD",
+              shippingAddressId: selectedAddressId,
+            }),
+          });
+          if (!createRes?.success || !createRes?.data?.paypalOrderId) {
+            throw new Error(createRes?.message || "Failed to create PayPal order");
+          }
+          const paypalOrderId = createRes.data.paypalOrderId;
+          // Open PayPal popup
+          await window.paypal.Buttons({
+            createOrder: () => paypalOrderId,
+            onApprove: async (data) => {
+              toast.loading("Capturing PayPal payment...", { id: "paypal-capture" });
+              const captureRes = await fetchApi("/payment/paypal/capture", {
+                method: "POST",
+                credentials: "include",
+                body: JSON.stringify({
+                  paypalOrderId: data.orderID,
+                  shippingAddressId: selectedAddressId,
+                  couponCode: coupon?.code || null,
+                }),
+              });
+              toast.dismiss("paypal-capture");
+              if (captureRes?.success) {
+                setOrderNumber(captureRes.data.orderNumber);
+                setOrderId(captureRes.data.orderId);
+                handleSuccessfulPayment(null, captureRes.data);
+              } else {
+                toast.error(captureRes?.message || "Payment capture failed");
+                setProcessing(false);
+              }
+            },
+            onError: (err) => {
+              console.error("PayPal error", err);
+              toast.error("PayPal payment failed. Please try again.");
+              setProcessing(false);
+            },
+            onCancel: () => {
+              toast.info("PayPal payment cancelled");
+              setProcessing(false);
+            },
+          }).render("#paypal-button-container");
+        } catch (err) {
+          toast.error(err?.message || "PayPal initialization failed");
+          setProcessing(false);
+        }
         return;
       } else if (paymentMethod === "RAZORPAY") {
         // Ensure Razorpay key is available
@@ -877,16 +1008,14 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
-                {/* Razorpay Option */}
-                {paymentSettings.razorpayEnabled && (
+                {/* Razorpay — India only */}
+                {paymentSettings.razorpayEnabled && isIndianCustomer && (
                   <div
                     className={`border rounded-md p-4 transition-all ${paymentMethod === "RAZORPAY"
                       ? "border-brand-brown bg-brand-brown/5 cursor-pointer"
                       : "hover:border-gray-400 cursor-pointer"
                       }`}
-                    onClick={() => {
-                      handlePaymentMethodSelect("RAZORPAY");
-                    }}
+                    onClick={() => handlePaymentMethodSelect("RAZORPAY")}
                   >
                     <div className="flex items-center">
                       <input
@@ -894,30 +1023,68 @@ export default function CheckoutPage() {
                         id="razorpay"
                         name="paymentMethod"
                         checked={paymentMethod === "RAZORPAY"}
-                        onChange={() => {
-                          handlePaymentMethodSelect("RAZORPAY");
-                        }}
+                        onChange={() => handlePaymentMethodSelect("RAZORPAY")}
                         className="h-4 w-4 text-brand-brown border-gray-300 focus:ring-brand-brown"
                       />
-                      <label
-                        htmlFor="razorpay"
-                        className="ml-2 flex items-center flex-1"
-                      >
+                      <label htmlFor="razorpay" className="ml-2 flex items-center flex-1">
                         <span className="font-medium">Pay Online (Razorpay)</span>
                         {paymentMethod === "RAZORPAY" && (
-                          <span className="ml-2 text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded">
-                            Selected
-                          </span>
+                          <span className="ml-2 text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded">Selected</span>
                         )}
                       </label>
-                      <span className="flex items-center">
-                        <IndianRupee className="h-4 w-4 text-brand-brown" />
-                      </span>
+                      <IndianRupee className="h-4 w-4 text-brand-brown" />
                     </div>
                     <p className="text-sm mt-2 ml-6 text-gray-600">
                       Pay securely with Credit/Debit Card, UPI, NetBanking, etc.
                     </p>
                   </div>
+                )}
+
+                {/* PayPal — International */}
+                {paymentSettings.paypalEnabled && paypalClientId && !isIndianCustomer && (
+                  <div
+                    className={`border rounded-md p-4 transition-all ${paymentMethod === "PAYPAL"
+                      ? "border-[#0070BA] bg-[#0070BA]/5 cursor-pointer"
+                      : "hover:border-gray-400 cursor-pointer"
+                      }`}
+                    onClick={() => handlePaymentMethodSelect("PAYPAL")}
+                  >
+                    <div className="flex items-center">
+                      <input
+                        type="radio"
+                        id="paypal"
+                        name="paymentMethod"
+                        checked={paymentMethod === "PAYPAL"}
+                        onChange={() => handlePaymentMethodSelect("PAYPAL")}
+                        className="h-4 w-4 border-gray-300"
+                      />
+                      <label htmlFor="paypal" className="ml-2 flex items-center flex-1">
+                        <span className="font-medium text-[#003087]">PayPal</span>
+                        {paymentMethod === "PAYPAL" && (
+                          <span className="ml-2 text-xs bg-[#0070BA]/10 text-[#0070BA] px-2 py-0.5 rounded">Selected</span>
+                        )}
+                      </label>
+                      <span className="text-[#0070BA] font-bold text-sm">PayPal</span>
+                    </div>
+                    <p className="text-sm mt-2 ml-6 text-gray-600">
+                      Pay securely with your PayPal account or credit/debit card internationally.
+                    </p>
+                  </div>
+                )}
+
+                {/* International notice */}
+                {!isIndianCustomer && geoDetected && (
+                  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md text-xs text-blue-700">
+                    International checkout detected. Showing international payment options.
+                    <button className="underline ml-1" onClick={() => setIsIndianCustomer(true)}>
+                      Switch to India payments
+                    </button>
+                  </div>
+                )}
+
+                {/* PayPal button mount point — rendered by SDK when PAYPAL selected */}
+                {paymentMethod === "PAYPAL" && (
+                  <div id="paypal-button-container" className="mt-4" />
                 )}
 
               </div>

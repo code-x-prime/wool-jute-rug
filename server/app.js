@@ -45,6 +45,7 @@ import adminShoppableCarouselRoutes from "./routes/admin.shoppableCarousel.route
 import adminOAuthRoutes from "./routes/admin.oauth.routes.js";
 import adminMenuRoutes from "./routes/admin.menu.routes.js";
 import authRoutes from "./routes/auth.routes.js";
+import easyshipRoutes from "./routes/easyship.routes.js";
 
 const app = express();
 
@@ -163,6 +164,7 @@ app.use("/api/admin/returns", adminReturnRoutes);
 app.use("/api/admin", adminMOQRoutes);
 app.use("/api/admin", adminPaymentGatewayRoutes);
 app.use("/api/admin/shiprocket", adminShiprocketRoutes);
+app.use("/api/admin/easyship", easyshipRoutes);
 app.use("/api/shipping", shippingRoutes);
 app.use("/api/admin/marketing", adminMarketingRoutes);
 app.use("/api/admin", adminSiteSettingsRoutes);

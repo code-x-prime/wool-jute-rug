@@ -511,7 +511,7 @@ export async function buildShiprocketOrderPayload(order) {
     const orderItems = [];
 
     for (const item of order.items) {
-        const variant = item.variant;
+        const variant = item.variant || {}; // null guard — variant may be soft-deleted
 
         // Use variant dimensions or defaults
         const length = variant.shippingLength || settings.defaultLength;
@@ -525,13 +525,13 @@ export async function buildShiprocketOrderPayload(order) {
         totalHeight += height * item.quantity;
 
         orderItems.push({
-            name: item.product.name,
-            sku: variant.sku,
+            name: item.product?.name || "Product",
+            sku: variant.sku || `SKU-${item.productId?.slice(-6) || "000"}`,
             units: item.quantity,
             selling_price: parseFloat(item.price),
             discount: 0,
             tax: 0,
-            hsn: "", // HSN code - can be added later
+            hsn: variant.hsn || "",
         });
     }
 
