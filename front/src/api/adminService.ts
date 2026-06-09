@@ -533,6 +533,15 @@ export const orders = {
   bookShipment: (orderId: string, courierId: number) => {
     return api.post(`/api/admin/shiprocket/orders/${orderId}/book`, { courierId });
   },
+  getEasyshipRates: (orderId: string, params: { destinationCountry: string; destinationPostal?: string; destinationCity?: string; destinationState?: string }) => {
+    return api.post(`/api/admin/easyship/rates`, { orderId, ...params });
+  },
+  bookEasyshipShipment: (orderId: string, courierId: string) => {
+    return api.post(`/api/admin/easyship/shipments`, { orderId, courierId });
+  },
+  trackEasyshipShipment: (easyshipShipmentId: string) => {
+    return api.get(`/api/admin/easyship/track/${easyshipShipmentId}`);
+  },
   getOrderStats: async () => {
     try {
       const response = await api.get("/api/admin/orders-stats");

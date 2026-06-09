@@ -706,15 +706,34 @@ export default function OrderDetailsPage({ params }) {
                 {/* Payment Info */}
                 <div className="px-5 pb-5 border-t border-gray-100 pt-4">
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Payment</h3>
+                  {/* Payment source badge */}
+                  <div className="flex gap-2 flex-wrap mb-3">
+                    {(order.paymentMethod === "PAYPAL" || order.paymentGateway === "PAYPAL") && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                        🌐 International · PayPal
+                      </span>
+                    )}
+                    {(order.paymentMethod === "PAYONEER" || order.paymentGateway === "PAYONEER") && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-50 text-orange-800 border border-orange-200">
+                        🌐 International · Payoneer
+                      </span>
+                    )}
+                    {(order.paymentMethod === "RAZORPAY" || order.paymentGateway === "RAZORPAY") && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                        🇮🇳 Razorpay
+                      </span>
+                    )}
+                    {order.paymentMethod === "CASH" && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-800 border border-green-200">
+                        🇮🇳 Cash on Delivery
+                      </span>
+                    )}
+                  </div>
                   <div className="text-sm space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Method</span>
-                      <span className="font-medium text-gray-900">{order.paymentMethod}</span>
-                    </div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-500">Status</span>
                       <span className={`px-2.5 py-0.5 inline-flex text-xs font-semibold rounded-full ${getStatusColor(order.paymentStatus)}`}>
-                        {order.paymentStatus}
+                        {order.paymentStatus || (order.paypalCaptureId ? "PAID" : order.status)}
                       </span>
                     </div>
                     {order.paymentId && (
@@ -722,6 +741,24 @@ export default function OrderDetailsPage({ params }) {
                         <span className="text-gray-500 text-xs">Payment ID</span>
                         <p className="font-mono text-xs text-gray-700 break-all mt-0.5">{order.paymentId}</p>
                       </div>
+                    )}
+                    {order.paypalCaptureId && (
+                      <div>
+                        <span className="text-gray-500 text-xs">PayPal Capture ID</span>
+                        <p className="font-mono text-xs text-gray-700 break-all mt-0.5">{order.paypalCaptureId}</p>
+                      </div>
+                    )}
+                    {order.awbCode && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">AWB / Tracking</span>
+                        <span className="font-mono text-xs text-gray-900">{order.awbCode}</span>
+                      </div>
+                    )}
+                    {order.trackingUrl && (
+                      <a href={order.trackingUrl} target="_blank" rel="noopener noreferrer"
+                        className="block text-xs text-[#136C5B] hover:underline font-medium mt-1">
+                        Track your shipment →
+                      </a>
                     )}
                   </div>
                 </div>

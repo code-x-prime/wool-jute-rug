@@ -102,6 +102,12 @@ export default function OrderDetailsPage() {
     };
     shippingCost?: string | number;
     total?: string | number;
+    // International / Easyship fields
+    shippingProvider?: string; // "SHIPROCKET" | "EASYSHIP"
+    easyshipShipmentId?: string;
+    easyshipTrackingNumber?: string;
+    easyshipLabelUrl?: string;
+    paypalCaptureId?: string;
   }
 
   const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
@@ -119,6 +125,20 @@ export default function OrderDetailsPage() {
   // Ref to prevent re-fetching couriers when other state changes
   const hasFetchedCouriers = useRef(false);
   const orderDetailsRef = useRef<OrderDetails | null>(null);
+
+  // Easyship Courier Assignment state
+  const [easyshipRates, setEasyshipRates] = useState<Array<{
+    courierId: string; courierName: string; serviceType: string;
+    totalCharge: number; currency: string; minDeliveryDays: number; maxDeliveryDays: number;
+    isTracked: boolean; courierLogo?: string;
+  }>>([]);
+  const [selectedEasyshipCourierId, setSelectedEasyshipCourierId] = useState<string>("");
+  const [isFetchingEasyshipRates, setIsFetchingEasyshipRates] = useState(false);
+  const [easyshipRateError, setEasyshipRateError] = useState<string | null>(null);
+  const [isBookingEasyship, setIsBookingEasyship] = useState(false);
+  const [easyshipBookingResult, setEasyshipBookingResult] = useState<{
+    easyshipShipmentId: string; awbNumber: string; trackingUrl: string; labelUrl?: string; courierName: string;
+  } | null>(null);
 
   interface OrderItem {
     id: string;
@@ -1008,6 +1028,39 @@ export default function OrderDetailsPage() {
             </CardHeader>
             <CardContent className="px-6 pb-6">
               <div className="space-y-3">
+                {/* Source badge: domestic vs international */}
+                <div className="flex gap-2 flex-wrap mb-1">
+                  {(orderDetails.paymentMethod === "PAYPAL" || orderDetails.paymentGateway === "PAYPAL") && (
+                    <Badge className="bg-[#003087]/10 text-[#003087] border-[#003087]/30 text-xs font-semibold">
+                      🌐 International · PayPal
+                    </Badge>
+                  )}
+                  {(orderDetails.paymentMethod === "PAYONEER" || orderDetails.paymentGateway === "PAYONEER") && (
+                    <Badge className="bg-orange-500/10 text-orange-700 border-orange-400/30 text-xs font-semibold">
+                      🌐 International · Payoneer
+                    </Badge>
+                  )}
+                  {(orderDetails.paymentMethod === "RAZORPAY" || orderDetails.paymentGateway === "RAZORPAY") && (
+                    <Badge className="bg-blue-500/10 text-blue-700 border-blue-400/30 text-xs font-semibold">
+                      🇮🇳 Domestic · Razorpay
+                    </Badge>
+                  )}
+                  {orderDetails.paymentMethod === "CASH" && (
+                    <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-400/30 text-xs font-semibold">
+                      🇮🇳 Domestic · Cash on Delivery
+                    </Badge>
+                  )}
+                  {orderDetails.shippingProvider && (
+                    <Badge className={cn("text-xs font-semibold",
+                      orderDetails.shippingProvider === "EASYSHIP"
+                        ? "bg-purple-500/10 text-purple-700 border-purple-400/30"
+                        : "bg-sky-500/10 text-sky-700 border-sky-400/30"
+                    )}>
+                      📦 {orderDetails.shippingProvider === "EASYSHIP" ? "Easyship (Intl)" : "Shiprocket (Domestic)"}
+                    </Badge>
+                  )}
+                </div>
+
                 <div>
                   <p className="text-xs text-[var(--text-secondary)] mb-1">{t('orders.details.method')}</p>
                   <p className="font-medium text-[var(--text-primary)]">
@@ -1032,14 +1085,17 @@ export default function OrderDetailsPage() {
                   <Badge
                     className={cn(
                       "text-xs font-medium border",
-                      orderDetails.razorpayPayment?.status === "CAPTURED" ||
+                      (orderDetails.razorpayPayment?.status === "CAPTURED" ||
                         orderDetails.razorpayPayment?.status === "PAID" ||
-                        orderDetails.status === "PAID"
+                        orderDetails.status === "PAID" ||
+                        orderDetails.paypalCaptureId)
                         ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
                         : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
                     )}
                   >
-                    {orderDetails.razorpayPayment?.status || getStatusLabel(orderDetails.status) || t('orders.details.not_available')}
+                    {orderDetails.paypalCaptureId
+                      ? "CAPTURED"
+                      : orderDetails.razorpayPayment?.status || getStatusLabel(orderDetails.status) || t('orders.details.not_available')}
                   </Badge>
                 </div>
                 {orderDetails.razorpayPayment?.razorpayPaymentId && (
@@ -1055,6 +1111,14 @@ export default function OrderDetailsPage() {
                     <p className="text-xs text-[var(--text-secondary)] mb-1">{t('orders.details.order_id')}</p>
                     <p className="font-mono text-xs text-[var(--text-primary)] bg-[var(--bg-secondary)] px-2 py-1 rounded border border-[var(--border-color)]">
                       {orderDetails.razorpayPayment.razorpayOrderId}
+                    </p>
+                  </div>
+                )}
+                {orderDetails.paypalCaptureId && (
+                  <div>
+                    <p className="text-xs text-[var(--text-secondary)] mb-1">PayPal Capture ID</p>
+                    <p className="font-mono text-xs text-[var(--text-primary)] bg-[var(--bg-secondary)] px-2 py-1 rounded border border-[var(--border-color)]">
+                      {orderDetails.paypalCaptureId}
                     </p>
                   </div>
                 )}
@@ -1302,8 +1366,165 @@ export default function OrderDetailsPage() {
           ) : null}
 
 
-          {/* Shiprocket Courier Assignment */}
+          {/* Easyship Courier Assignment — for international/PayPal orders */}
+          {(orderDetails.shippingProvider === "EASYSHIP" || orderDetails.paymentGateway === "PAYPAL" || orderDetails.paymentGateway === "PAYONEER") &&
+            orderDetails.status !== "CANCELLED" &&
+            orderDetails.status !== "DELIVERED" && (
+            <Card className="bg-[var(--bg-card)] border-purple-500/30 shadow-[0_1px_2px_rgba(0,0,0,0.04)] rounded-xl">
+              <CardHeader className="px-6 pt-6 pb-4">
+                <CardTitle className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                  <Truck className="h-5 w-5 text-purple-600" />
+                  Easyship — International Shipping
+                  <Badge className="bg-purple-500/10 text-purple-700 border-purple-400/30 text-xs">International</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-6 pb-6">
+                {/* Already booked */}
+                {(easyshipBookingResult || orderDetails.easyshipShipmentId) ? (
+                  <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-emerald-600 font-semibold">
+                      <CheckCircle className="h-5 w-5" />
+                      International Shipment Booked
+                    </div>
+                    <div className="text-sm space-y-2">
+                      <div>
+                        <span className="text-[var(--text-secondary)]">AWB: </span>
+                        <span className="font-mono font-semibold">
+                          {easyshipBookingResult?.awbNumber || orderDetails.easyshipTrackingNumber}
+                        </span>
+                      </div>
+                      {(easyshipBookingResult?.courierName) && (
+                        <div><span className="text-[var(--text-secondary)]">Courier: </span>{easyshipBookingResult.courierName}</div>
+                      )}
+                      {(easyshipBookingResult?.easyshipShipmentId || orderDetails.easyshipShipmentId) && (
+                        <div>
+                          <span className="text-[var(--text-secondary)]">Easyship ID: </span>
+                          <span className="font-mono text-xs">{easyshipBookingResult?.easyshipShipmentId || orderDetails.easyshipShipmentId}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      {(easyshipBookingResult?.trackingUrl || orderDetails.trackingUrl) && (
+                        <Button size="sm" variant="outline" className="border-emerald-500/50 text-emerald-700 hover:bg-emerald-500/10"
+                          onClick={() => window.open(easyshipBookingResult?.trackingUrl || orderDetails.trackingUrl!, "_blank")}>
+                          Track Shipment
+                        </Button>
+                      )}
+                      {(easyshipBookingResult?.labelUrl || orderDetails.easyshipLabelUrl) && (
+                        <Button size="sm" variant="outline"
+                          onClick={() => window.open(easyshipBookingResult?.labelUrl || orderDetails.easyshipLabelUrl!, "_blank")}>
+                          Download Label
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ) : isFetchingEasyshipRates ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Fetching international courier rates…
+                    </div>
+                    {[0,1,2].map(i => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}
+                  </div>
+                ) : easyshipRateError ? (
+                  <div className="rounded-lg border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-[var(--destructive)] text-sm font-medium">
+                      <AlertTriangle className="h-4 w-4" />
+                      {easyshipRateError}
+                    </div>
+                    <Button size="sm" variant="outline" onClick={async () => {
+                      if (!id) return;
+                      setIsFetchingEasyshipRates(true); setEasyshipRateError(null);
+                      try {
+                        const res = await orders.getEasyshipRates(id, {
+                          destinationCountry: orderDetails.shippingAddress?.country?.slice(0,2).toUpperCase() || "US",
+                          destinationPostal: orderDetails.shippingAddress?.postalCode || "",
+                          destinationCity: orderDetails.shippingAddress?.city || "",
+                        });
+                        if (res?.data?.success) setEasyshipRates(res.data.data.rates || []);
+                        else setEasyshipRateError(res?.data?.message || "Failed to fetch rates");
+                      } catch (e: unknown) {
+                        setEasyshipRateError((e as { response?: { data?: { message?: string } } })?.response?.data?.message || "Failed to fetch rates");
+                      } finally { setIsFetchingEasyshipRates(false); }
+                    }}>Retry</Button>
+                  </div>
+                ) : easyshipRates.length === 0 ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      Get shipping rates from 250+ international couriers via Easyship. Requires Easyship API key in Settings.
+                    </p>
+                    <Button size="sm" onClick={async () => {
+                      if (!id) return;
+                      setIsFetchingEasyshipRates(true); setEasyshipRateError(null);
+                      try {
+                        const res = await orders.getEasyshipRates(id, {
+                          destinationCountry: orderDetails.shippingAddress?.country?.slice(0,2).toUpperCase() || "US",
+                          destinationPostal: orderDetails.shippingAddress?.postalCode || "",
+                          destinationCity: orderDetails.shippingAddress?.city || "",
+                        });
+                        if (res?.data?.success) setEasyshipRates(res.data.data.rates || []);
+                        else setEasyshipRateError(res?.data?.message || "Failed to fetch rates");
+                      } catch (e: unknown) {
+                        setEasyshipRateError((e as { response?: { data?: { message?: string } } })?.response?.data?.message || "Failed to fetch rates");
+                      } finally { setIsFetchingEasyshipRates(false); }
+                    }}>
+                      <Truck className="h-4 w-4 mr-2" />
+                      Get Easyship Rates
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <RadioGroup value={selectedEasyshipCourierId} onValueChange={setSelectedEasyshipCourierId} className="space-y-2">
+                      {easyshipRates.map((rate) => (
+                        <Label key={rate.courierId} htmlFor={`easy-${rate.courierId}`}
+                          className={cn("flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-[var(--bg-secondary)]",
+                            selectedEasyshipCourierId === rate.courierId ? "border-purple-500 bg-purple-500/5" : "border-[var(--border-color)]")}>
+                          <RadioGroupItem value={rate.courierId} id={`easy-${rate.courierId}`} />
+                          <div className="flex flex-1 items-center justify-between gap-2">
+                            <div>
+                              <p className="font-medium text-[var(--text-primary)] text-sm">{rate.courierName}</p>
+                              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                                {rate.serviceType} · {rate.minDeliveryDays}–{rate.maxDeliveryDays} days
+                                {rate.isTracked && <span className="ml-2 text-emerald-600">• Tracked</span>}
+                              </p>
+                            </div>
+                            <span className="font-semibold text-[var(--text-primary)] text-sm shrink-0">
+                              {rate.currency} {rate.totalCharge}
+                            </span>
+                          </div>
+                        </Label>
+                      ))}
+                    </RadioGroup>
+                    <Button className="w-full" disabled={!selectedEasyshipCourierId || isBookingEasyship}
+                      onClick={async () => {
+                        if (!selectedEasyshipCourierId || !id) return;
+                        setIsBookingEasyship(true);
+                        try {
+                          const res = await orders.bookEasyshipShipment(id, selectedEasyshipCourierId);
+                          if (res?.data?.success) {
+                            setEasyshipBookingResult(res.data.data);
+                            toast.success("International shipment booked!");
+                            fetchOrderDetails();
+                          } else {
+                            toast.error(res?.data?.message || "Booking failed");
+                          }
+                        } catch (e: unknown) {
+                          toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message || "Booking failed");
+                        } finally { setIsBookingEasyship(false); }
+                      }}>
+                      {isBookingEasyship ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Booking…</> : "Book International Shipment"}
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Shiprocket Courier Assignment — domestic orders only */}
           {isShiprocketEnabled &&
+            orderDetails.shippingProvider !== "EASYSHIP" &&
+            orderDetails.paymentGateway !== "PAYPAL" &&
+            orderDetails.paymentGateway !== "PAYONEER" &&
             orderDetails.status !== "CANCELLED" &&
             orderDetails.status !== "DELIVERED" && (
             <Card className="bg-[var(--bg-card)] border-[var(--border-color)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] rounded-xl">
