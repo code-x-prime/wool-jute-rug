@@ -115,9 +115,13 @@ export const createPayPalOrder = asyncHandler(async (req, res) => {
     throw new ApiError(502, `PayPal order creation failed: ${order.message || JSON.stringify(order.details || order)}`);
   }
 
+  // Extract the approval URL for redirect flow (more reliable than JS SDK for live mode)
+  const approveLink = order.links?.find((l) => l.rel === "approve")?.href || null;
+
   res.status(200).json(new ApiResponsive(200, {
     paypalOrderId: order.id,
     status: order.status,
+    approveLink, // URL to redirect user to PayPal hosted checkout
   }, "PayPal order created"));
 });
 
