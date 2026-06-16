@@ -32,46 +32,6 @@ const getImageUrl = (image) => {
   return `https://desirediv-storage.blr1.digitaloceanspaces.com/${image}`;
 };
 
-// Helper to safely load PayPal SDK and wait for Buttons function to be available
-const loadPaypalSDK = (clientId) => {
-  return new Promise((resolve, reject) => {
-    if (typeof window !== "undefined") {
-      if (window.paypal && typeof window.paypal.Buttons === "function") {
-        resolve(window.paypal);
-        return;
-      }
-
-      // Check if the script with the correct client ID is already present in document
-      let script = document.querySelector(`script[src*="client-id=${clientId}"]`);
-      if (!script) {
-        script = document.createElement("script");
-        script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
-        script.async = true;
-        document.head.appendChild(script);
-      }
-
-      const checkInterval = setInterval(() => {
-        if (window.paypal && typeof window.paypal.Buttons === "function") {
-          clearInterval(checkInterval);
-          clearTimeout(timeout);
-          resolve(window.paypal);
-        }
-      }, 50);
-
-      const timeout = setTimeout(() => {
-        clearInterval(checkInterval);
-        if (window.paypal && typeof window.paypal.Buttons === "function") {
-          resolve(window.paypal);
-        } else {
-          reject(new Error("PayPal SDK loaded but window.paypal.Buttons is not a function"));
-        }
-      }, 10000); // 10s timeout
-    } else {
-      reject(new Error("window is not defined"));
-    }
-  });
-};
-
 export default function CheckoutPage() {
   const { isAuthenticated, user } = useAuth();
   const router = useRouter();
@@ -267,95 +227,7 @@ export default function CheckoutPage() {
   }, [isAuthenticated]);
 
   // Load and render PayPal buttons when PayPal is selected
-  useEffect(() => {
-    if (paymentMethod !== "PAYPAL" || !paypalClientId || !selectedAddressId) return;
-
-    let isMounted = true;
-
-    const loadAndRenderPaypal = async () => {
-      try {
-        const paypalInstance = await loadPaypalSDK(paypalClientId);
-
-        if (!isMounted) return;
-
-        const container = document.getElementById("paypal-button-container");
-        if (container && paypalInstance && paypalInstance.Buttons) {
-          container.innerHTML = "";
-          await paypalInstance.Buttons({
-            createOrder: async () => {
-              try {
-                const paypalAmount = Math.max(
-                  parseFloat(((totals.subtotal - totals.discount) / paymentSettings.usdExchangeRate).toFixed(2)),
-                  0.01
-                );
-                const createRes = await fetchApi("/payment/paypal/create-order", {
-                  method: "POST",
-                  credentials: "include",
-                  body: JSON.stringify({
-                    amount: paypalAmount.toFixed(2),
-                    currency: "USD",
-                    shippingAddressId: selectedAddressId,
-                  }),
-                });
-                if (!createRes?.success || !createRes?.data?.paypalOrderId) {
-                  throw new Error(createRes?.message || "Failed to create PayPal order");
-                }
-                return createRes.data.paypalOrderId;
-              } catch (err) {
-                toast.error(err.message || "Failed to create PayPal order");
-                throw err;
-              }
-            },
-            onApprove: async (data) => {
-              setProcessing(true);
-              toast.loading("Capturing PayPal payment...", { id: "paypal-capture" });
-              try {
-                const captureRes = await fetchApi("/payment/paypal/capture", {
-                  method: "POST",
-                  credentials: "include",
-                  body: JSON.stringify({
-                    paypalOrderId: data.orderID,
-                    shippingAddressId: selectedAddressId,
-                    couponCode: coupon?.code || null,
-                  }),
-                });
-                toast.dismiss("paypal-capture");
-                if (captureRes?.success) {
-                  handleSuccessfulPayment(null, captureRes.data);
-                } else {
-                  toast.error(captureRes?.message || "Payment capture failed");
-                  setProcessing(false);
-                }
-              } catch (err) {
-                toast.dismiss("paypal-capture");
-                toast.error(err.message || "Payment capture failed");
-                setProcessing(false);
-              }
-            },
-            onError: (err) => {
-              console.error("PayPal error", err);
-              toast.error("PayPal payment failed. Please try again.");
-              setProcessing(false);
-            },
-            onCancel: () => {
-              toast.info("PayPal payment cancelled");
-              setProcessing(false);
-            },
-          }).render("#paypal-button-container");
-        }
-      } catch (err) {
-        console.error("Error loading/rendering PayPal SDK:", err);
-      }
-    };
-
-    // Delay slightly to make sure container is in the DOM
-    const timer = setTimeout(loadAndRenderPaypal, 200);
-
-    return () => {
-      isMounted = false;
-      clearTimeout(timer);
-    };
-  }, [paymentMethod, paypalClientId, selectedAddressId, totals.total, paymentSettings.usdExchangeRate]);
+  // (No-op: PayPal now uses redirect flow. Buttons are rendered server-side via hosted checkout.)
 
   // Handle address selection
   const handleAddressSelect = (id) => {
@@ -515,20 +387,18 @@ export default function CheckoutPage() {
         handleSuccessfulPayment(null, orderData);
         return;
       } else if (paymentMethod === "PAYPAL") {
-        // PayPal flow — create PayPal order then open PayPal JS SDK
+        // PayPal flow — redirect to PayPal hosted checkout (reliable for all countries)
         if (!paypalClientId) {
           toast.error("PayPal is not configured. Please contact support.");
           setProcessing(false);
           return;
         }
         try {
-          // Load PayPal SDK dynamically
-          const paypalInstance = await loadPaypalSDK(paypalClientId);
-          // Create PayPal order on backend
           const paypalAmount = Math.max(
-            parseFloat(((totals.subtotal - totals.discount) / paymentSettings.usdExchangeRate).toFixed(2)), // INR → USD approx
+            parseFloat(((totals.subtotal - totals.discount) / paymentSettings.usdExchangeRate).toFixed(2)),
             0.01
           );
+          toast.loading("Redirecting to PayPal...", { id: "paypal-redirect" });
           const createRes = await fetchApi("/payment/paypal/create-order", {
             method: "POST",
             credentials: "include",
@@ -538,46 +408,16 @@ export default function CheckoutPage() {
               shippingAddressId: selectedAddressId,
             }),
           });
-          if (!createRes?.success || !createRes?.data?.paypalOrderId) {
-            throw new Error(createRes?.message || "Failed to create PayPal order");
+          toast.dismiss("paypal-redirect");
+          if (!createRes?.success) throw new Error(createRes?.message || "Failed to create PayPal order");
+          const approveLink = createRes.data?.approveLink;
+          if (!approveLink) {
+            throw new Error("PayPal approval link not received. Please try again.");
           }
-          const paypalOrderId = createRes.data.paypalOrderId;
-          // Open PayPal popup
-          await paypalInstance.Buttons({
-            createOrder: () => paypalOrderId,
-            onApprove: async (data) => {
-              toast.loading("Capturing PayPal payment...", { id: "paypal-capture" });
-              const captureRes = await fetchApi("/payment/paypal/capture", {
-                method: "POST",
-                credentials: "include",
-                body: JSON.stringify({
-                  paypalOrderId: data.orderID,
-                  shippingAddressId: selectedAddressId,
-                  couponCode: coupon?.code || null,
-                }),
-              });
-              toast.dismiss("paypal-capture");
-              if (captureRes?.success) {
-                setOrderNumber(captureRes.data.orderNumber);
-                setOrderId(captureRes.data.orderId);
-                handleSuccessfulPayment(null, captureRes.data);
-              } else {
-                toast.error(captureRes?.message || "Payment capture failed");
-                setProcessing(false);
-              }
-            },
-            onError: (err) => {
-              console.error("PayPal error", err);
-              toast.error("PayPal payment failed. Please try again.");
-              setProcessing(false);
-            },
-            onCancel: () => {
-              toast.info("PayPal payment cancelled");
-              setProcessing(false);
-            },
-          }).render("#paypal-button-container");
+          // Redirect user to PayPal hosted checkout (works in all countries, including India live mode)
+          window.location.href = approveLink;
         } catch (err) {
-          toast.error(err?.message || "PayPal initialization failed");
+          toast.error(err?.message || "PayPal redirect failed. Please try again.");
           setProcessing(false);
         }
         return;
@@ -1438,14 +1278,36 @@ export default function CheckoutPage() {
               </div>
 
               {paymentMethod === "PAYPAL" ? (
-                <div className="mt-6 w-full relative z-10 min-h-[150px]">
+                <div className="mt-6">
                   {!selectedAddressId ? (
                     <div className="text-sm text-center text-amber-700 bg-amber-50 p-4 border border-amber-200 rounded-md font-medium">
                       Please select a shipping address to pay with PayPal
                     </div>
                   ) : (
-                    <div id="paypal-button-container" className="w-full relative z-10" />
+                    <button
+                      onClick={handleCheckout}
+                      disabled={processing}
+                      className="w-full bg-[#0070BA] hover:bg-[#003087] text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+                    >
+                      {processing ? (
+                        <>
+                          <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <span>Redirecting to PayPal...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg viewBox="0 0 24 24" className="h-5 w-5 fill-white" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a3.35 3.35 0 0 0-.607-.541c-.013.076-.026.175-.041.254-.93 4.778-4.005 7.201-9.138 7.201h-2.19a.563.563 0 0 0-.556.479l-1.187 7.527h-.506l-.24 1.516a.56.56 0 0 0 .554.647h3.882c.46 0 .85-.334.922-.788.06-.26.76-4.852.816-5.09a.932.932 0 0 1 .923-.788h.58c3.76 0 6.705-1.528 7.565-5.946.36-1.847.174-3.388-.777-4.471z"/>
+                          </svg>
+                          <span>Pay with PayPal • USD ${Math.max(parseFloat(((totals.subtotal - totals.discount) / paymentSettings.usdExchangeRate).toFixed(2)), 0.01).toFixed(2)}</span>
+                        </>
+                      )}
+                    </button>
                   )}
+                  <p className="text-xs text-gray-500 mt-2 text-center">You will be redirected to PayPal to complete your payment securely.</p>
                 </div>
               ) : (
                 <Button

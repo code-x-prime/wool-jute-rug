@@ -36,12 +36,15 @@ export default function AddressForm({
     },
     phone: (value) => {
       if (!value.trim()) return "Phone number is required";
-      if (!/^[0-9]{10}$/.test(value)) return "Enter valid 10-digit phone number";
+      // Accept 7-15 digit international numbers (strip +, spaces, dashes for check)
+      const digitsOnly = value.replace(/[\s\-\+\(\)]/g, "");
+      if (!/^[0-9]{7,15}$/.test(digitsOnly)) return "Enter a valid phone number (7-15 digits)";
       return "";
     },
     postalCode: (value) => {
       if (!value.trim()) return "Postal code is required";
-      if (!/^[0-9]{6}$/.test(value)) return "Enter valid 6-digit postal code";
+      // Support India (6-digit), US (5-digit), UK (alphanumeric), Canada (6-char), etc.
+      if (!/^[A-Za-z0-9\s\-]{3,10}$/.test(value.trim())) return "Enter a valid postal code (3-10 characters)";
       return "";
     },
     street: (value) => !value.trim() ? "Street address is required" : "",
@@ -212,8 +215,8 @@ export default function AddressForm({
               value={formData.postalCode}
               onChange={handleChange}
               className={errors.postalCode ? "border-red-500" : ""}
-              placeholder="Enter 6-digit postal code"
-              maxLength={6}
+              placeholder="Enter postal/zip code"
+              maxLength={10}
             />
             {errors.postalCode && (
               <p className="text-red-500 text-sm mt-1">{errors.postalCode}</p>
@@ -229,8 +232,8 @@ export default function AddressForm({
               value={formData.phone}
               onChange={handleChange}
               className={errors.phone ? "border-red-500" : ""}
-              placeholder="Enter 10-digit phone number"
-              maxLength={10}
+              placeholder="Enter phone number (with country code if international)"
+              maxLength={15}
             />
             {errors.phone && (
               <p className="text-red-500 text-sm mt-1">{errors.phone}</p>
