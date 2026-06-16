@@ -1,3 +1,4 @@
+// PayPal Controller v2 — redirect flow (approveLink support)
 import { prisma } from "../config/db.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponsive } from "../utils/ApiResponsive.js";
