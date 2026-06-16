@@ -233,10 +233,13 @@ export const capturePayPalPayment = asyncHandler(async (req, res) => {
   const tax = 0;
   const total = Math.max(Math.round((subtotal - discount + shippingCost + tax) * 100) / 100, 0);
 
+  const settings = await prisma.siteSettings.findFirst({ select: { usdExchangeRate: true } });
+  const exchangeRate = settings?.usdExchangeRate || 83.0;
+
   // Sanity check: paidAmount should be >= total (allow small FX rounding difference)
   let checkTotal = total;
   if (currency === "USD") {
-    checkTotal = Math.max(parseFloat((total / 83).toFixed(2)), 0.01);
+    checkTotal = Math.max(parseFloat((total / exchangeRate).toFixed(2)), 0.01);
   }
   if (paidAmount > 0 && Math.abs(paidAmount - checkTotal) > 5) {
     throw new ApiError(400, `Amount mismatch: paid ${paidAmount} but order total ${checkTotal} USD (${total} INR)`);

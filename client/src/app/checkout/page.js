@@ -45,6 +45,7 @@ export default function CheckoutPage() {
     codCharge: 0,
     paypalEnabled: false,
     payoneerEnabled: false,
+    usdExchangeRate: 83.0,
   });
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [processing, setProcessing] = useState(false);
@@ -94,6 +95,7 @@ export default function CheckoutPage() {
             codCharge: response.data.codCharge ?? 0,
             paypalEnabled: response.data.paypalEnabled ?? false,
             payoneerEnabled: response.data.payoneerEnabled ?? false,
+            usdExchangeRate: response.data.usdExchangeRate ?? 83.0,
           });
           // Default: Cash > Razorpay for Indian; PayPal for international (set after geo-detect)
           if (response.data.cashEnabled) {
@@ -401,7 +403,7 @@ export default function CheckoutPage() {
           }
           // Create PayPal order on backend
           const paypalAmount = Math.max(
-            parseFloat(((totals.subtotal - totals.discount) / 83).toFixed(2)), // INR → USD approx
+            parseFloat(((totals.subtotal - totals.discount) / paymentSettings.usdExchangeRate).toFixed(2)), // INR → USD approx
             0.01
           );
           const createRes = await fetchApi("/payment/paypal/create-order", {
@@ -460,7 +462,7 @@ export default function CheckoutPage() {
         // Payoneer — create payment session → redirect to Payoneer hosted page
         try {
           const payoneerAmount = Math.max(
-            parseFloat(((totals.subtotal - totals.discount) / 83).toFixed(2)),
+            parseFloat(((totals.subtotal - totals.discount) / paymentSettings.usdExchangeRate).toFixed(2)),
             0.01
           );
           toast.loading("Creating Payoneer payment...", { id: "payoneer-create" });

@@ -77,6 +77,7 @@ export const updateSiteSettings = asyncHandler(async (req, res) => {
     easyshipApiKey,
     easyshipEnabled,
     easyshipAccountId,
+    usdExchangeRate,
   } = req.body;
 
   let settings = await prisma.siteSettings.findFirst();
@@ -159,6 +160,10 @@ export const updateSiteSettings = asyncHandler(async (req, res) => {
     } catch (e) {
       throw new ApiError(400, "Failed to encrypt Easyship key");
     }
+  }
+
+  if (usdExchangeRate !== undefined) {
+    updateData.usdExchangeRate = parseFloat(usdExchangeRate) || 83.0;
   }
 
   const updated = await prisma.siteSettings.update({

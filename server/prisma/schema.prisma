@@ -1427,6 +1427,7 @@ model SiteSettings {
   shiprocketEnabled   Boolean   @default(false)
   shiprocketToken     String?
   shiprocketTokenExpiry DateTime?
+  usdExchangeRate     Float     @default(90)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 }

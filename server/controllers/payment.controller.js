@@ -179,8 +179,11 @@ export const getPaymentSettings = asyncHandler(async (req, res) => {
   // Check PayPal + Payoneer from SiteSettings
   const siteSettings2 = await prisma.siteSettings.findFirst({
     select: {
-      paypalEnabled: true, paypalClientId: true,
-      payoneerEnabled: true, payoneerApiKey: true,
+      paypalEnabled: true,
+      paypalClientId: true,
+      payoneerEnabled: true,
+      payoneerApiKey: true,
+      usdExchangeRate: true,
     },
   });
 
@@ -194,6 +197,7 @@ export const getPaymentSettings = asyncHandler(async (req, res) => {
         codCharge: parseFloat(paymentSettings.codCharge) || 0,
         paypalEnabled: !!(siteSettings2?.paypalEnabled && siteSettings2?.paypalClientId),
         payoneerEnabled: !!(siteSettings2?.payoneerEnabled && siteSettings2?.payoneerApiKey),
+        usdExchangeRate: siteSettings2?.usdExchangeRate || 83.0,
       },
       "Payment settings fetched successfully"
     )

@@ -171,6 +171,7 @@ export default function SiteSettingsPage() {
     easyshipAccountId: "",
   });
   const [showEasyshipKey, setShowEasyshipKey] = useState(false);
+  const [usdExchangeRate, setUsdExchangeRate] = useState(83.0);
 
   const [_storageConfig, setStorageConfig] = useState<{
     activeProvider: string | null;
@@ -390,6 +391,7 @@ export default function SiteSettingsPage() {
           easyshipEnabled: s.easyshipEnabled || false,
           easyshipAccountId: s.easyshipAccountId || "",
         });
+        setUsdExchangeRate(s.usdExchangeRate ?? 83.0);
       }
     } catch (err: unknown) {
       toast.error("Failed to load site settings");
@@ -459,6 +461,22 @@ export default function SiteSettingsPage() {
     } catch (err: unknown) {
       const msg = err && typeof err === "object" && "response" in err ? (err as { response?: { data?: { message?: string } } }).response?.data?.message : undefined;
       toast.error(msg || "Failed to save Payoneer settings");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveExchangeRate = async () => {
+    try {
+      setIsSaving(true);
+      await api.put("/api/admin/site-settings", {
+        usdExchangeRate: parseFloat(String(usdExchangeRate)) || 83.0,
+      });
+      toast.success("USD Exchange Rate saved");
+      fetchSettings();
+    } catch (err: unknown) {
+      const msg = err && typeof err === "object" && "response" in err ? (err as { response?: { data?: { message?: string } } }).response?.data?.message : undefined;
+      toast.error(msg || "Failed to save exchange rate");
     } finally {
       setIsSaving(false);
     }
@@ -1472,6 +1490,33 @@ export default function SiteSettingsPage() {
                 Indian customers see Razorpay/COD. International customers see PayPal and/or Payoneer.
               </p>
             </CardHeader>
+          </Card>
+
+          {/* USD Exchange Rate */}
+          <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
+            <CardHeader>
+              <CardTitle className="text-[var(--text-primary)]">USD to INR Exchange Rate</CardTitle>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Used to convert your product prices from INR to USD for PayPal and Payoneer checkouts.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="text-[var(--text-primary)]">Exchange Rate (1 USD = ? INR)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={usdExchangeRate}
+                  onChange={(e) => setUsdExchangeRate(parseFloat(e.target.value) || 0)}
+                  className="mt-1"
+                  placeholder="83.0"
+                />
+              </div>
+              <Button onClick={handleSaveExchangeRate} disabled={isSaving}>
+                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Exchange Rate
+              </Button>
+            </CardContent>
           </Card>
 
           {/* PayPal */}
