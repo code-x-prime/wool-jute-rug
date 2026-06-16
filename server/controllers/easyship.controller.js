@@ -31,6 +31,7 @@ async function getEasyshipConfig() {
       sitePincode: true,
       siteEmail: true,
       sitePhone: true,
+      usdExchangeRate: true,
     },
   });
   if (!settings?.easyshipEnabled || !settings?.easyshipApiKey) {
@@ -122,7 +123,7 @@ export const getEasyshipRates = asyncHandler(async (req, res) => {
       finalLength = maxLength || defaultL;
       finalWidth = maxWidth || defaultB;
       finalHeight = maxHeight || defaultH;
-      finalDeclaredValue = Math.round(totalValue / 83) || 50; // rough INR→USD conversion
+      finalDeclaredValue = Math.round(totalValue / (settings.usdExchangeRate || 83.0)) || 50; // dynamic INR→USD conversion
     }
   }
 
@@ -270,7 +271,7 @@ export const createEasyshipShipment = asyncHandler(async (req, res) => {
       category: "home_and_garden",
       quantity: item.quantity,
       declared_currency: declaredCurrency,
-      declared_customs_value: Math.round((itemValue / 83) * 100) / 100, // INR → USD approx
+      declared_customs_value: Math.round((itemValue / (settings.usdExchangeRate || 83.0)) * 100) / 100, // INR → USD dynamic conversion
       hs_code: "5702",
       sku: v.sku || undefined,
     });
