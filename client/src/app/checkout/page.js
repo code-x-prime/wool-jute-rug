@@ -32,6 +32,46 @@ const getImageUrl = (image) => {
   return `https://desirediv-storage.blr1.digitaloceanspaces.com/${image}`;
 };
 
+// Helper to safely load PayPal SDK and wait for Buttons function to be available
+const loadPaypalSDK = (clientId) => {
+  return new Promise((resolve, reject) => {
+    if (typeof window !== "undefined") {
+      if (window.paypal && typeof window.paypal.Buttons === "function") {
+        resolve(window.paypal);
+        return;
+      }
+
+      // Check if the script is already present in document
+      let script = document.querySelector('script[src*="paypal.com/sdk/js"]');
+      if (!script) {
+        script = document.createElement("script");
+        script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
+        script.async = true;
+        document.head.appendChild(script);
+      }
+
+      const checkInterval = setInterval(() => {
+        if (window.paypal && typeof window.paypal.Buttons === "function") {
+          clearInterval(checkInterval);
+          clearTimeout(timeout);
+          resolve(window.paypal);
+        }
+      }, 50);
+
+      const timeout = setTimeout(() => {
+        clearInterval(checkInterval);
+        if (window.paypal && typeof window.paypal.Buttons === "function") {
+          resolve(window.paypal);
+        } else {
+          reject(new Error("PayPal SDK loaded but window.paypal.Buttons is not a function"));
+        }
+      }, 10000); // 10s timeout
+    } else {
+      reject(new Error("window is not defined"));
+    }
+  });
+};
+
 export default function CheckoutPage() {
   const { isAuthenticated, user } = useAuth();
   const router = useRouter();
@@ -226,6 +266,97 @@ export default function CheckoutPage() {
     fetchKey();
   }, [isAuthenticated]);
 
+  // Load and render PayPal buttons when PayPal is selected
+  useEffect(() => {
+    if (paymentMethod !== "PAYPAL" || !paypalClientId || !selectedAddressId) return;
+
+    let isMounted = true;
+
+    const loadAndRenderPaypal = async () => {
+      try {
+        const paypalInstance = await loadPaypalSDK(paypalClientId);
+
+        if (!isMounted) return;
+
+        const container = document.getElementById("paypal-button-container");
+        if (container && paypalInstance && paypalInstance.Buttons) {
+          container.innerHTML = "";
+          await paypalInstance.Buttons({
+            createOrder: async () => {
+              try {
+                const paypalAmount = Math.max(
+                  parseFloat(((totals.subtotal - totals.discount) / paymentSettings.usdExchangeRate).toFixed(2)),
+                  0.01
+                );
+                const createRes = await fetchApi("/payment/paypal/create-order", {
+                  method: "POST",
+                  credentials: "include",
+                  body: JSON.stringify({
+                    amount: paypalAmount.toFixed(2),
+                    currency: "USD",
+                    shippingAddressId: selectedAddressId,
+                  }),
+                });
+                if (!createRes?.success || !createRes?.data?.paypalOrderId) {
+                  throw new Error(createRes?.message || "Failed to create PayPal order");
+                }
+                return createRes.data.paypalOrderId;
+              } catch (err) {
+                toast.error(err.message || "Failed to create PayPal order");
+                throw err;
+              }
+            },
+            onApprove: async (data) => {
+              setProcessing(true);
+              toast.loading("Capturing PayPal payment...", { id: "paypal-capture" });
+              try {
+                const captureRes = await fetchApi("/payment/paypal/capture", {
+                  method: "POST",
+                  credentials: "include",
+                  body: JSON.stringify({
+                    paypalOrderId: data.orderID,
+                    shippingAddressId: selectedAddressId,
+                    couponCode: coupon?.code || null,
+                  }),
+                });
+                toast.dismiss("paypal-capture");
+                if (captureRes?.success) {
+                  handleSuccessfulPayment(null, captureRes.data);
+                } else {
+                  toast.error(captureRes?.message || "Payment capture failed");
+                  setProcessing(false);
+                }
+              } catch (err) {
+                toast.dismiss("paypal-capture");
+                toast.error(err.message || "Payment capture failed");
+                setProcessing(false);
+              }
+            },
+            onError: (err) => {
+              console.error("PayPal error", err);
+              toast.error("PayPal payment failed. Please try again.");
+              setProcessing(false);
+            },
+            onCancel: () => {
+              toast.info("PayPal payment cancelled");
+              setProcessing(false);
+            },
+          }).render("#paypal-button-container");
+        }
+      } catch (err) {
+        console.error("Error loading/rendering PayPal SDK:", err);
+      }
+    };
+
+    // Delay slightly to make sure container is in the DOM
+    const timer = setTimeout(loadAndRenderPaypal, 200);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [paymentMethod, paypalClientId, selectedAddressId, totals.total, paymentSettings.usdExchangeRate]);
+
   // Handle address selection
   const handleAddressSelect = (id) => {
     setSelectedAddressId(id);
@@ -392,15 +523,7 @@ export default function CheckoutPage() {
         }
         try {
           // Load PayPal SDK dynamically
-          if (!window.paypal) {
-            await new Promise((resolve, reject) => {
-              const script = document.createElement("script");
-              script.src = `https://www.paypal.com/sdk/js?client-id=${paypalClientId}&currency=USD`;
-              script.onload = resolve;
-              script.onerror = reject;
-              document.head.appendChild(script);
-            });
-          }
+          const paypalInstance = await loadPaypalSDK(paypalClientId);
           // Create PayPal order on backend
           const paypalAmount = Math.max(
             parseFloat(((totals.subtotal - totals.discount) / paymentSettings.usdExchangeRate).toFixed(2)), // INR → USD approx
@@ -420,7 +543,7 @@ export default function CheckoutPage() {
           }
           const paypalOrderId = createRes.data.paypalOrderId;
           // Open PayPal popup
-          await window.paypal.Buttons({
+          await paypalInstance.Buttons({
             createOrder: () => paypalOrderId,
             onApprove: async (data) => {
               toast.loading("Capturing PayPal payment...", { id: "paypal-capture" });
@@ -1156,12 +1279,6 @@ export default function CheckoutPage() {
                     </button>
                   </div>
                 )}
-
-                {/* PayPal button mount point — rendered by SDK when PAYPAL selected */}
-                {paymentMethod === "PAYPAL" && (
-                  <div id="paypal-button-container" className="mt-4" />
-                )}
-
               </div>
             )}
           </div>
@@ -1320,33 +1437,45 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              <Button
-                className={`w-full mt-6 bg-brand-brown hover:bg-brand-dark text-white transition-all duration-200 ${processing ? "shadow-lg" : "hover:shadow-lg"
-                  }`}
-                size="lg"
-                onClick={handleCheckout}
-                disabled={
-                  processing ||
-                  !selectedAddressId ||
-                  !paymentMethod ||
-                  addresses.length === 0
-                }
-              >
-                {processing ? (
-                  <span className="flex items-center">
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    <span className="animate-pulse">Processing Payment...</span>
-                  </span>
-                ) : (
-                  <span className="flex items-center justify-center">
-                    <IndianRupee className="mr-2 h-4 w-4" />
-                    Place Order •{" "}
-                    {formatCurrency(
-                      totals.total + (paymentMethod === "CASH" ? (paymentSettings.codCharge || 0) : 0)
-                    )}
-                  </span>
-                )}
-              </Button>
+              {paymentMethod === "PAYPAL" ? (
+                <div className="mt-6 w-full relative z-10 min-h-[150px]">
+                  {!selectedAddressId ? (
+                    <div className="text-sm text-center text-amber-700 bg-amber-50 p-4 border border-amber-200 rounded-md font-medium">
+                      Please select a shipping address to pay with PayPal
+                    </div>
+                  ) : (
+                    <div id="paypal-button-container" className="w-full relative z-10" />
+                  )}
+                </div>
+              ) : (
+                <Button
+                  className={`w-full mt-6 bg-brand-brown hover:bg-brand-dark text-white transition-all duration-200 ${processing ? "shadow-lg" : "hover:shadow-lg"
+                    }`}
+                  size="lg"
+                  onClick={handleCheckout}
+                  disabled={
+                    processing ||
+                    !selectedAddressId ||
+                    !paymentMethod ||
+                    addresses.length === 0
+                  }
+                >
+                  {processing ? (
+                    <span className="flex items-center">
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      <span className="animate-pulse">Processing Payment...</span>
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center">
+                      <IndianRupee className="mr-2 h-4 w-4" />
+                      Place Order •{" "}
+                      {formatCurrency(
+                        totals.total + (paymentMethod === "CASH" ? (paymentSettings.codCharge || 0) : 0)
+                      )}
+                    </span>
+                  )}
+                </Button>
+              )}
 
               <p className="text-xs text-gray-500 mt-4 text-center">
                 By placing your order, you agree to our terms and conditions.
