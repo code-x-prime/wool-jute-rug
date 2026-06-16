@@ -41,8 +41,8 @@ const loadPaypalSDK = (clientId) => {
         return;
       }
 
-      // Check if the script is already present in document
-      let script = document.querySelector('script[src*="paypal.com/sdk/js"]');
+      // Check if the script with the correct client ID is already present in document
+      let script = document.querySelector(`script[src*="client-id=${clientId}"]`);
       if (!script) {
         script = document.createElement("script");
         script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
