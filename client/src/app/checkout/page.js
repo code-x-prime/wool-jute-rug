@@ -1050,7 +1050,7 @@ export default function CheckoutPage() {
                 )}
 
                 {/* Razorpay — India only */}
-                {paymentSettings.razorpayEnabled && isIndianCustomer && (
+                {paymentSettings.razorpayEnabled && (
                   <div
                     className={`border rounded-md p-4 transition-all ${paymentMethod === "RAZORPAY"
                       ? "border-brand-brown bg-brand-brown/5 cursor-pointer"
@@ -1082,7 +1082,7 @@ export default function CheckoutPage() {
                 )}
 
                 {/* PayPal — International */}
-                {paymentSettings.paypalEnabled && paypalClientId && !isIndianCustomer && (
+                {paymentSettings.paypalEnabled && paypalClientId && (
                   <div
                     className={`border rounded-md p-4 transition-all ${paymentMethod === "PAYPAL"
                       ? "border-[#0070BA] bg-[#0070BA]/5 cursor-pointer"
@@ -1114,7 +1114,7 @@ export default function CheckoutPage() {
                 )}
 
                 {/* Payoneer — International */}
-                {paymentSettings.payoneerEnabled && !isIndianCustomer && (
+                {paymentSettings.payoneerEnabled && (
                   <div
                     className={`border rounded-md p-4 transition-all ${paymentMethod === "PAYONEER"
                       ? "border-orange-500 bg-orange-50 cursor-pointer"
