@@ -1341,6 +1341,17 @@ export const cancelOrder = asyncHandler(async (req, res) => {
     }
   }
 
+  // Cancel Easyship shipment if it exists (outside transaction, non-blocking)
+  if (order.easyshipShipmentId) {
+    try {
+      const { deleteEasyshipShipment } = await import("./easyship.controller.js");
+      await deleteEasyshipShipment(order.easyshipShipmentId);
+      console.log(`Easyship shipment ${order.easyshipShipmentId} cancelled`);
+    } catch (error) {
+      console.error("Failed to cancel Easyship shipment:", error.message);
+    }
+  }
+
   res
     .status(200)
     .json(

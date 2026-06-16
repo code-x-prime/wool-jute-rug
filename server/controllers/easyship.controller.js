@@ -83,11 +83,17 @@ export const getEasyshipRates = asyncHandler(async (req, res) => {
 
   const { apiKey, settings } = await getEasyshipConfig();
 
+  const srSettings = await prisma.shiprocketSettings.findFirst();
+  const defaultW = srSettings?.defaultWeight || 0.5;
+  const defaultL = srSettings?.defaultLength || 20;
+  const defaultB = srSettings?.defaultBreadth || 15;
+  const defaultH = srSettings?.defaultHeight || 10;
+
   // If orderId provided, try to get dimensions from order items' variants
-  let finalWeight = weightKg || 0.5;
-  let finalLength = lengthCm || 20;
-  let finalWidth = widthCm || 15;
-  let finalHeight = heightCm || 10;
+  let finalWeight = weightKg || defaultW;
+  let finalLength = lengthCm || defaultL;
+  let finalWidth = widthCm || defaultB;
+  let finalHeight = heightCm || defaultH;
   let finalDeclaredValue = declaredValue;
 
   if (orderId) {
@@ -106,16 +112,16 @@ export const getEasyshipRates = asyncHandler(async (req, res) => {
       let totalWeight = 0, maxLength = 0, maxWidth = 0, maxHeight = 0, totalValue = 0;
       for (const item of order.items) {
         const v = item.variant;
-        totalWeight += (v?.shippingWeight || 0.5) * item.quantity;
-        maxLength = Math.max(maxLength, v?.shippingLength || 20);
-        maxWidth = Math.max(maxWidth, v?.shippingBreadth || 15);
-        maxHeight = Math.max(maxHeight, v?.shippingHeight || 10);
+        totalWeight += (v?.shippingWeight || defaultW) * item.quantity;
+        maxLength = Math.max(maxLength, v?.shippingLength || defaultL);
+        maxWidth = Math.max(maxWidth, v?.shippingBreadth || defaultB);
+        maxHeight = Math.max(maxHeight, v?.shippingHeight || defaultH);
         totalValue += parseFloat(v?.price || 10) * item.quantity;
       }
-      finalWeight = totalWeight || 0.5;
-      finalLength = maxLength || 20;
-      finalWidth = maxWidth || 15;
-      finalHeight = maxHeight || 10;
+      finalWeight = totalWeight || defaultW;
+      finalLength = maxLength || defaultL;
+      finalWidth = maxWidth || defaultB;
+      finalHeight = maxHeight || defaultH;
       finalDeclaredValue = Math.round(totalValue / 83) || 50; // rough INR→USD conversion
     }
   }
@@ -239,17 +245,23 @@ export const createEasyshipShipment = asyncHandler(async (req, res) => {
   const resolvedPostal = destinationPostal || addr?.postalCode || "";
   const resolvedCountry = destinationCountry || addr?.country || "US";
 
+  const srSettings = await prisma.shiprocketSettings.findFirst();
+  const defaultW = srSettings?.defaultWeight || 0.5;
+  const defaultL = srSettings?.defaultLength || 20;
+  const defaultB = srSettings?.defaultBreadth || 15;
+  const defaultH = srSettings?.defaultHeight || 10;
+
   // Aggregate dimensions from order items
   let totalWeight = 0, maxLength = 0, maxWidth = 0, maxHeight = 0, totalValue = 0;
   const easyshipItems = [];
 
   for (const item of order.items) {
     const v = item.variant || {};
-    const itemWeight = (v.shippingWeight || 0.5) * item.quantity;
+    const itemWeight = (v.shippingWeight || defaultW) * item.quantity;
     totalWeight += itemWeight;
-    maxLength = Math.max(maxLength, v.shippingLength || 20);
-    maxWidth = Math.max(maxWidth, v.shippingBreadth || 15);
-    maxHeight = Math.max(maxHeight, v.shippingHeight || 10);
+    maxLength = Math.max(maxLength, v.shippingLength || defaultL);
+    maxWidth = Math.max(maxWidth, v.shippingBreadth || defaultB);
+    maxHeight = Math.max(maxHeight, v.shippingHeight || defaultH);
     const itemValue = parseFloat(v.price || 10) * item.quantity;
     totalValue += itemValue;
 
@@ -266,11 +278,11 @@ export const createEasyshipShipment = asyncHandler(async (req, res) => {
 
   const payload = {
     parcels: [{
-      total_actual_weight: totalWeight || 0.5,
+      total_actual_weight: totalWeight || defaultW,
       box: {
-        length: maxLength || 20,
-        width: maxWidth || 15,
-        height: maxHeight || 10,
+        length: maxLength || defaultL,
+        width: maxWidth || defaultB,
+        height: maxHeight || defaultH,
       },
       items: easyshipItems,
     }],
@@ -377,3 +389,18 @@ export const trackEasyshipShipment = asyncHandler(async (req, res) => {
     labelUrl: s?.label_url || null,
   }, "Tracking info fetched"));
 });
+
+// Helper for order cancellation
+export async function deleteEasyshipShipment(easyshipShipmentId) {
+  try {
+    const { apiKey } = await getEasyshipConfig();
+    const response = await fetch(`${EASYSHIP_BASE}/2024-09/shipments/${easyshipShipmentId}`, {
+      method: "DELETE",
+      headers: easyshipHeaders(apiKey),
+    });
+    return response.ok;
+  } catch (error) {
+    console.error("Failed to delete Easyship shipment:", error);
+    return false;
+  }
+}
