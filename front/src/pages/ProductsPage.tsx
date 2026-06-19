@@ -155,6 +155,14 @@ export function ProductForm({
 
   // Per-attribute inline add-value state: attrId → {open, value, hexCode, loading}
   const [inlineAddValue, setInlineAddValue] = useState<Record<string, { open: boolean; value: string; hexCode: string; loading: boolean }>>({});
+
+  // ── Confirm-delete dialog state ────────────────────────────────────────────
+  const [confirmDelete, setConfirmDelete] = useState<{
+    open: boolean;
+    label: string; // e.g. "Category: Hand-knotted Rugs"
+    onConfirm: () => Promise<void>;
+  }>({ open: false, label: "", onConfirm: async () => {} });
+  const [confirmDeleteLoading, setConfirmDeleteLoading] = useState(false);
   const [product, setProduct] = useState({
     name: "",
     description: "",
@@ -742,6 +750,80 @@ export function ProductForm({
       setQuickSubCatLoading(false);
     }
   };
+
+  // ── Confirm-delete helper — opens dialog, runs action on confirm ─────────
+  const askDelete = (label: string, action: () => Promise<void>) => {
+    setConfirmDelete({ open: true, label, onConfirm: action });
+  };
+
+  const runConfirmedDelete = async () => {
+    setConfirmDeleteLoading(true);
+    try {
+      await confirmDelete.onConfirm();
+      setConfirmDelete({ open: false, label: "", onConfirm: async () => {} });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Delete failed");
+    } finally {
+      setConfirmDeleteLoading(false);
+    }
+  };
+
+  // ── Delete handlers ────────────────────────────────────────────────────────
+
+  const handleDeleteBrand = (brandId: string, brandName: string) =>
+    askDelete(`Brand: "${brandName}"`, async () => {
+      await brandsApi.deleteBrand(brandId);
+      setBrandsList((prev) => prev.filter((b: { id: string }) => b.id !== brandId));
+      if ((product as { brandId?: string }).brandId === brandId)
+        setProduct((prev) => ({ ...prev, brandId: "" }));
+      toast.success(`Brand "${brandName}" deleted`);
+    });
+
+  const handleDeleteCategory = (categoryId: string, catName: string) =>
+    askDelete(`Category: "${catName}"`, async () => {
+      await categoriesApi.deleteCategory(categoryId);
+      window.dispatchEvent(new CustomEvent("refetch-categories"));
+      setProduct((prev) => ({
+        ...prev,
+        categoryIds: prev.categoryIds.filter((id) => id !== categoryId),
+        primaryCategoryId: prev.primaryCategoryId === categoryId ? "" : prev.primaryCategoryId,
+      }));
+      toast.success(`Category "${catName}" deleted`);
+    });
+
+  const handleDeleteSubCategory = (subCatId: string, subCatName: string, parentCatId: string) =>
+    askDelete(`Sub-category: "${subCatName}"`, async () => {
+      await import("@/api/adminService").then((m) => m.subCategories.deleteSubCategory(subCatId));
+      setSubCategoriesMap((prev) => ({
+        ...prev,
+        [parentCatId]: (prev[parentCatId] || []).filter((sc: { id: string }) => sc.id !== subCatId),
+      }));
+      setSelectedSubCategories((prev) => prev.filter((id) => id !== subCatId));
+      toast.success(`Sub-category "${subCatName}" deleted`);
+    });
+
+  const handleDeleteAttribute = (attrId: string, attrName: string) =>
+    askDelete(`Attribute: "${attrName}"`, async () => {
+      await attributesApi.deleteAttribute(attrId);
+      setAttributesList((prev) => prev.filter((a) => a.id !== attrId));
+      setAttributeValuesMap((prev) => { const n = { ...prev }; delete n[attrId]; return n; });
+      setSelectedAttributes((prev) => { const n = { ...prev }; delete n[attrId]; return n; });
+      toast.success(`Attribute "${attrName}" deleted`);
+    });
+
+  const handleDeleteAttributeValue = (attrId: string, valueId: string, valueName: string) =>
+    askDelete(`Value: "${valueName}"`, async () => {
+      await import("@/api/adminService").then((m) => m.attributeValues.deleteAttributeValue(valueId));
+      setAttributeValuesMap((prev) => ({
+        ...prev,
+        [attrId]: (prev[attrId] || []).filter((v: any) => v.id !== valueId),
+      }));
+      setSelectedAttributes((prev) => ({
+        ...prev,
+        [attrId]: (prev[attrId] || []).filter((id) => id !== valueId),
+      }));
+      toast.success(`Value "${valueName}" deleted`);
+    });
 
   const handleInlineAddValue = async (attrId: string) => {
     const s = inlineAddValue[attrId];
@@ -1819,6 +1901,21 @@ export function ProductForm({
                   categories={categories}
                   isLoading={categoriesLoading}
                 />
+                {/* Delete existing categories */}
+                {categories.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {categories.filter((c: { parentId?: string }) => !c.parentId).map((c: { id: string; name: string }) => (
+                      <div key={c.id} className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] text-xs group">
+                        <span className="text-[var(--text-primary)]">{c.name}</span>
+                        <button type="button" title="Delete category"
+                          className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity"
+                          onClick={() => handleDeleteCategory(c.id, c.name)}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Primary Category Selection - only show if multiple categories selected */}
@@ -1899,34 +1996,27 @@ export function ProductForm({
                             {category?.name || "Category"} {t("products.form.categories.sub_categories_label")}:
                           </p>
                           <div className="flex flex-wrap gap-3 mt-2">
-                            {subCats.map((subCat: any) => (
-                              <label
-                                key={subCat.id}
-                                className="flex items-center space-x-2 cursor-pointer p-2 rounded-md hover:bg-[var(--bg-secondary)] transition-colors border border-transparent hover:border-[var(--accent)]/20 text-[var(--text-primary)]"
-                              >
-                                <Checkbox
-                                  checked={selectedSubCategories.includes(
-                                    subCat.id
-                                  )}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      setSelectedSubCategories([
-                                        ...selectedSubCategories,
-                                        subCat.id,
-                                      ]);
-                                    } else {
-                                      setSelectedSubCategories(
-                                        selectedSubCategories.filter(
-                                          (id) => id !== subCat.id
-                                        )
-                                      );
-                                    }
-                                  }}
-                                />
-                                <span className="text-sm font-medium text-[var(--text-primary)]">
-                                  {subCat.name}
-                                </span>
-                              </label>
+                            {subCats.map((subCat: { id: string; name: string }) => (
+                              <div key={subCat.id} className="flex items-center gap-1 group">
+                                <label className="flex items-center space-x-2 cursor-pointer p-2 rounded-md hover:bg-[var(--bg-secondary)] transition-colors border border-transparent hover:border-[var(--accent)]/20 text-[var(--text-primary)]">
+                                  <Checkbox
+                                    checked={selectedSubCategories.includes(subCat.id)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setSelectedSubCategories([...selectedSubCategories, subCat.id]);
+                                      } else {
+                                        setSelectedSubCategories(selectedSubCategories.filter((id) => id !== subCat.id));
+                                      }
+                                    }}
+                                  />
+                                  <span className="text-sm font-medium text-[var(--text-primary)]">{subCat.name}</span>
+                                </label>
+                                <button type="button" title="Delete sub-category"
+                                  className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity"
+                                  onClick={() => handleDeleteSubCategory(subCat.id, subCat.name, categoryId)}>
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -2053,22 +2143,32 @@ export function ProductForm({
                     <Plus className="h-3 w-3" /> New Brand
                   </Button>
                 </div>
-                <select
-                  id="brandId"
-                  name="brandId"
-                  value={(product as any).brandId || ""}
-                  onChange={(e) =>
-                    setProduct((prev) => ({ ...prev, brandId: e.target.value }))
-                  }
-                  className="rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm w-full text-[var(--input-text)]"
-                >
-                  <option value="">{t("products.form.placeholders.select_brand")}</option>
-                  {brandsList.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
+                {/* Brand custom list with delete */}
+                <div className="rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] max-h-36 overflow-y-auto divide-y divide-[var(--border-color)]">
+                  <label className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-[var(--bg-secondary)]">
+                    <input type="radio" name="brandId" value=""
+                      checked={!(product as { brandId?: string }).brandId}
+                      onChange={() => setProduct((prev) => ({ ...prev, brandId: "" }))}
+                      className="h-3 w-3" />
+                    <span className="text-sm text-[var(--text-secondary)]">— None —</span>
+                  </label>
+                  {brandsList.map((b: { id: string; name: string }) => (
+                    <div key={b.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--bg-secondary)] group">
+                      <label className="flex items-center gap-2 flex-1 cursor-pointer">
+                        <input type="radio" name="brandId" value={b.id}
+                          checked={(product as { brandId?: string }).brandId === b.id}
+                          onChange={() => setProduct((prev) => ({ ...prev, brandId: b.id }))}
+                          className="h-3 w-3" />
+                        <span className="text-sm text-[var(--text-primary)]">{b.name}</span>
+                      </label>
+                      <button type="button" title="Delete brand"
+                        className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity"
+                        onClick={() => handleDeleteBrand(b.id, b.name)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   ))}
-                </select>
+                </div>
                 <p className="text-xs text-[var(--text-secondary)]">
                   Optional - associate this product with a brand
                 </p>
@@ -2571,10 +2671,17 @@ export function ProductForm({
                           <Label>
                             {attribute.name} <span className="text-[var(--text-secondary)] font-normal text-xs">({attribute.inputType})</span>
                           </Label>
-                          <Button type="button" size="sm" variant="ghost" className="h-6 text-xs gap-1 text-[var(--accent)]"
-                            onClick={() => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { open: !iav.open, value: "", hexCode: "", loading: false } }))}>
-                            <Plus className="h-3 w-3" /> Add Value
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button type="button" size="sm" variant="ghost" className="h-6 text-xs gap-1 text-[var(--accent)]"
+                              onClick={() => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { open: !iav.open, value: "", hexCode: "", loading: false } }))}>
+                              <Plus className="h-3 w-3" /> Add Value
+                            </Button>
+                            <button type="button" title="Delete attribute"
+                              className="text-red-500 hover:text-red-700 p-1"
+                              onClick={() => handleDeleteAttribute(attribute.id, attribute.name)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
                         {iav.open && (
                           <div className="flex items-center gap-2 p-2 rounded-md border border-dashed border-[var(--accent)]/40 bg-[var(--bg-secondary)]">
@@ -2605,10 +2712,10 @@ export function ProductForm({
                         <div className="space-y-2 rounded-md border p-3 max-h-40 overflow-y-auto bg-[var(--bg-card)]">
                           {attributeValuesMap[attribute.id]?.length > 0 ? (
                             attributeValuesMap[attribute.id].map(
-                              (value: any) => (
+                              (value: { id: string; value: string; hexCode?: string; image?: string }) => (
                                 <div
                                   key={value.id}
-                                  className="flex items-center space-x-2"
+                                  className="flex items-center space-x-2 group"
                                 >
                                   <input
                                     type="checkbox"
@@ -2629,12 +2736,20 @@ export function ProductForm({
                                   {value.hexCode && (
                                     <span className="inline-block h-4 w-4 rounded-full border border-gray-300 flex-shrink-0" style={{ background: value.hexCode }} />
                                   )}
+                                  {value.image && !value.hexCode && (
+                                    <img src={value.image} alt={value.value} className="h-5 w-5 rounded object-cover flex-shrink-0 border" />
+                                  )}
                                   <Label
                                     htmlFor={`attr-${attribute.id}-value-${value.id}`}
-                                    className="text-sm font-normal cursor-pointer text-[var(--text-primary)]"
+                                    className="text-sm font-normal cursor-pointer text-[var(--text-primary)] flex-1"
                                   >
                                     {value.value}
                                   </Label>
+                                  <button type="button" title="Delete value"
+                                    className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity flex-shrink-0"
+                                    onClick={() => handleDeleteAttributeValue(attribute.id, value.id, value.value)}>
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
                                 </div>
                               )
                             )
@@ -3003,6 +3118,30 @@ export function ProductForm({
               <Button variant="outline" onClick={() => setShowQuickAttr(false)}>Cancel</Button>
               <Button onClick={handleQuickCreateAttribute} disabled={quickAttrLoading}>
                 {quickAttrLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Attribute"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Confirm Delete Dialog ───────────────────────────────────────────── */}
+        <Dialog open={confirmDelete.open} onOpenChange={(open) => { if (!open) setConfirmDelete({ open: false, label: "", onConfirm: async () => {} }); }}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="text-red-600">Confirm Delete</DialogTitle>
+            </DialogHeader>
+            <div className="py-3">
+              <p className="text-sm text-[var(--text-primary)]">
+                Permanently delete <span className="font-semibold">{confirmDelete.label}</span>?
+              </p>
+              <p className="text-xs text-[var(--text-secondary)] mt-1">This cannot be undone.</p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmDelete({ open: false, label: "", onConfirm: async () => {} })}
+                disabled={confirmDeleteLoading}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={runConfirmedDelete} disabled={confirmDeleteLoading}>
+                {confirmDeleteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Yes, Delete"}
               </Button>
             </DialogFooter>
           </DialogContent>
