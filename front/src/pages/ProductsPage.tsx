@@ -156,6 +156,23 @@ export function ProductForm({
   // Per-attribute inline add-value state: attrId → {open, value, hexCode, loading}
   const [inlineAddValue, setInlineAddValue] = useState<Record<string, { open: boolean; value: string; hexCode: string; loading: boolean }>>({});
 
+  // ── Inline edit state for attribute values: valueId → {value, hexCode, imageFile, imagePreview, loading}
+  const [editingValue, setEditingValue] = useState<Record<string, {
+    value: string; hexCode: string; imageFile: File | null; imagePreview: string | null; loading: boolean;
+  }>>({});
+
+  // ── Edit dialog for category / subcategory ─────────────────────────────────
+  const [editEntityDialog, setEditEntityDialog] = useState<{
+    open: boolean;
+    type: "category" | "subcategory";
+    id: string;
+    name: string;
+    parentId?: string;
+    imageFile: File | null;
+    imagePreview: string | null;
+    loading: boolean;
+  }>({ open: false, type: "category", id: "", name: "", imageFile: null, imagePreview: null, loading: false });
+
   // ── Confirm-delete dialog state ────────────────────────────────────────────
   const [confirmDelete, setConfirmDelete] = useState<{
     open: boolean;
@@ -824,6 +841,83 @@ export function ProductForm({
       }));
       toast.success(`Value "${valueName}" deleted`);
     });
+
+  // ── Edit handlers ──────────────────────────────────────────────────────────
+
+  const startEditValue = (v: { id: string; value: string; hexCode?: string; image?: string }) => {
+    setEditingValue((prev) => ({
+      ...prev,
+      [v.id]: { value: v.value, hexCode: v.hexCode || "", imageFile: null, imagePreview: v.image || null, loading: false },
+    }));
+  };
+
+  const cancelEditValue = (valueId: string) =>
+    setEditingValue((prev) => { const n = { ...prev }; delete n[valueId]; return n; });
+
+  const saveEditValue = async (attrId: string, valueId: string) => {
+    const s = editingValue[valueId];
+    if (!s?.value?.trim()) { toast.error("Value required"); return; }
+    setEditingValue((prev) => ({ ...prev, [valueId]: { ...prev[valueId], loading: true } }));
+    try {
+      const res = await attributeValuesApi.updateAttributeValue(valueId, {
+        value: s.value.trim(),
+        hexCode: s.hexCode || undefined,
+        image: s.imageFile || undefined,
+      });
+      const updated = res.data.data?.value || res.data.data;
+      setAttributeValuesMap((prev) => ({
+        ...prev,
+        [attrId]: (prev[attrId] || []).map((v: { id: string }) => v.id === valueId ? updated : v),
+      }));
+      cancelEditValue(valueId);
+      toast.success("Value updated");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to update value");
+      setEditingValue((prev) => ({ ...prev, [valueId]: { ...prev[valueId], loading: false } }));
+    }
+  };
+
+  const openEditCategory = (c: { id: string; name: string; image?: string }) =>
+    setEditEntityDialog({ open: true, type: "category", id: c.id, name: c.name, imageFile: null, imagePreview: c.image || null, loading: false });
+
+  const openEditSubCategory = (sc: { id: string; name: string; image?: string }, parentId: string) =>
+    setEditEntityDialog({ open: true, type: "subcategory", id: sc.id, name: sc.name, parentId, imageFile: null, imagePreview: sc.image || null, loading: false });
+
+  const saveEditEntity = async () => {
+    const d = editEntityDialog;
+    if (!d.name.trim()) { toast.error("Name required"); return; }
+    setEditEntityDialog((prev) => ({ ...prev, loading: true }));
+    try {
+      if (d.type === "category") {
+        const fd = new FormData();
+        fd.append("name", d.name.trim());
+        if (d.imageFile) fd.append("image", d.imageFile);
+        await categoriesApi.updateCategory(d.id, fd);
+        window.dispatchEvent(new CustomEvent("refetch-categories"));
+        toast.success("Category updated");
+      } else {
+        const fd = new FormData();
+        fd.append("name", d.name.trim());
+        if (d.imageFile) fd.append("image", d.imageFile);
+        await import("@/api/adminService").then((m) =>
+          m.subCategories.updateSubCategory(d.id, { name: d.name.trim(), image: d.imageFile || undefined })
+        );
+        if (d.parentId) {
+          setSubCategoriesMap((prev) => ({
+            ...prev,
+            [d.parentId!]: (prev[d.parentId!] || []).map((sc: { id: string }) =>
+              sc.id === d.id ? { ...sc, name: d.name.trim() } : sc
+            ),
+          }));
+        }
+        toast.success("Sub-category updated");
+      }
+      setEditEntityDialog({ open: false, type: "category", id: "", name: "", imageFile: null, imagePreview: null, loading: false });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Update failed");
+      setEditEntityDialog((prev) => ({ ...prev, loading: false }));
+    }
+  };
 
   const handleInlineAddValue = async (attrId: string) => {
     const s = inlineAddValue[attrId];
@@ -1904,9 +1998,14 @@ export function ProductForm({
                 {/* Delete existing categories */}
                 {categories.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1">
-                    {categories.filter((c: { parentId?: string }) => !c.parentId).map((c: { id: string; name: string }) => (
+                    {categories.filter((c: { parentId?: string }) => !c.parentId).map((c: { id: string; name: string; image?: string }) => (
                       <div key={c.id} className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] text-xs group">
                         <span className="text-[var(--text-primary)]">{c.name}</span>
+                        <button type="button" title="Edit category"
+                          className="opacity-0 group-hover:opacity-100 text-blue-500 hover:text-blue-700 transition-opacity"
+                          onClick={() => openEditCategory(c)}>
+                          <Edit className="h-3 w-3" />
+                        </button>
                         <button type="button" title="Delete category"
                           className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity"
                           onClick={() => handleDeleteCategory(c.id, c.name)}>
@@ -2011,6 +2110,11 @@ export function ProductForm({
                                   />
                                   <span className="text-sm font-medium text-[var(--text-primary)]">{subCat.name}</span>
                                 </label>
+                                <button type="button" title="Edit sub-category"
+                                  className="opacity-0 group-hover:opacity-100 text-blue-500 hover:text-blue-700 transition-opacity"
+                                  onClick={() => openEditSubCategory(subCat, categoryId)}>
+                                  <Edit className="h-3 w-3" />
+                                </button>
                                 <button type="button" title="Delete sub-category"
                                   className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity"
                                   onClick={() => handleDeleteSubCategory(subCat.id, subCat.name, categoryId)}>
@@ -2709,49 +2813,94 @@ export function ProductForm({
                             </Button>
                           </div>
                         )}
-                        <div className="space-y-2 rounded-md border p-3 max-h-40 overflow-y-auto bg-[var(--bg-card)]">
+                        <div className="space-y-1 rounded-md border p-3 max-h-52 overflow-y-auto bg-[var(--bg-card)]">
                           {attributeValuesMap[attribute.id]?.length > 0 ? (
                             attributeValuesMap[attribute.id].map(
-                              (value: { id: string; value: string; hexCode?: string; image?: string }) => (
-                                <div
-                                  key={value.id}
-                                  className="flex items-center space-x-2 group"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    id={`attr-${attribute.id}-value-${value.id}`}
-                                    checked={
-                                      selectedAttributes[
-                                        attribute.id
-                                      ]?.includes(value.id) || false
-                                    }
-                                    onChange={() =>
-                                      handleAttributeValueToggle(
-                                        attribute.id,
-                                        value.id
-                                      )
-                                    }
-                                    className="h-6 w-6 rounded border-[var(--border-color)] text-[var(--accent)] focus:ring-[var(--accent)] cursor-pointer"
-                                  />
-                                  {value.hexCode && (
-                                    <span className="inline-block h-4 w-4 rounded-full border border-gray-300 flex-shrink-0" style={{ background: value.hexCode }} />
-                                  )}
-                                  {value.image && !value.hexCode && (
-                                    <img src={value.image} alt={value.value} className="h-5 w-5 rounded object-cover flex-shrink-0 border" />
-                                  )}
-                                  <Label
-                                    htmlFor={`attr-${attribute.id}-value-${value.id}`}
-                                    className="text-sm font-normal cursor-pointer text-[var(--text-primary)] flex-1"
-                                  >
-                                    {value.value}
-                                  </Label>
-                                  <button type="button" title="Delete value"
-                                    className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity flex-shrink-0"
-                                    onClick={() => handleDeleteAttributeValue(attribute.id, value.id, value.value)}>
-                                    <Trash2 className="h-3 w-3" />
-                                  </button>
-                                </div>
-                              )
+                              (value: { id: string; value: string; hexCode?: string; image?: string }) => {
+                                const ev = editingValue[value.id];
+                                if (ev) {
+                                  // ── Inline edit row ──────────────────────
+                                  return (
+                                    <div key={value.id} className="flex flex-col gap-1 p-2 rounded border border-[var(--accent)]/30 bg-[var(--bg-secondary)]">
+                                      <div className="flex items-center gap-2">
+                                        <Input value={ev.value} placeholder="Value name"
+                                          onChange={(e) => setEditingValue((prev) => ({ ...prev, [value.id]: { ...prev[value.id], value: e.target.value } }))}
+                                          className="h-7 text-xs flex-1"
+                                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveEditValue(attribute.id, value.id); } }}
+                                        />
+                                        {isColor && (
+                                          <input type="color" title="Color"
+                                            value={ev.hexCode || "#000000"}
+                                            onChange={(e) => setEditingValue((prev) => ({ ...prev, [value.id]: { ...prev[value.id], hexCode: e.target.value } }))}
+                                            className="h-7 w-7 rounded cursor-pointer border border-[var(--border-color)] flex-shrink-0"
+                                          />
+                                        )}
+                                        <Button type="button" size="sm" className="h-7 text-xs" disabled={ev.loading}
+                                          onClick={() => saveEditValue(attribute.id, value.id)}>
+                                          {ev.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+                                        </Button>
+                                        <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0"
+                                          onClick={() => cancelEditValue(value.id)}>
+                                          <X className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                      {/* Image upload */}
+                                      <div className="flex items-center gap-2">
+                                        {ev.imagePreview && (
+                                          <img src={ev.imagePreview} alt="preview" className="h-8 w-8 rounded object-cover border flex-shrink-0" />
+                                        )}
+                                        <label className="flex items-center gap-1 cursor-pointer text-xs text-[var(--accent)] hover:underline">
+                                          <ImageIcon className="h-3 w-3" />
+                                          {ev.imagePreview ? "Change image" : "Add image"}
+                                          <input type="file" accept="image/*" className="hidden"
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0] || null;
+                                              setEditingValue((prev) => ({
+                                                ...prev,
+                                                [value.id]: { ...prev[value.id], imageFile: file, imagePreview: file ? URL.createObjectURL(file) : prev[value.id].imagePreview },
+                                              }));
+                                            }}
+                                          />
+                                        </label>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                // ── Normal display row ───────────────────
+                                return (
+                                  <div key={value.id} className="flex items-center space-x-2 group py-0.5">
+                                    <input
+                                      type="checkbox"
+                                      id={`attr-${attribute.id}-value-${value.id}`}
+                                      checked={selectedAttributes[attribute.id]?.includes(value.id) || false}
+                                      onChange={() => handleAttributeValueToggle(attribute.id, value.id)}
+                                      className="h-5 w-5 rounded border-[var(--border-color)] text-[var(--accent)] focus:ring-[var(--accent)] cursor-pointer flex-shrink-0"
+                                    />
+                                    {value.hexCode && (
+                                      <span className="inline-block h-4 w-4 rounded-full border border-gray-300 flex-shrink-0" style={{ background: value.hexCode }} />
+                                    )}
+                                    {value.image && !value.hexCode && (
+                                      <img src={value.image} alt={value.value} className="h-5 w-5 rounded object-cover flex-shrink-0 border" />
+                                    )}
+                                    <Label htmlFor={`attr-${attribute.id}-value-${value.id}`}
+                                      className="text-sm font-normal cursor-pointer text-[var(--text-primary)] flex-1">
+                                      {value.value}
+                                    </Label>
+                                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity flex-shrink-0">
+                                      <button type="button" title="Edit value"
+                                        className="text-blue-500 hover:text-blue-700"
+                                        onClick={() => startEditValue(value)}>
+                                        <Edit className="h-3 w-3" />
+                                      </button>
+                                      <button type="button" title="Delete value"
+                                        className="text-red-500 hover:text-red-700"
+                                        onClick={() => handleDeleteAttributeValue(attribute.id, value.id, value.value)}>
+                                        <Trash2 className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              }
                             )
                           ) : (
                             <p className="text-sm text-gray-500">
@@ -3118,6 +3267,56 @@ export function ProductForm({
               <Button variant="outline" onClick={() => setShowQuickAttr(false)}>Cancel</Button>
               <Button onClick={handleQuickCreateAttribute} disabled={quickAttrLoading}>
                 {quickAttrLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Attribute"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Edit Category / Sub-category Dialog ────────────────────────────── */}
+        <Dialog open={editEntityDialog.open} onOpenChange={(open) => { if (!open) setEditEntityDialog((prev) => ({ ...prev, open: false })); }}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Edit {editEntityDialog.type === "category" ? "Category" : "Sub-category"}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1">
+                <Label>Name *</Label>
+                <Input value={editEntityDialog.name}
+                  onChange={(e) => setEditEntityDialog((prev) => ({ ...prev, name: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveEditEntity(); } }}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Image (optional — replaces existing)</Label>
+                <div className="flex items-center gap-3">
+                  {editEntityDialog.imagePreview && (
+                    <img src={editEntityDialog.imagePreview} alt="preview" className="h-12 w-12 rounded object-cover border" />
+                  )}
+                  <label className="flex items-center gap-1 cursor-pointer text-sm text-[var(--accent)] hover:underline">
+                    <ImageIcon className="h-4 w-4" />
+                    {editEntityDialog.imagePreview ? "Change" : "Upload image"}
+                    <input type="file" accept="image/*" className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null;
+                        setEditEntityDialog((prev) => ({
+                          ...prev,
+                          imageFile: file,
+                          imagePreview: file ? URL.createObjectURL(file) : prev.imagePreview,
+                        }));
+                      }}
+                    />
+                  </label>
+                </div>
+                {editEntityDialog.imageFile && (
+                  <p className="text-xs text-green-600">New image selected — old one will be replaced on save</p>
+                )}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditEntityDialog((prev) => ({ ...prev, open: false }))}
+                disabled={editEntityDialog.loading}>Cancel</Button>
+              <Button onClick={saveEditEntity} disabled={editEntityDialog.loading}>
+                {editEntityDialog.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
               </Button>
             </DialogFooter>
           </DialogContent>
