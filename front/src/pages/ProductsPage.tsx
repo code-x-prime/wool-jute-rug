@@ -142,6 +142,11 @@ export function ProductForm({
   const [quickCatName, setQuickCatName] = useState("");
   const [quickCatLoading, setQuickCatLoading] = useState(false);
 
+  const [showQuickSubCat, setShowQuickSubCat] = useState(false);
+  const [quickSubCatParentId, setQuickSubCatParentId] = useState<string>("");
+  const [quickSubCatName, setQuickSubCatName] = useState("");
+  const [quickSubCatLoading, setQuickSubCatLoading] = useState(false);
+
   const [showQuickAttr, setShowQuickAttr] = useState(false);
   const [quickAttrName, setQuickAttrName] = useState("");
   const [quickAttrType, setQuickAttrType] = useState("select");
@@ -712,6 +717,32 @@ export function ProductForm({
       toast.error(err?.response?.data?.message || "Failed to create attribute");
     } finally {
       setQuickAttrLoading(false);
+    }
+  };
+
+  const handleQuickCreateSubCat = async () => {
+    if (!quickSubCatName.trim()) { toast.error("Sub-category name required"); return; }
+    if (!quickSubCatParentId) { toast.error("Select a parent category first"); return; }
+    setQuickSubCatLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append("name", quickSubCatName.trim());
+      const res = await import("@/api/adminService").then((m) =>
+        m.subCategories.createSubCategory(quickSubCatParentId, { name: quickSubCatName.trim() })
+      );
+      const newSC = res.data.data?.subCategory || res.data.data;
+      setSubCategoriesMap((prev) => ({
+        ...prev,
+        [quickSubCatParentId]: [...(prev[quickSubCatParentId] || []), newSC],
+      }));
+      setSelectedSubCategories((prev) => [...prev, newSC.id]);
+      setShowQuickSubCat(false);
+      setQuickSubCatName("");
+      toast.success(`Sub-category "${newSC.name}" created and selected`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to create sub-category");
+    } finally {
+      setQuickSubCatLoading(false);
     }
   };
 
@@ -1831,9 +1862,18 @@ export function ProductForm({
               {/* Sub-Categories Selection */}
               {product.categoryIds.length > 0 && (
                 <div className="space-y-2">
-                  <Label htmlFor="subCategories">
-                    {t("products.form.categories.sub_categories_optional")}
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="subCategories">
+                      {t("products.form.categories.sub_categories_optional")}
+                    </Label>
+                    <Button type="button" size="sm" variant="outline" className="h-7 text-xs gap-1"
+                      onClick={() => {
+                        setQuickSubCatParentId(product.categoryIds[0] || "");
+                        setShowQuickSubCat(true);
+                      }}>
+                      <Plus className="h-3 w-3" /> New Sub-category
+                    </Button>
+                  </div>
                   <p className="text-xs text-[var(--text-secondary)] mb-2">
                     {t("products.form.categories.select_sub_categories_hint")}
                   </p>
@@ -1843,7 +1883,15 @@ export function ProductForm({
                         (c) => c.id === categoryId
                       );
                       const subCats = subCategoriesMap[categoryId] || [];
-                      if (subCats.length === 0) return null;
+                      if (subCats.length === 0) return (
+                        <div key={categoryId} className="flex items-center justify-between p-2 rounded border border-dashed border-[var(--border-color)]">
+                          <span className="text-sm text-[var(--text-secondary)]">{category?.name} — no sub-categories yet</span>
+                          <Button type="button" size="sm" variant="ghost" className="h-6 text-xs gap-1 text-[var(--accent)]"
+                            onClick={() => { setQuickSubCatParentId(categoryId); setShowQuickSubCat(true); }}>
+                            <Plus className="h-3 w-3" /> Add
+                          </Button>
+                        </div>
+                      );
 
                       return (
                         <div
@@ -2841,6 +2889,42 @@ export function ProductForm({
               <Button variant="outline" onClick={() => setShowQuickBrand(false)}>Cancel</Button>
               <Button onClick={handleQuickCreateBrand} disabled={quickBrandLoading}>
                 {quickBrandLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Brand"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Quick Create: Sub-Category ─────────────────────────────────────── */}
+        <Dialog open={showQuickSubCat} onOpenChange={setShowQuickSubCat}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Create New Sub-category</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              {product.categoryIds.length > 1 && (
+                <div className="space-y-1">
+                  <Label>Parent Category</Label>
+                  <select value={quickSubCatParentId} onChange={(e) => setQuickSubCatParentId(e.target.value)}
+                    className="rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm w-full">
+                    {product.categoryIds.map((cid) => {
+                      const cat = categories.find((c) => c.id === cid);
+                      return <option key={cid} value={cid}>{cat?.name || cid}</option>;
+                    })}
+                  </select>
+                </div>
+              )}
+              <div className="space-y-1">
+                <Label>Sub-category Name *</Label>
+                <Input placeholder="e.g. Modern Rugs" value={quickSubCatName}
+                  onChange={(e) => setQuickSubCatName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleQuickCreateSubCat(); } }}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowQuickSubCat(false)}>Cancel</Button>
+              <Button onClick={handleQuickCreateSubCat} disabled={quickSubCatLoading}>
+                {quickSubCatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Sub-category"}
               </Button>
             </DialogFooter>
           </DialogContent>
