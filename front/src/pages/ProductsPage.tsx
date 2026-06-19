@@ -675,9 +675,6 @@ export function ProductForm({
       const newCat = res.data.data?.category || res.data.data;
       // Re-fetch categories list to update CategorySelector
       try {
-        const catRes = await categoriesApi.getCategories();
-        const cats = catRes.data.data?.categories || catRes.data.data || [];
-        // categories state is from useCategories hook — trigger re-fetch by dispatching custom event
         window.dispatchEvent(new CustomEvent("refetch-categories"));
       } catch {}
       setShowQuickCategory(false);
