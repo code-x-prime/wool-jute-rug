@@ -55,7 +55,14 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { brands as brandsApi, categories as categoriesApi, attributes as attributesApi, attributeValues as attributeValuesApi } from "@/api/adminService";
 
 import { useLanguage } from "@/context/LanguageContext";
 import { useTheme } from "@/hooks/useTheme";
@@ -88,6 +95,17 @@ function useCategories() {
     fetchCategories();
   }, []);
 
+  // Re-fetch when quick-create triggers event
+  useEffect(() => {
+    const handler = () => {
+      categories.getCategories().then((r) => {
+        if (r.data.success) setCategoriesData(r.data.data?.categories || []);
+      }).catch(() => {});
+    };
+    window.addEventListener("refetch-categories", handler);
+    return () => window.removeEventListener("refetch-categories", handler);
+  }, []);
+
   return { categories: categoriesData, isLoading, error };
 }
 
@@ -113,6 +131,25 @@ export function ProductForm({
   >({});
   const [brandsList, setBrandsList] = useState<any[]>([]);
   const [hasVariants, setHasVariants] = useState(false);
+
+  // ── Inline quick-create state ──────────────────────────────────────────────
+  const [showQuickBrand, setShowQuickBrand] = useState(false);
+  const [quickBrandName, setQuickBrandName] = useState("");
+  const [quickBrandFile, setQuickBrandFile] = useState<File | null>(null);
+  const [quickBrandLoading, setQuickBrandLoading] = useState(false);
+
+  const [showQuickCategory, setShowQuickCategory] = useState(false);
+  const [quickCatName, setQuickCatName] = useState("");
+  const [quickCatLoading, setQuickCatLoading] = useState(false);
+
+  const [showQuickAttr, setShowQuickAttr] = useState(false);
+  const [quickAttrName, setQuickAttrName] = useState("");
+  const [quickAttrType, setQuickAttrType] = useState("select");
+  const [quickAttrValues, setQuickAttrValues] = useState<string[]>([""]);
+  const [quickAttrLoading, setQuickAttrLoading] = useState(false);
+
+  // Per-attribute inline add-value state: attrId → {open, value, hexCode, loading}
+  const [inlineAddValue, setInlineAddValue] = useState<Record<string, { open: boolean; value: string; hexCode: string; loading: boolean }>>({});
   const [product, setProduct] = useState({
     name: "",
     description: "",
@@ -598,6 +635,104 @@ export function ProductForm({
 
     fetchBrands();
   }, []);
+
+  // ── Quick-create handlers ──────────────────────────────────────────────────
+
+  const handleQuickCreateBrand = async () => {
+    if (!quickBrandName.trim() || !quickBrandFile) {
+      toast.error("Brand name and logo required");
+      return;
+    }
+    setQuickBrandLoading(true);
+    try {
+      const res = await brandsApi.createBrand({ name: quickBrandName.trim(), image: quickBrandFile });
+      const newBrand = res.data.data?.brand || res.data.data;
+      setBrandsList((prev) => [...prev, newBrand]);
+      setProduct((prev) => ({ ...prev, brandId: newBrand.id }));
+      setShowQuickBrand(false);
+      setQuickBrandName("");
+      setQuickBrandFile(null);
+      toast.success(`Brand "${newBrand.name}" created`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to create brand");
+    } finally {
+      setQuickBrandLoading(false);
+    }
+  };
+
+  const handleQuickCreateCategory = async () => {
+    if (!quickCatName.trim()) { toast.error("Category name required"); return; }
+    setQuickCatLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append("name", quickCatName.trim());
+      const res = await categoriesApi.createCategory(fd);
+      const newCat = res.data.data?.category || res.data.data;
+      // Re-fetch categories list to update CategorySelector
+      try {
+        const catRes = await categoriesApi.getCategories();
+        const cats = catRes.data.data?.categories || catRes.data.data || [];
+        // categories state is from useCategories hook — trigger re-fetch by dispatching custom event
+        window.dispatchEvent(new CustomEvent("refetch-categories"));
+      } catch {}
+      setShowQuickCategory(false);
+      setQuickCatName("");
+      toast.success(`Category "${newCat.name}" created — select it below`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to create category");
+    } finally {
+      setQuickCatLoading(false);
+    }
+  };
+
+  const handleQuickCreateAttribute = async () => {
+    if (!quickAttrName.trim()) { toast.error("Attribute name required"); return; }
+    setQuickAttrLoading(true);
+    try {
+      const res = await attributesApi.createAttribute({ name: quickAttrName.trim(), inputType: quickAttrType });
+      const newAttr = res.data.data?.attribute || res.data.data;
+      // Add values
+      const valuesToAdd = quickAttrValues.filter((v) => v.trim());
+      const addedValues: any[] = [];
+      for (const val of valuesToAdd) {
+        try {
+          const vRes = await attributeValuesApi.createAttributeValue(newAttr.id, { value: val.trim() });
+          const v = vRes.data.data?.value || vRes.data.data;
+          if (v) addedValues.push(v);
+        } catch {}
+      }
+      setAttributesList((prev) => [...prev, newAttr]);
+      setAttributeValuesMap((prev) => ({ ...prev, [newAttr.id]: addedValues }));
+      setShowQuickAttr(false);
+      setQuickAttrName("");
+      setQuickAttrType("select");
+      setQuickAttrValues([""]);
+      toast.success(`Attribute "${newAttr.name}" created with ${addedValues.length} values`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to create attribute");
+    } finally {
+      setQuickAttrLoading(false);
+    }
+  };
+
+  const handleInlineAddValue = async (attrId: string) => {
+    const s = inlineAddValue[attrId];
+    if (!s?.value?.trim()) { toast.error("Value required"); return; }
+    setInlineAddValue((prev) => ({ ...prev, [attrId]: { ...prev[attrId], loading: true } }));
+    try {
+      const res = await attributeValuesApi.createAttributeValue(attrId, {
+        value: s.value.trim(),
+        hexCode: s.hexCode || undefined,
+      });
+      const newVal = res.data.data?.value || res.data.data;
+      setAttributeValuesMap((prev) => ({ ...prev, [attrId]: [...(prev[attrId] || []), newVal] }));
+      setInlineAddValue((prev) => ({ ...prev, [attrId]: { open: false, value: "", hexCode: "", loading: false } }));
+      toast.success(`Value "${s.value.trim()}" added`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to add value");
+      setInlineAddValue((prev) => ({ ...prev, [attrId]: { ...prev[attrId], loading: false } }));
+    }
+  };
 
   // Fetch product details if in edit mode
   useEffect(() => {
@@ -1642,7 +1777,12 @@ export function ProductForm({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="categories">{t("products.form.labels.category")} *</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="categories">{t("products.form.labels.category")} *</Label>
+                  <Button type="button" size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setShowQuickCategory(true)}>
+                    <Plus className="h-3 w-3" /> New Category
+                  </Button>
+                </div>
                 <CategorySelector
                   selectedCategoryIds={product.categoryIds}
                   onSelectCategory={handleSelectCategory}
@@ -1862,7 +2002,12 @@ export function ProductForm({
 
               {/* Brand selection */}
               <div className="space-y-2">
-                <Label htmlFor="brandId" className="text-[var(--text-primary)]">{t("products.form.labels.brand_optional")}</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="brandId" className="text-[var(--text-primary)]">{t("products.form.labels.brand_optional")}</Label>
+                  <Button type="button" size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setShowQuickBrand(true)}>
+                    <Plus className="h-3 w-3" /> New Brand
+                  </Button>
+                </div>
                 <select
                   id="brandId"
                   name="brandId"
@@ -2353,26 +2498,65 @@ export function ProductForm({
               </div>
 
               <div className="space-y-4">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm text-[var(--text-secondary)]">Select attribute values for variants</span>
+                  <Button type="button" size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setShowQuickAttr(true)}>
+                    <Plus className="h-3 w-3" /> New Attribute
+                  </Button>
+                </div>
                 <div className="space-y-4">
                   {attributesList.length === 0 ? (
                     <div className="rounded-md border p-4 bg-yellow-50">
                       <p className="text-sm text-yellow-700">
-                        {t("products.form.variants.no_attributes_available")}{" "}
-                        <Link
-                          to="/attributes"
-                          className="underline font-medium"
-                        >
-                          {t("products.form.variants.attributes_link")}
-                        </Link>{" "}
-                        {t("products.form.variants.section_text")}.
+                        No attributes yet.{" "}
+                        <button type="button" className="underline font-medium" onClick={() => setShowQuickAttr(true)}>
+                          Create one now
+                        </button>
+                        {" "}or go to the{" "}
+                        <Link to="/attributes" className="underline font-medium">Attributes page</Link>.
                       </p>
                     </div>
                   ) : (
-                    attributesList.map((attribute) => (
+                    attributesList.map((attribute) => {
+                      const iav = inlineAddValue[attribute.id] || { open: false, value: "", hexCode: "", loading: false };
+                      const isColor = attribute.name?.toLowerCase().includes("color");
+                      return (
                       <div key={attribute.id} className="space-y-2">
-                        <Label>
-                          {attribute.name} ({attribute.inputType})
-                        </Label>
+                        <div className="flex items-center justify-between">
+                          <Label>
+                            {attribute.name} <span className="text-[var(--text-secondary)] font-normal text-xs">({attribute.inputType})</span>
+                          </Label>
+                          <Button type="button" size="sm" variant="ghost" className="h-6 text-xs gap-1 text-[var(--accent)]"
+                            onClick={() => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { open: !iav.open, value: "", hexCode: "", loading: false } }))}>
+                            <Plus className="h-3 w-3" /> Add Value
+                          </Button>
+                        </div>
+                        {iav.open && (
+                          <div className="flex items-center gap-2 p-2 rounded-md border border-dashed border-[var(--accent)]/40 bg-[var(--bg-secondary)]">
+                            <Input
+                              placeholder="Value name"
+                              value={iav.value}
+                              onChange={(e) => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { ...prev[attribute.id], value: e.target.value } }))}
+                              className="h-7 text-xs flex-1"
+                              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleInlineAddValue(attribute.id); } }}
+                            />
+                            {isColor && (
+                              <input type="color" title="Pick color"
+                                value={iav.hexCode || "#000000"}
+                                onChange={(e) => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { ...prev[attribute.id], hexCode: e.target.value } }))}
+                                className="h-7 w-7 rounded cursor-pointer border border-[var(--border-color)]"
+                              />
+                            )}
+                            <Button type="button" size="sm" className="h-7 text-xs" disabled={iav.loading}
+                              onClick={() => handleInlineAddValue(attribute.id)}>
+                              {iav.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
+                            </Button>
+                            <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0"
+                              onClick={() => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { open: false, value: "", hexCode: "", loading: false } }))}>
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        )}
                         <div className="space-y-2 rounded-md border p-3 max-h-40 overflow-y-auto bg-[var(--bg-card)]">
                           {attributeValuesMap[attribute.id]?.length > 0 ? (
                             attributeValuesMap[attribute.id].map(
@@ -2397,6 +2581,9 @@ export function ProductForm({
                                     }
                                     className="h-6 w-6 rounded border-[var(--border-color)] text-[var(--accent)] focus:ring-[var(--accent)] cursor-pointer"
                                   />
+                                  {value.hexCode && (
+                                    <span className="inline-block h-4 w-4 rounded-full border border-gray-300 flex-shrink-0" style={{ background: value.hexCode }} />
+                                  )}
                                   <Label
                                     htmlFor={`attr-${attribute.id}-value-${value.id}`}
                                     className="text-sm font-normal cursor-pointer text-[var(--text-primary)]"
@@ -2408,18 +2595,17 @@ export function ProductForm({
                             )
                           ) : (
                             <p className="text-sm text-gray-500">
-                              {t("products.form.variants.no_values_available")}{" "}
-                              <Link
-                                to={`/attributes/${attribute.id}/values/new`}
-                                className="underline"
-                              >
-                                {t("products.form.variants.add_values_link")}
-                              </Link>
+                              No values yet.{" "}
+                              <button type="button" className="underline text-[var(--accent)]"
+                                onClick={() => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { open: true, value: "", hexCode: "", loading: false } }))}>
+                                Add first value
+                              </button>
                             </p>
                           )}
                         </div>
                       </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
 
@@ -2627,6 +2813,120 @@ export function ProductForm({
             </Button>
           </div>
         </form>
+
+        {/* ── Quick Create: Brand ─────────────────────────────────────────────── */}
+        <Dialog open={showQuickBrand} onOpenChange={setShowQuickBrand}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Create New Brand</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1">
+                <Label>Brand Name *</Label>
+                <Input placeholder="e.g. Wool & Jute" value={quickBrandName}
+                  onChange={(e) => setQuickBrandName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleQuickCreateBrand(); } }}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Logo / Image *</Label>
+                <input type="file" accept="image/*" className="block w-full text-sm"
+                  onChange={(e) => setQuickBrandFile(e.target.files?.[0] || null)} />
+                {quickBrandFile && (
+                  <img src={URL.createObjectURL(quickBrandFile)} alt="preview" className="mt-2 h-16 w-16 rounded object-cover border" />
+                )}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowQuickBrand(false)}>Cancel</Button>
+              <Button onClick={handleQuickCreateBrand} disabled={quickBrandLoading}>
+                {quickBrandLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Brand"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Quick Create: Category ──────────────────────────────────────────── */}
+        <Dialog open={showQuickCategory} onOpenChange={setShowQuickCategory}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Create New Category</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1">
+                <Label>Category Name *</Label>
+                <Input placeholder="e.g. Hand-knotted Rugs" value={quickCatName}
+                  onChange={(e) => setQuickCatName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleQuickCreateCategory(); } }}
+                />
+              </div>
+              <p className="text-xs text-[var(--text-secondary)]">Category will be created and appear in the selector below. Select it after creation.</p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowQuickCategory(false)}>Cancel</Button>
+              <Button onClick={handleQuickCreateCategory} disabled={quickCatLoading}>
+                {quickCatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Category"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Quick Create: Attribute + Values ────────────────────────────────── */}
+        <Dialog open={showQuickAttr} onOpenChange={setShowQuickAttr}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Create New Attribute</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Attribute Name *</Label>
+                  <Input placeholder="e.g. Color, Size, Material" value={quickAttrName}
+                    onChange={(e) => setQuickAttrName(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label>Input Type</Label>
+                  <select value={quickAttrType} onChange={(e) => setQuickAttrType(e.target.value)}
+                    className="rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm w-full">
+                    <option value="select">Select</option>
+                    <option value="multiselect">Multi-select</option>
+                    <option value="text">Text</option>
+                    <option value="number">Number</option>
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Values (optional — add now or later)</Label>
+                  <Button type="button" size="sm" variant="ghost" className="h-6 text-xs gap-1"
+                    onClick={() => setQuickAttrValues((prev) => [...prev, ""])}>
+                    <Plus className="h-3 w-3" /> Add row
+                  </Button>
+                </div>
+                {quickAttrValues.map((val, idx) => (
+                  <div key={idx} className="flex gap-2">
+                    <Input placeholder={`Value ${idx + 1}`} value={val}
+                      onChange={(e) => setQuickAttrValues((prev) => prev.map((v, i) => i === idx ? e.target.value : v))}
+                      className="h-8 text-sm flex-1" />
+                    {quickAttrValues.length > 1 && (
+                      <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0"
+                        onClick={() => setQuickAttrValues((prev) => prev.filter((_, i) => i !== idx))}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowQuickAttr(false)}>Cancel</Button>
+              <Button onClick={handleQuickCreateAttribute} disabled={quickAttrLoading}>
+                {quickAttrLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Attribute"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
       </Card>
     </div>
   );
