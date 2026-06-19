@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { fetchApi, formatCurrency, stripInlineStyles } from "@/lib/utils";
+import { IconTruckDelivery, IconShoppingBag, IconPalette, IconTag } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import {
   Star,
@@ -1296,6 +1297,43 @@ export default function ProductContent({ slug }) {
               </div>
             )}
           </div>
+
+          {/* Status badges: Ready to Ship / Accept Orders / Customizable */}
+          {(product.readyToShip || product.acceptOrders || product.isCustomizable) && (
+            <div className="flex flex-wrap gap-2 mt-4">
+              {product.readyToShip && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 border border-green-200 text-green-700 text-xs font-semibold">
+                  <IconTruckDelivery size={15} stroke={1.8} />
+                  Ready to Ship
+                </span>
+              )}
+              {product.acceptOrders && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold">
+                  <IconShoppingBag size={15} stroke={1.8} />
+                  Possible Orders
+                </span>
+              )}
+              {product.isCustomizable && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-50 border border-purple-200 text-purple-700 text-xs font-semibold">
+                  <IconPalette size={15} stroke={1.8} />
+                  Customizable
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Tags */}
+          {product.tags && product.tags.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 mt-3">
+              <IconTag size={14} className="text-gray-400 flex-shrink-0" />
+              {product.tags.map((tag) => (
+                <span key={tag} className="inline-block px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs">
+                  #{tag}
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* Product Accordions */}
           <div className="mt-8">
             <Accordion type="single" collapsible className="w-full">

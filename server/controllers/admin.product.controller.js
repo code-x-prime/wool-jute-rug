@@ -409,6 +409,9 @@ export const createProduct = asyncHandler(async (req, res, next) => {
     shippingAndReturns,
     aboutThisDesign,
     designStory,
+    readyToShip,
+    acceptOrders,
+    isCustomizable,
   } = req.body;
 
   // Validation checks with better error handling
@@ -554,6 +557,9 @@ export const createProduct = asyncHandler(async (req, res, next) => {
               : req.body.hotBrandIds
             : [],
           ourProduct: ourProduct === "true" || ourProduct === true,
+          readyToShip: readyToShip === "true" || readyToShip === true,
+          acceptOrders: acceptOrders === "true" || acceptOrders === true,
+          isCustomizable: isCustomizable === "true" || isCustomizable === true,
           washingAndCare,
           shippingAndReturns,
           aboutThisDesign,
@@ -1128,6 +1134,9 @@ export const updateProduct = asyncHandler(async (req, res, next) => {
     shippingAndReturns,
     aboutThisDesign,
     designStory,
+    readyToShip,
+    acceptOrders,
+    isCustomizable,
   } = req.body;
 
   // Check if product exists
@@ -1302,6 +1311,15 @@ export const updateProduct = asyncHandler(async (req, res, next) => {
           }),
           ...(ourProduct !== undefined && {
             ourProduct: ourProduct === "true" || ourProduct === true,
+          }),
+          ...(readyToShip !== undefined && {
+            readyToShip: readyToShip === "true" || readyToShip === true,
+          }),
+          ...(acceptOrders !== undefined && {
+            acceptOrders: acceptOrders === "true" || acceptOrders === true,
+          }),
+          ...(isCustomizable !== undefined && {
+            isCustomizable: isCustomizable === "true" || isCustomizable === true,
           }),
           ...(req.body.brandId !== undefined && {
             brandId:

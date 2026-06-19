@@ -195,6 +195,9 @@ export function ProductForm({
     quantity: 0,
     featured: false,
     ourProduct: false,
+    readyToShip: false,
+    acceptOrders: false,
+    isCustomizable: false,
     productType: [] as string[],
     isActive: true,
     // SEO fields
@@ -220,6 +223,7 @@ export function ProductForm({
   });
 
   const [imagePreviews, setImagePreviews] = useState<ImagePreview[]>([]);
+  const [tagInput, setTagInput] = useState("");
 
   // Video state (optional)
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -1005,6 +1009,9 @@ export function ProductForm({
                   : 0,
               featured: productData.featured || false,
               ourProduct: productData.ourProduct || false,
+              readyToShip: productData.readyToShip || false,
+              acceptOrders: productData.acceptOrders || false,
+              isCustomizable: productData.isCustomizable || false,
               productType: Array.isArray(productData.productType)
                 ? productData.productType
                 : typeof productData.productType === "string"
@@ -1393,6 +1400,9 @@ export function ProductForm({
       formData.append("description", finalDescription);
       formData.append("featured", String(product.featured));
       formData.append("ourProduct", String(product.ourProduct));
+      formData.append("readyToShip", String(product.readyToShip));
+      formData.append("acceptOrders", String(product.acceptOrders));
+      formData.append("isCustomizable", String(product.isCustomizable));
       formData.append("productType", JSON.stringify(product.productType));
       formData.append("isActive", String(product.isActive));
       formData.append("hasVariants", String(hasVariants));
@@ -2323,6 +2333,33 @@ export function ProductForm({
                       {t("products.form.labels.our_product")}
                     </Label>
                   </div>
+
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="readyToShip"
+                      checked={product.readyToShip}
+                      onCheckedChange={(checked) => setProduct((prev) => ({ ...prev, readyToShip: !!checked }))}
+                    />
+                    <Label htmlFor="readyToShip" className="text-[var(--text-primary)]">Ready to Ship</Label>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="acceptOrders"
+                      checked={product.acceptOrders}
+                      onCheckedChange={(checked) => setProduct((prev) => ({ ...prev, acceptOrders: !!checked }))}
+                    />
+                    <Label htmlFor="acceptOrders" className="text-[var(--text-primary)]">Accept / Possible Orders</Label>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="isCustomizable"
+                      checked={product.isCustomizable}
+                      onCheckedChange={(checked) => setProduct((prev) => ({ ...prev, isCustomizable: !!checked }))}
+                    />
+                    <Label htmlFor="isCustomizable" className="text-[var(--text-primary)]">Customizable</Label>
+                  </div>
                 </div>
 
                 {/* Product Type Selection */}
@@ -2727,6 +2764,51 @@ export function ProductForm({
                 <p className="text-xs text-[var(--text-secondary)]">
                   {t("products.form.seo.keywords_hint")}
                 </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Tags</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if ((e.key === "Enter" || e.key === ",") && tagInput.trim()) {
+                        e.preventDefault();
+                        const tag = tagInput.trim().replace(/,$/, "");
+                        if (tag && !product.tags.includes(tag)) {
+                          setProduct((prev) => ({ ...prev, tags: [...prev.tags, tag] }));
+                        }
+                        setTagInput("");
+                      }
+                    }}
+                    placeholder="Type tag and press Enter"
+                  />
+                  <Button type="button" variant="outline" size="sm"
+                    onClick={() => {
+                      const tag = tagInput.trim().replace(/,$/, "");
+                      if (tag && !product.tags.includes(tag)) {
+                        setProduct((prev) => ({ ...prev, tags: [...prev.tags, tag] }));
+                      }
+                      setTagInput("");
+                    }}>
+                    Add
+                  </Button>
+                </div>
+                {product.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {product.tags.map((tag) => (
+                      <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--accent)]/10 text-[var(--accent)] text-xs font-medium border border-[var(--accent)]/20">
+                        #{tag}
+                        <button type="button" onClick={() => setProduct((prev) => ({ ...prev, tags: prev.tags.filter((t) => t !== tag) }))}
+                          className="ml-0.5 hover:text-red-500 transition-colors">
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-[var(--text-secondary)]">Press Enter or comma to add. Tags show on product page.</p>
               </div>
             </div>
           </div>
