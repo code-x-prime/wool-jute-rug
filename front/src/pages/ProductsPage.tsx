@@ -140,11 +140,13 @@ export function ProductForm({
 
   const [showQuickCategory, setShowQuickCategory] = useState(false);
   const [quickCatName, setQuickCatName] = useState("");
+  const [quickCatFile, setQuickCatFile] = useState<File | null>(null);
   const [quickCatLoading, setQuickCatLoading] = useState(false);
 
   const [showQuickSubCat, setShowQuickSubCat] = useState(false);
   const [quickSubCatParentId, setQuickSubCatParentId] = useState<string>("");
   const [quickSubCatName, setQuickSubCatName] = useState("");
+  const [quickSubCatFile, setQuickSubCatFile] = useState<File | null>(null);
   const [quickSubCatLoading, setQuickSubCatLoading] = useState(false);
 
   const [showQuickAttr, setShowQuickAttr] = useState(false);
@@ -696,6 +698,7 @@ export function ProductForm({
     try {
       const fd = new FormData();
       fd.append("name", quickCatName.trim());
+      if (quickCatFile) fd.append("image", quickCatFile);
       const res = await categoriesApi.createCategory(fd);
       const newCat = res.data.data?.category || res.data.data;
       // Re-fetch categories list to update CategorySelector
@@ -704,6 +707,7 @@ export function ProductForm({
       } catch {}
       setShowQuickCategory(false);
       setQuickCatName("");
+      setQuickCatFile(null);
       toast.success(`Category "${newCat.name}" created — select it below`);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Failed to create category");
@@ -747,10 +751,8 @@ export function ProductForm({
     if (!quickSubCatParentId) { toast.error("Select a parent category first"); return; }
     setQuickSubCatLoading(true);
     try {
-      const fd = new FormData();
-      fd.append("name", quickSubCatName.trim());
       const res = await import("@/api/adminService").then((m) =>
-        m.subCategories.createSubCategory(quickSubCatParentId, { name: quickSubCatName.trim() })
+        m.subCategories.createSubCategory(quickSubCatParentId, { name: quickSubCatName.trim(), image: quickSubCatFile || undefined })
       );
       const newSC = res.data.data?.subCategory || res.data.data;
       setSubCategoriesMap((prev) => ({
@@ -760,6 +762,7 @@ export function ProductForm({
       setSelectedSubCategories((prev) => [...prev, newSC.id]);
       setShowQuickSubCat(false);
       setQuickSubCatName("");
+      setQuickSubCatFile(null);
       toast.success(`Sub-category "${newSC.name}" created and selected`);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Failed to create sub-category");
@@ -3156,7 +3159,7 @@ export function ProductForm({
         </Dialog>
 
         {/* ── Quick Create: Sub-Category ─────────────────────────────────────── */}
-        <Dialog open={showQuickSubCat} onOpenChange={setShowQuickSubCat}>
+        <Dialog open={showQuickSubCat} onOpenChange={(o) => { setShowQuickSubCat(o); if (!o) { setQuickSubCatName(""); setQuickSubCatFile(null); } }}>
           <DialogContent className="sm:max-w-sm">
             <DialogHeader>
               <DialogTitle>Create New Sub-category</DialogTitle>
@@ -3181,9 +3184,28 @@ export function ProductForm({
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleQuickCreateSubCat(); } }}
                 />
               </div>
+              <div className="space-y-1">
+                <Label>Image (optional)</Label>
+                <div className="flex items-center gap-3">
+                  {quickSubCatFile && (
+                    <img src={URL.createObjectURL(quickSubCatFile)} alt="preview" className="h-12 w-12 rounded object-cover border flex-shrink-0" />
+                  )}
+                  <label className="flex items-center gap-2 cursor-pointer border border-dashed border-[var(--border-color)] rounded-md px-3 py-2 text-sm text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors flex-1">
+                    <ImageIcon className="h-4 w-4 flex-shrink-0" />
+                    {quickSubCatFile ? quickSubCatFile.name : "Upload image"}
+                    <input type="file" accept="image/*" className="hidden"
+                      onChange={(e) => setQuickSubCatFile(e.target.files?.[0] || null)} />
+                  </label>
+                  {quickSubCatFile && (
+                    <button type="button" onClick={() => setQuickSubCatFile(null)} className="text-red-500 hover:text-red-700">
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowQuickSubCat(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => { setShowQuickSubCat(false); setQuickSubCatName(""); setQuickSubCatFile(null); }}>Cancel</Button>
               <Button onClick={handleQuickCreateSubCat} disabled={quickSubCatLoading}>
                 {quickSubCatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Sub-category"}
               </Button>
@@ -3192,7 +3214,7 @@ export function ProductForm({
         </Dialog>
 
         {/* ── Quick Create: Category ──────────────────────────────────────────── */}
-        <Dialog open={showQuickCategory} onOpenChange={setShowQuickCategory}>
+        <Dialog open={showQuickCategory} onOpenChange={(o) => { setShowQuickCategory(o); if (!o) { setQuickCatName(""); setQuickCatFile(null); } }}>
           <DialogContent className="sm:max-w-sm">
             <DialogHeader>
               <DialogTitle>Create New Category</DialogTitle>
@@ -3205,10 +3227,28 @@ export function ProductForm({
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleQuickCreateCategory(); } }}
                 />
               </div>
-              <p className="text-xs text-[var(--text-secondary)]">Category will be created and appear in the selector below. Select it after creation.</p>
+              <div className="space-y-1">
+                <Label>Image (optional)</Label>
+                <div className="flex items-center gap-3">
+                  {quickCatFile && (
+                    <img src={URL.createObjectURL(quickCatFile)} alt="preview" className="h-12 w-12 rounded object-cover border flex-shrink-0" />
+                  )}
+                  <label className="flex items-center gap-2 cursor-pointer border border-dashed border-[var(--border-color)] rounded-md px-3 py-2 text-sm text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors flex-1">
+                    <ImageIcon className="h-4 w-4 flex-shrink-0" />
+                    {quickCatFile ? quickCatFile.name : "Upload category image"}
+                    <input type="file" accept="image/*" className="hidden"
+                      onChange={(e) => setQuickCatFile(e.target.files?.[0] || null)} />
+                  </label>
+                  {quickCatFile && (
+                    <button type="button" onClick={() => setQuickCatFile(null)} className="text-red-500 hover:text-red-700">
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowQuickCategory(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => { setShowQuickCategory(false); setQuickCatName(""); setQuickCatFile(null); }}>Cancel</Button>
               <Button onClick={handleQuickCreateCategory} disabled={quickCatLoading}>
                 {quickCatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Category"}
               </Button>
@@ -3368,6 +3408,7 @@ const CategorySelector = ({
   isLoading: boolean;
 }) => {
   const { t } = useLanguage();
+  const [catSearch, setCatSearch] = useState("");
   if (isLoading) {
     return <div className="text-sm text-gray-500">{t("products.form.categories.loading")}</div>;
   }
@@ -3456,8 +3497,14 @@ const CategorySelector = ({
     onSelectCategory(categoryId);
   };
 
+  // Filter categories by search
+  const searchLower = catSearch.toLowerCase();
+  const filteredAll = catSearch
+    ? categories.filter((c) => c.name?.toLowerCase().includes(searchLower))
+    : categories;
+
   // Filter only parent categories (those without parentId)
-  const parentCategories = categories.filter((category) => !category.parentId);
+  const parentCategories = filteredAll.filter((category) => !category.parentId);
 
   // Render a category and its children recursively
   const renderCategory = (category: any) => {
@@ -3559,12 +3606,34 @@ const CategorySelector = ({
   };
 
   return (
-    <div className="space-y-2 border rounded-md p-3 max-h-60 overflow-y-auto bg-[var(--bg-card)]">
-      <div className="font-medium text-sm mb-1 text-[var(--text-primary)]">
-        Select categories (multiple allowed):
+    <div className="border rounded-md bg-[var(--bg-card)]">
+      {/* Search bar */}
+      <div className="p-3 border-b border-[var(--border-color)] sticky top-0 bg-[var(--bg-card)] z-10">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-secondary)]" />
+          <input
+            type="text"
+            placeholder="Search categories..."
+            value={catSearch}
+            onChange={(e) => setCatSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2.5 text-sm rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-[var(--input-text)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
+          />
+          {catSearch && (
+            <button type="button" onClick={() => setCatSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
-      <div className="space-y-2">
-        {parentCategories.map((category) => renderCategory(category))}
+      <div className="p-3 max-h-52 overflow-y-auto space-y-1">
+        {parentCategories.length === 0 ? (
+          <p className="text-sm text-[var(--text-secondary)] py-2 text-center">
+            {catSearch ? `No categories matching "${catSearch}"` : "No categories yet"}
+          </p>
+        ) : (
+          parentCategories.map((category) => renderCategory(category))
+        )}
       </div>
     </div>
   );
