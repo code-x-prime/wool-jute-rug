@@ -523,7 +523,6 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
       if (priceInfo) {
         const baseSalePrice = parsePrice(selectedVariant.salePrice);
         const basePrice = parsePrice(selectedVariant.price);
-        const originalBasePrice = baseSalePrice > 0 && baseSalePrice < basePrice ? basePrice : baseSalePrice || basePrice;
 
         return {
           currentPrice: priceInfo.price,
@@ -614,7 +613,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
       return (
         <div className="flex flex-col gap-1">
           <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="text-2xl font-bold text-[#136C5B]">
+            <span className="text-2xl font-bold text-[#3D1C02]">
               {formatCurrency(priceData.currentPrice)}
             </span>
             <span className="text-lg text-gray-500 line-through">
@@ -632,7 +631,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
 
     return (
       <div className="flex flex-col gap-1">
-        <span className="text-2xl font-bold text-[#136C5B]">
+        <span className="text-2xl font-bold text-[#3D1C02]">
           {formatCurrency(priceData.currentPrice || 0)}
         </span>
         {priceData.isSlabPrice && (
@@ -748,19 +747,18 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
   };
 
   const discountPercentage = getDiscountPercentage();
-  const priceData = getPriceData();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-6xl max-w-[95vw] max-h-[95vh] overflow-hidden p-0 gap-0">
         {loading && !productDetails ? (
           <div className="py-20 flex justify-center">
-            <div className="w-10 h-10 border-4 border-[#136C5B] border-t-transparent rounded-full animate-spin"></div>
+            <div className="w-10 h-10 border-4 border-[#C9A84C] border-t-transparent rounded-full animate-spin"></div>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 h-full max-h-[95vh]">
             {/* Left Side - Image Gallery */}
-            <div className="relative bg-gray-50 flex flex-row  h-[400px] lg:h-auto">
+            <div className="relative bg-gray-50 flex flex-row h-[300px] sm:h-[380px] lg:h-auto">
               {/* Thumbnail Gallery */}
               {allImages.length > 1 && (
                 <div className="hidden lg:flex flex-col gap-2 p-4 overflow-y-auto">
@@ -768,8 +766,8 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                     <button
                       key={idx}
                       onClick={() => setCurrentImageIndex(idx)}
-                      className={`relative w-16 h-16 rounded-md overflow-hidden border-2 transition-all ${currentImageIndex === idx
-                        ? "border-[#136C5B] shadow-md"
+                      className={`relative w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${currentImageIndex === idx
+                        ? "border-[#3D1C02] shadow-md"
                         : "border-gray-200 hover:border-gray-300"
                         }`}
                     >
@@ -852,7 +850,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
               )}
 
               {/* Product Name */}
-              <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4 uppercase tracking-tight">
+              <h2 className="text-xl md:text-2xl font-semibold text-[#3D1C02] mb-4 uppercase tracking-tight leading-snug">
                 {displayProduct.name}
               </h2>
 
@@ -926,7 +924,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                           >
                             <div
                               className={`w-12 h-12 rounded-full border-2 transition-all ${isSelected
-                                ? "border-[#136C5B] shadow-lg scale-110"
+                                ? "border-[#3D1C02] shadow-lg scale-110"
                                 : "border-gray-300 hover:border-gray-400"
                                 }`}
                               style={{
@@ -934,7 +932,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                               }}
                             />
                             <span
-                              className={`text-xs font-medium ${isSelected ? "text-[#136C5B]" : "text-gray-700"
+                              className={`text-xs font-medium ${isSelected ? "text-[#3D1C02]" : "text-gray-700"
                                 }`}
                             >
                               {color.name}
@@ -975,10 +973,10 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                             type="button"
                             onClick={() => handleSizeChange(size)}
                             disabled={!isAvailable}
-                            className={`w-12 h-12 rounded-full border-2 text-sm font-semibold transition-all ${isSelected
-                              ? "border-[#136C5B] bg-[#136C5B] text-white shadow-md"
+                            className={`px-3 py-2 min-w-[3rem] rounded-lg border-2 text-sm font-semibold transition-all ${isSelected
+                              ? "border-[#3D1C02] bg-[#3D1C02] text-white shadow-md"
                               : isAvailable
-                                ? "border-gray-300 text-gray-700 hover:border-gray-400 bg-white"
+                                ? "border-gray-300 text-gray-700 hover:border-[#3D1C02]/40 bg-white"
                                 : "border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed"
                               }`}
                           >
@@ -1030,7 +1028,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                       });
                     };
 
-                    const handleAttributeChange = (attrValueId, value) => {
+                    const handleAttributeChange = (attrValueId) => {
                       setSelectedAttributes((prev) => ({
                         ...prev,
                         [attribute.id]: attrValueId,
@@ -1087,16 +1085,13 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                                 key={attrValue.id}
                                 type="button"
                                 onClick={() =>
-                                  handleAttributeChange(
-                                    attrValue.id,
-                                    attrValue.value
-                                  )
+                                  handleAttributeChange(attrValue.id)
                                 }
                                 disabled={!isAvailable}
-                                className={`px-4 py-2 rounded-md border-2 text-sm font-semibold transition-all ${isSelected
-                                  ? "border-[#136C5B] bg-[#136C5B] text-white shadow-md"
+                                className={`px-4 py-2 rounded-lg border-2 text-sm font-semibold transition-all ${isSelected
+                                  ? "border-[#3D1C02] bg-[#3D1C02] text-white shadow-md"
                                   : isAvailable
-                                    ? "border-gray-300 text-gray-700 hover:border-gray-400 bg-white"
+                                    ? "border-gray-300 text-gray-700 hover:border-[#3D1C02]/40 bg-white"
                                     : "border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed"
                                   }`}
                               >
@@ -1144,7 +1139,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                             <td className="py-2 px-3 text-gray-700">
                               {slab.minQty} {slab.maxQty ? `- ${slab.maxQty}` : "+"} units
                             </td>
-                            <td className="py-2 px-3 text-right font-medium text-[#136C5B]">
+                            <td className="py-2 px-3 text-right font-medium text-[#3D1C02]">
                               {formatCurrency(slab.price)}
                             </td>
                           </tr>
@@ -1179,7 +1174,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                 <div className="flex items-center">
                   <button
                     type="button"
-                    className="p-2 border rounded-l-sm hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="p-2 border border-gray-200 rounded-l-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     onClick={() => {
                       const effectiveMOQ = selectedVariant?.moq || 1;
                       if (quantity > effectiveMOQ) {
@@ -1197,12 +1192,12 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                   >
                     <Minus className="h-4 w-4" />
                   </button>
-                  <span className="px-4 py-2 border-t border-b min-w-[3rem] text-center font-medium">
+                  <span className="px-4 py-2 border-t border-b border-gray-200 min-w-[3rem] text-center font-medium text-[#3D1C02]">
                     {quantity}
                   </span>
                   <button
                     type="button"
-                    className="p-2 border rounded-r-sm hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="p-2 border border-gray-200 rounded-r-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     onClick={() => {
                       const availableStock = selectedVariant?.stock || selectedVariant?.quantity || 0;
                       if (availableStock > 0 && quantity < availableStock) {
@@ -1230,7 +1225,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
               <div className="grid md:grid-cols-2 gap-3 mt-auto pt-2">
                 <Button
                   onClick={handleAddToCart}
-                  className="w-full py-4 bg-gray-100 hover:bg-gray-200 text-gray-900 font-semibold text-sm uppercase tracking-wide rounded-none"
+                  className="w-full py-4 bg-white border-2 border-[#3D1C02] hover:bg-[#3D1C02] hover:text-white text-[#3D1C02] font-semibold text-sm uppercase tracking-wide rounded-none transition-colors"
                   disabled={
                     loading ||
                     addingToCart ||
@@ -1254,16 +1249,16 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                 </Button>
 
                 <Link href={`/products/${displayProduct.slug}`}>
-                  <Button className="w-full py-4 bg-[#136C5B] hover:bg-[#0f5a4a] text-white font-semibold text-sm uppercase tracking-wide rounded-none">
+                  <Button className="w-full py-4 bg-[#3D1C02] hover:bg-[#3D1C02]/90 text-white font-semibold text-sm uppercase tracking-wide rounded-none">
                     BUY NOW
                   </Button>
                 </Link>
               </div>
               <Link
                 href={`/products/${displayProduct.slug}`}
-                className="text-center text-sm text-[#136C5B] hover:underline font-medium mt-4"
+                className="text-center text-xs text-[#C9A84C] hover:text-[#3D1C02] hover:underline font-medium mt-3 uppercase tracking-widest transition-colors"
               >
-                PRODUCT DETAILS
+                Product Details
               </Link>
             </div>
           </div>

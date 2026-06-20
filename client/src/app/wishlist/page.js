@@ -94,7 +94,7 @@ export default function WishlistPage() {
 
   return (
     <ClientOnly>
-      <div className="container mx-auto py-10 px-4">
+      <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6">
         <div className="mb-8">
           <h1 className="text-2xl font-light tracking-wide text-[#3D1C02]">My Wishlist</h1>
           <div className="h-0.5 w-12 bg-[#C9A84C] mt-2" />
