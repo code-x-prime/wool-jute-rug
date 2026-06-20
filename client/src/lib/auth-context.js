@@ -52,70 +52,24 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // First try to read from cookies to avoid unnecessary API calls
-        const userSessionCookie = document.cookie
-          .split("; ")
-          .find((row) => row.startsWith("user_session="));
-
-        if (userSessionCookie) {
+        // Always call /users/me — httpOnly accessToken cookie goes automatically
+        const res = await fetchApi("/users/me", { credentials: "include" });
+        setUser(res.data.user);
+      } catch (err) {
+        if (err.statusCode === 401) {
+          // accessToken expired — try refresh
           try {
-            const sessionData = JSON.parse(
-              decodeURIComponent(userSessionCookie.split("=")[1])
-            );
-            if (sessionData.isAuthenticated) {
-              try {
-                const res = await fetchApi("/users/me", { credentials: "include" });
-                setUser(res.data.user);
-                setLoading(false);
-                return;
-              } catch (err) {
-                // accessToken expired — try refresh
-                if (err.statusCode === 401) {
-                  try {
-                    const userData = await refreshAndFetchUser();
-                    setUser(userData);
-                    // Update user_session cookie
-                    document.cookie = `user_session=${encodeURIComponent(
-                      JSON.stringify({ isAuthenticated: true, userId: userData.id, timestamp: new Date().getTime() })
-                    )}; path=/; max-age=86400`;
-                    setLoading(false);
-                    return;
-                  } catch {
-                    // refreshToken also expired — clear session
-                    document.cookie = "user_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-                    document.cookie = "accessToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-                    document.cookie = "refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-                    setUser(null);
-                    setLoading(false);
-                    return;
-                  }
-                }
-                throw err;
-              }
-            }
-          } catch (e) {
-            console.error("Failed to parse user session cookie", e);
-          }
-        }
-
-        // No valid cookie — attempt API call anyway (server may have httpOnly cookies)
-        try {
-          const res = await fetchApi("/users/me", { credentials: "include" });
-          setUser(res.data.user);
-        } catch (err) {
-          if (err.statusCode === 401) {
-            try {
-              const userData = await refreshAndFetchUser();
-              setUser(userData);
-              document.cookie = `user_session=${encodeURIComponent(
-                JSON.stringify({ isAuthenticated: true, userId: userData.id, timestamp: new Date().getTime() })
-              )}; path=/; max-age=86400`;
-            } catch {
-              setUser(null);
-            }
-          } else {
+            const userData = await refreshAndFetchUser();
+            setUser(userData);
+          } catch {
+            // refreshToken also expired — clear everything
+            document.cookie = "user_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+            document.cookie = "accessToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+            document.cookie = "refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
             setUser(null);
           }
+        } else {
+          setUser(null);
         }
       } finally {
         setLoading(false);
