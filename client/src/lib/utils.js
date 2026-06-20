@@ -104,6 +104,27 @@ async function performFetch(url, options) {
             ...config,
             credentials: "include",
           });
+          // Refresh user_session cookie timestamp so client-side check stays valid
+          if (response.ok && typeof window !== "undefined") {
+            const existingSession = document.cookie
+              .split("; ")
+              .find((row) => row.startsWith("user_session="));
+            if (existingSession) {
+              try {
+                const sessionData = JSON.parse(
+                  decodeURIComponent(existingSession.split("=")[1])
+                );
+                document.cookie = `user_session=${encodeURIComponent(
+                  JSON.stringify({ ...sessionData, timestamp: new Date().getTime() })
+                )}; path=/; max-age=86400`;
+              } catch {}
+            }
+          }
+        } else if (typeof window !== "undefined") {
+          // Refresh token also expired — clear all session cookies
+          document.cookie = "user_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+          document.cookie = "accessToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+          document.cookie = "refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
         }
       } catch (refreshError) {
         console.error("Failed to refresh token:", refreshError);

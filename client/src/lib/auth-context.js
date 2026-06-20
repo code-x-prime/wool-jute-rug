@@ -36,6 +36,18 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Helper: refresh accessToken then retry /users/me
+  const refreshAndFetchUser = async () => {
+    const refreshResponse = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4001/api"}/users/refresh-token`,
+      { method: "POST", credentials: "include" }
+    );
+    if (!refreshResponse.ok) throw new Error("Refresh failed");
+    // Retry /users/me with fresh accessToken cookie
+    const res = await fetchApi("/users/me", { credentials: "include" });
+    return res.data.user;
+  };
+
   // Check if user is logged in on first load
   useEffect(() => {
     const checkAuth = async () => {
@@ -47,34 +59,64 @@ export function AuthProvider({ children }) {
 
         if (userSessionCookie) {
           try {
-            // If we have a cookie, we're at least temporarily authenticated
-            // and can avoid a loading flash
             const sessionData = JSON.parse(
               decodeURIComponent(userSessionCookie.split("=")[1])
             );
             if (sessionData.isAuthenticated) {
-              // Make the API call to get full user data
-              const res = await fetchApi("/users/me", {
-                credentials: "include",
-              });
-              setUser(res.data.user);
-              setLoading(false);
-              return;
+              try {
+                const res = await fetchApi("/users/me", { credentials: "include" });
+                setUser(res.data.user);
+                setLoading(false);
+                return;
+              } catch (err) {
+                // accessToken expired — try refresh
+                if (err.statusCode === 401) {
+                  try {
+                    const userData = await refreshAndFetchUser();
+                    setUser(userData);
+                    // Update user_session cookie
+                    document.cookie = `user_session=${encodeURIComponent(
+                      JSON.stringify({ isAuthenticated: true, userId: userData.id, timestamp: new Date().getTime() })
+                    )}; path=/; max-age=86400`;
+                    setLoading(false);
+                    return;
+                  } catch {
+                    // refreshToken also expired — clear session
+                    document.cookie = "user_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+                    document.cookie = "accessToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+                    document.cookie = "refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+                    setUser(null);
+                    setLoading(false);
+                    return;
+                  }
+                }
+                throw err;
+              }
             }
           } catch (e) {
-            // If cookie parsing failed, continue to API call
             console.error("Failed to parse user session cookie", e);
           }
         }
 
-        // No valid cookie found, attempt API call with credentials
-        const res = await fetchApi("/users/me", {
-          credentials: "include",
-        });
-        setUser(res.data.user);
-      } catch (err) {
-        // API call failed, user is not authenticated
-        setUser(null);
+        // No valid cookie — attempt API call anyway (server may have httpOnly cookies)
+        try {
+          const res = await fetchApi("/users/me", { credentials: "include" });
+          setUser(res.data.user);
+        } catch (err) {
+          if (err.statusCode === 401) {
+            try {
+              const userData = await refreshAndFetchUser();
+              setUser(userData);
+              document.cookie = `user_session=${encodeURIComponent(
+                JSON.stringify({ isAuthenticated: true, userId: userData.id, timestamp: new Date().getTime() })
+              )}; path=/; max-age=86400`;
+            } catch {
+              setUser(null);
+            }
+          } else {
+            setUser(null);
+          }
+        }
       } finally {
         setLoading(false);
       }
