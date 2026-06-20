@@ -77,6 +77,7 @@ interface VariantCardProps {
   onImagesChange: (index: number, images: ImageData[]) => void;
   isEditMode?: boolean;
   shiprocketEnabled?: boolean;
+  attributeValuesMap?: Record<string, any[]>;
 }
 
 export default function VariantCard({
@@ -87,6 +88,7 @@ export default function VariantCard({
   onImagesChange,
   isEditMode = false,
   shiprocketEnabled = false,
+  attributeValuesMap = {},
 }: VariantCardProps) {
   const { t } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(true); // Default expanded so user can see images
@@ -293,6 +295,31 @@ export default function VariantCard({
   const hasImages = currentImages.length > 0;
   const maxImages = 5;
   const remainingSlots = maxImages - currentImages.length;
+
+  // Collect attribute value images as suggestions (when variant has no images yet)
+  const suggestedAttrImages: { url: string; label: string }[] = [];
+  if (!hasImages && variant.attributes && variant.attributes.length > 0) {
+    for (const attr of variant.attributes) {
+      const allValues: any[] = attributeValuesMap[attr.attributeId] || [];
+      const matchedValue = allValues.find((v: any) => v.id === attr.attributeValueId);
+      if (matchedValue?.image) {
+        suggestedAttrImages.push({ url: matchedValue.image, label: `${attr.attribute}: ${attr.value}` });
+      }
+    }
+  }
+
+  const handleUseSuggestedImage = (imgUrl: string) => {
+    const tempId = `temp-suggested-${Date.now()}-${index}`;
+    const newImage: ImageData = {
+      url: imgUrl,
+      tempId,
+      isPrimary: currentImages.length === 0,
+      order: currentImages.length,
+      isNew: true,
+    };
+    onImagesChange(index, [...currentImages, newImage]);
+    toast.success("Image added from attribute value. Upload your own to replace.");
+  };
 
   // Handle image upload via dropzone
   const onDrop = useCallback(
@@ -1243,6 +1270,32 @@ export default function VariantCard({
                 {currentImages.length}/{maxImages}
               </Badge>
             </div>
+
+            {/* Suggested images from attribute values */}
+            {suggestedAttrImages.length > 0 && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-medium text-amber-700 mb-2">Suggested from attribute values — click to use:</p>
+                <div className="flex flex-wrap gap-2">
+                  {suggestedAttrImages.map((s, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => handleUseSuggestedImage(s.url)}
+                      className="flex flex-col items-center gap-1 group"
+                      title={`Use image from "${s.label}"`}
+                    >
+                      <div className="relative w-14 h-14 rounded-md overflow-hidden border-2 border-amber-300 group-hover:border-amber-500 transition-colors">
+                        <img src={s.url} alt={s.label} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                          <Plus className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 drop-shadow transition-opacity" />
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-amber-600 max-w-[56px] truncate">{s.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Upload Area */}
             {remainingSlots > 0 && (

@@ -3036,6 +3036,7 @@ export function ProductForm({
                           onImagesChange={handleVariantImagesChange}
                           isEditMode={mode === "edit"}
                           shiprocketEnabled={shiprocketEnabled}
+                          attributeValuesMap={attributeValuesMap}
                         />
                       ))}
                     </div>
