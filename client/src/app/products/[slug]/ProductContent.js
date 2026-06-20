@@ -632,12 +632,14 @@ export default function ProductContent({ slug }) {
     const basePrice = variant.price
       ? (typeof variant.price === 'string' ? parseFloat(variant.price) : variant.price)
       : 0;
+    // originalPrice = the "was" price shown with strikethrough
+    // displayBasePrice = the actual price customer pays
     const originalPrice = hasFlashSale
       ? (typeof variant.flashSaleOriginalPrice === 'string' ? parseFloat(variant.flashSaleOriginalPrice) : variant.flashSaleOriginalPrice)
-      : baseSalePrice || basePrice;
+      : basePrice; // always the regular price (MRP)
     const displayBasePrice = hasFlashSale
       ? (typeof variant.flashSalePrice === 'string' ? parseFloat(variant.flashSalePrice) : variant.flashSalePrice)
-      : baseSalePrice || basePrice;
+      : baseSalePrice || basePrice; // sale price if set, else regular price
 
     // Check pricing slabs
     if (variant.pricingSlabs && variant.pricingSlabs.length > 0) {
