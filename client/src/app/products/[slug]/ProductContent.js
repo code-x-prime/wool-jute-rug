@@ -11,7 +11,6 @@ import {
   Minus,
   Plus,
   AlertCircle,
-  ShoppingCart,
   Heart,
   ChevronRight,
   ChevronLeft,
@@ -70,7 +69,6 @@ export default function ProductContent({ slug }) {
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [effectivePriceInfo, setEffectivePriceInfo] = useState(null);
-  const [activeTab, setActiveTab] = useState("description");
   const { isAuthenticated } = useAuth();
   const router = useRouter();
   const [isAddingToWishlist, setIsAddingToWishlist] = useState(false);
