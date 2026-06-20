@@ -1222,7 +1222,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
               </div>
 
               {/* Action Buttons */}
-              <div className="grid md:grid-cols-2 gap-3 mt-auto pt-2">
+              <div className="grid grid-cols-2 gap-3 mt-auto pt-2">
                 <Button
                   onClick={handleAddToCart}
                   className="w-full py-4 bg-white border-2 border-[#3D1C02] hover:bg-[#3D1C02] hover:text-white text-[#3D1C02] font-semibold text-sm uppercase tracking-wide rounded-none transition-colors"
@@ -1237,29 +1237,23 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                 >
                   {addingToCart ? (
                     <>
-                      <div className="w-4 h-4 border-2 border-gray-900 border-t-transparent rounded-full animate-spin mr-2"></div>
+                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"></div>
                       Adding...
                     </>
                   ) : (
                     <>
                       <ShoppingCart className="h-4 w-4 mr-2" />
-                      ADD TO BAG
+                      ADD TO CART
                     </>
                   )}
                 </Button>
 
-                <Link href={`/products/${displayProduct.slug}`}>
+                <Link href={`/products/${displayProduct.slug}`} className="w-full">
                   <Button className="w-full py-4 bg-[#3D1C02] hover:bg-[#3D1C02]/90 text-white font-semibold text-sm uppercase tracking-wide rounded-none">
-                    BUY NOW
+                    VIEW PRODUCT
                   </Button>
                 </Link>
               </div>
-              <Link
-                href={`/products/${displayProduct.slug}`}
-                className="text-center text-xs text-[#C9A84C] hover:text-[#3D1C02] hover:underline font-medium mt-3 uppercase tracking-widest transition-colors"
-              >
-                Product Details
-              </Link>
             </div>
           </div>
         )}
