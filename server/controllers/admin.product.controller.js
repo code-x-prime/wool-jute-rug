@@ -496,6 +496,21 @@ export const createProduct = asyncHandler(async (req, res, next) => {
     throw new ApiError(409, "Product with similar name already exists");
   }
 
+  // Validate images are provided
+  const isVariantProduct = hasVariants === "true" || hasVariants === true;
+  const uploadedImageFiles = req.files?.images || (Array.isArray(req.files) ? req.files : []);
+  const uploadedVariantFiles = Array.isArray(req.files)
+    ? req.files
+    : req.files
+    ? Object.values(req.files).flat()
+    : [];
+  if (!isVariantProduct && uploadedImageFiles.length === 0) {
+    throw new ApiError(400, "At least one product image is required");
+  }
+  if (isVariantProduct && uploadedVariantFiles.length === 0) {
+    throw new ApiError(400, "At least one image is required for product variants");
+  }
+
   // Create the product with transaction to ensure variants are created as well
   try {
     const result = await prisma.$transaction(async (prisma) => {

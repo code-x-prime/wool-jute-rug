@@ -217,6 +217,17 @@ export const getProductsByCategory = asyncHandler(async (req, res) => {
               ...product.variants.map((v) => parseFloat(v.salePrice || v.price))
             )
           : null,
+      regularPrice:
+        product.variants.length > 0
+          ? Math.min(
+              ...product.variants.map((v) => parseFloat(v.price))
+            )
+          : null,
+      hasSale:
+        product.variants.length > 0 &&
+        product.variants.some(
+          (v) => v.salePrice && parseFloat(v.salePrice) < parseFloat(v.price)
+        ),
     };
   });
 

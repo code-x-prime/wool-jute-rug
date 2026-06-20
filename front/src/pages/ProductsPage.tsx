@@ -1368,6 +1368,13 @@ export function ProductForm({
       return;
     }
 
+    // Validate images
+    if (!hasVariants && imagePreviews.length === 0) {
+      toast.error("At least one product image is required");
+      setIsLoading(false);
+      return;
+    }
+
     try {
       // Create FormData object for API submission
       const formData = new FormData();
