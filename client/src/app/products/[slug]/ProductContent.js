@@ -1326,7 +1326,10 @@ export default function ProductContent({ slug }) {
           {product.tags && product.tags.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 mt-3">
               <IconTag size={14} className="text-gray-400 flex-shrink-0" />
-              {product.tags.map((tag) => (
+              {(product.tags.length === 1 && typeof product.tags[0] === "string" && product.tags[0].startsWith("[")
+                ? (() => { try { return JSON.parse(product.tags[0]); } catch { return product.tags; } })()
+                : product.tags
+              ).map((tag) => (
                 <span key={tag} className="inline-block px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs">
                   #{tag}
                 </span>

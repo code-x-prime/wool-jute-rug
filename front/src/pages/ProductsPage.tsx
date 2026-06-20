@@ -1032,7 +1032,15 @@ export function ProductForm({
               metaTitle: productData.metaTitle || "",
               metaDescription: productData.metaDescription || "",
               keywords: productData.keywords || "",
-              tags: productData.tags || [],
+              tags: (() => {
+                const raw = productData.tags;
+                if (!raw || raw.length === 0) return [];
+                // Fix: if stored as single-element array containing JSON string e.g. ['["a","b"]']
+                if (raw.length === 1 && typeof raw[0] === "string" && raw[0].startsWith("[")) {
+                  try { return JSON.parse(raw[0]); } catch { return raw; }
+                }
+                return raw;
+              })(),
               topBrandIds: productData.topBrandIds || [],
               newBrandIds: productData.newBrandIds || [],
               hotBrandIds: productData.hotBrandIds || [],
