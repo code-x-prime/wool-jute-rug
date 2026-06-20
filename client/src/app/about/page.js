@@ -23,11 +23,11 @@ export default function AboutPage() {
 
         <div className="relative z-10 text-center px-6 max-w-4xl mx-auto">
           <p className="text-white/90 text-sm md:text-base font-jost tracking-[0.2em] uppercase mb-4">
-            Our Heritage
+            Who We Are
           </p>
           <h1 className="text-4xl md:text-6xl lg:text-7xl font-jost text-white leading-tight mb-6">
-            Weaving Stories, <br className="hidden md:block" />
-            <span className="italic font-light">One Knot at a Time</span>
+            Rooted in Craft, <br className="hidden md:block" />
+            <span className="italic font-light">Woven with Purpose</span>
           </h1>
         </div>
       </section>
@@ -39,11 +39,11 @@ export default function AboutPage() {
             className="text-2xl md:text-4xl font-jost leading-relaxed"
             style={{ color: BRAND_BROWN }}
           >
-            &quot;A rug is more than a piece of decor. It is a canvas of tradition, a testament to time, and a foundation for the memories you build upon it.&quot;
+            &quot;Every thread carries the patience of the weaver, the warmth of natural fibre, and the intention of a craft passed down across generations.&quot;
           </h2>
           <div className="mt-8 w-16 h-px mx-auto" style={{ backgroundColor: BRAND_GOLD }} />
           <p className="mt-8 text-sm md:text-base font-jost tracking-widest uppercase" style={{ color: "#8a7a6a" }}>
-            The Wool Jute Rug Co Philosophy
+            The Wool Jute Rug Co. Belief
           </p>
         </div>
       </section>
@@ -68,25 +68,25 @@ export default function AboutPage() {
                 className="text-xs font-jost tracking-[0.2em] uppercase mb-6 block"
                 style={{ color: BRAND_GOLD }}
               >
-                Our Journey
+                How We Started
               </span>
               <h2
                 className="text-3xl md:text-5xl font-jost mb-8 leading-tight"
                 style={{ color: BRAND_BROWN }}
               >
-                From Passion to <br />
-                <span className="italic font-light">Purpose</span>
+                Handmade in India, <br />
+                <span className="italic font-light">Loved Worldwide</span>
               </h2>
 
               <div className="space-y-6 font-roboto text-base leading-loose" style={{ color: "#5C4A3D" }}>
                 <p>
-                  Founded in 2009, Wool Jute Rug Co was born from a deep reverence for the ancient art of rug weaving. We started with a simple belief: that the warmth of a handcrafted rug brings a soul to any living space.
+                  Wool Jute Rug Co. was built on a straightforward idea — that a rug made slowly, by hand, from natural fibres, will always outlast and outfeel anything made by a machine. We work directly with skilled weavers across India&apos;s traditional rug-making regions.
                 </p>
                 <p>
-                  What began as a small collaborative effort with local artisans has gracefully evolved into a nationwide movement. Today, we stand proud as a bridge between the masterful hands of rural weavers and contemporary homes across the globe.
+                  Our collections are designed in-house and produced in small batches, ensuring that each piece receives the attention it deserves. From selecting the raw wool and jute to the final wash and finishing, every step is done with care.
                 </p>
                 <p>
-                  Every collection we curate is a dialogue between heritage and modernity. We preserve centuries-old techniques while embracing minimalist, elegant designs that resonate with the aesthetics of today.
+                  We are not a marketplace or a middleman. We own our production relationships, which means better quality control, fair wages for artisans, and rugs that arrive at your door exactly as intended.
                 </p>
               </div>
             </div>
@@ -105,10 +105,10 @@ export default function AboutPage() {
             Behind The Looms
           </span>
           <h2 className="text-3xl md:text-5xl font-jost text-white mb-8 leading-tight font-light">
-            Empowering the Hands <br />That Create Magic
+            Made by Hand. <br />Finished with Intention.
           </h2>
           <p className="text-white/80 font-roboto text-lg leading-relaxed max-w-2xl mx-auto">
-            Our rugs are not manufactured; they are born. Over 10,000 hours of meticulous knotting, washing, and finishing go into our premium collections. By partnering directly with artisans, we ensure fair wages, sustainable practices, and the preservation of a generational craft.
+            Each rug goes through a multi-stage process — hand-spinning, natural dyeing, loom weaving, washing in clean water, and sun drying — before it passes our quality inspection. We do not cut corners, and we do not outsource our standards.
           </p>
         </div>
       </section>
@@ -126,23 +126,23 @@ export default function AboutPage() {
           <div className="grid md:grid-cols-3 gap-12 md:gap-16">
             {/* Pillar 1 */}
             <div className="text-center">
-              <h3 className="text-xl font-jost mb-4" style={{ color: BRAND_BROWN }}>Raw & Natural</h3>
+              <h3 className="text-xl font-jost mb-4" style={{ color: BRAND_BROWN }}>Natural Fibres Only</h3>
               <p className="font-roboto leading-relaxed text-sm" style={{ color: "#5C4A3D" }}>
-                We source the finest, unadulterated wool and natural jute. Our commitment to organic, sustainable materials ensures that every rug is as kind to the earth as it is to your home.
+                We use wool, jute, and cotton sourced responsibly from trusted suppliers. No synthetic blends, no shortcuts — just materials that age gracefully and feel honest underfoot.
               </p>
             </div>
             {/* Pillar 2 */}
             <div className="text-center">
-              <h3 className="text-xl font-jost mb-4" style={{ color: BRAND_BROWN }}>Slow Living</h3>
+              <h3 className="text-xl font-jost mb-4" style={{ color: BRAND_BROWN }}>Artisan-First Approach</h3>
               <p className="font-roboto leading-relaxed text-sm" style={{ color: "#5C4A3D" }}>
-                In a world of mass production, we embrace the slow, deliberate pace of hand-knotting. True luxury cannot be rushed; it is cultivated over months of patient craftsmanship.
+                We work with weavers who have spent decades at the loom. Their skill is irreplaceable, and their livelihood matters to us. Fair pay and sustainable workloads are non-negotiable.
               </p>
             </div>
             {/* Pillar 3 */}
             <div className="text-center">
-              <h3 className="text-xl font-jost mb-4" style={{ color: BRAND_BROWN }}>Enduring Quality</h3>
+              <h3 className="text-xl font-jost mb-4" style={{ color: BRAND_BROWN }}>Built to Last</h3>
               <p className="font-roboto leading-relaxed text-sm" style={{ color: "#5C4A3D" }}>
-                A Wool Jute Co rug is designed to be an heirloom. With meticulous attention to detail and rigorous quality standards, we create pieces that withstand the test of time.
+                A rug from Wool Jute Rug Co. is not a seasonal purchase. Properly cared for, it will hold its colour, structure, and character for years — even decades.
               </p>
             </div>
           </div>
@@ -153,10 +153,10 @@ export default function AboutPage() {
       <section className="py-24 px-6 bg-white text-center">
         <div className="max-w-2xl mx-auto">
           <h2 className="text-3xl font-jost mb-6" style={{ color: BRAND_BROWN }}>
-            Bring Our Story Home
+            Find Your Rug
           </h2>
           <p className="font-roboto mb-10 text-base" style={{ color: "#5C4A3D" }}>
-            Explore our curated collections and find the perfect piece to anchor your space.
+            Browse our full range of handmade wool and jute rugs — from classic weaves to contemporary patterns. Free shipping on orders above a certain value.
           </p>
           <Link
             href="/products"

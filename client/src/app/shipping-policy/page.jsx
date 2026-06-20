@@ -16,7 +16,7 @@ export default function ShippingPolicy() {
       <Card className="border border-[#e5e0da] shadow-none bg-white rounded-none">
         <CardContent className="space-y-8 p-8 md:p-12 text-gray-800 leading-relaxed font-roboto">
           <p className="text-base font-jost tracking-wide text-gray-600">
-            Learn more about our shipping partners, processing timelines, and domestic/international delivery terms.
+            We take care to pack and ship every rug securely. Below is everything you need to know about how and when your order will reach you.
           </p>
 
           <hr className="border-[#e5e0da]" />
@@ -24,40 +24,60 @@ export default function ShippingPolicy() {
           {/* Section 1 */}
           <div className="space-y-3">
             <h2 className="font-jost text-sm font-bold uppercase tracking-widest text-[#3D1C02]">
-              Shipping &amp; Courier Channels
+              Order Processing Time
             </h2>
             <p className="text-sm text-gray-600">
-              For International buyers, orders are shipped and delivered through registered international courier companies and/or International speed post only. For domestic buyers, orders are shipped through registered domestic courier companies and/or speed post only.
+              All in-stock orders are processed and dispatched within <strong>2&ndash;5 business days</strong> of payment confirmation. Custom and made-to-order rugs have a separate production timeline which will be communicated at the time of order.
             </p>
           </div>
 
           {/* Section 2 */}
           <div className="space-y-3">
             <h2 className="font-jost text-sm font-bold uppercase tracking-widest text-[#3D1C02]">
-              Dispatch &amp; Delivery Timelines
+              Domestic Shipping (India)
             </h2>
             <p className="text-sm text-gray-600">
-              Orders are dispatched within 0-7 days or as per the delivery date agreed at the time of order confirmation. The delivery timeline is subject to Courier Company / post office norms.
+              We ship across India using trusted courier partners. Estimated delivery time is <strong>5&ndash;10 business days</strong> after dispatch, depending on your location. Remote areas may take slightly longer. You will receive a tracking number once your order is dispatched.
             </p>
           </div>
 
           {/* Section 3 */}
           <div className="space-y-3">
             <h2 className="font-jost text-sm font-bold uppercase tracking-widest text-[#3D1C02]">
-              Liability Disclaimer
+              International Shipping
             </h2>
             <p className="text-sm text-gray-600">
-              Wool Jute Rug Co. is not liable for any delay in delivery by the courier company / postal authorities and only guarantees to hand over the consignment to the courier company or postal authorities within 0-7 days from the date of the order and payment, or as per the delivery date agreed at the time of order confirmation.
+              We ship internationally via registered courier services. Delivery typically takes <strong>10&ndash;21 business days</strong> depending on the destination country and customs clearance. Import duties, taxes, and customs fees are the sole responsibility of the buyer and are not included in the order total.
             </p>
           </div>
 
           {/* Section 4 */}
           <div className="space-y-3">
             <h2 className="font-jost text-sm font-bold uppercase tracking-widest text-[#3D1C02]">
-              Delivery Address
+              Shipping Address
             </h2>
             <p className="text-sm text-gray-600">
-              All orders will be delivered to the shipping address provided by the buyer at the time of checkout. Confirmation of your shipment will be sent to the email ID provided during registration/checkout.
+              Orders are shipped to the address provided at checkout. Please double-check your address before completing your order. We are unable to redirect shipments once an order has been dispatched.
+            </p>
+          </div>
+
+          {/* Section 5 */}
+          <div className="space-y-3">
+            <h2 className="font-jost text-sm font-bold uppercase tracking-widest text-[#3D1C02]">
+              Delays &amp; Exceptions
+            </h2>
+            <p className="text-sm text-gray-600">
+              While we do our best to meet estimated delivery windows, delays caused by courier operations, weather conditions, public holidays, or customs clearance are outside our control. We will keep you informed if there is a significant delay on our end.
+            </p>
+          </div>
+
+          {/* Section 6 */}
+          <div className="space-y-3">
+            <h2 className="font-jost text-sm font-bold uppercase tracking-widest text-[#3D1C02]">
+              Damaged in Transit
+            </h2>
+            <p className="text-sm text-gray-600">
+              If your rug arrives damaged due to transit, please photograph the packaging and the product and contact us within <strong>48 hours of delivery</strong>. We will assess the case and arrange a replacement or resolution promptly.
             </p>
           </div>
 
@@ -66,16 +86,16 @@ export default function ShippingPolicy() {
           {/* Contact */}
           <div className="text-center pt-4">
             <p className="text-sm text-gray-500 font-jost tracking-wide uppercase">
-              Contact Us
+              Questions about your shipment?
             </p>
             <p className="text-base font-semibold text-[#3D1C02] font-jost mt-1">
               Wool Jute Rug Co.
             </p>
-            <a 
-              href="mailto:support@wooljuterugco.com" 
+            <a
+              href="mailto:connect.wooljuterugco@gmail.com"
               className="text-base font-semibold text-[#C9A84C] hover:text-[#3D1C02] transition-colors font-jost mt-1 inline-block"
             >
-              support@wooljuterugco.com
+              connect.wooljuterugco@gmail.com
             </a>
           </div>
         </CardContent>

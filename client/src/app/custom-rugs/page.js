@@ -78,14 +78,14 @@ export default function CustomRugsPage() {
 
         <div className="relative z-10 text-center px-6 max-w-4xl mx-auto mt-10">
           <p className="text-white/90 text-sm md:text-base font-jost tracking-[0.2em] uppercase mb-4">
-            Bespoke Creations
+            Custom Rug Orders
           </p>
           <h1 className="text-4xl md:text-6xl lg:text-7xl font-jost text-white leading-tight mb-6">
-            Design Your <br className="hidden md:block" />
-            <span className="italic font-light">Dream Rug</span>
+            Your Space, <br className="hidden md:block" />
+            <span className="italic font-light">Your Rug</span>
           </h1>
           <p className="text-white/80 max-w-2xl mx-auto text-lg leading-relaxed">
-            From imagination to reality. Co-create a masterpiece that perfectly reflects your personal style and fits your space flawlessly.
+            We make rugs to your exact size, colour, and design — handwoven by skilled artisans using natural wool and jute. Tell us what you need, and we will take care of the rest.
           </p>
         </div>
       </section>
@@ -102,10 +102,10 @@ export default function CustomRugsPage() {
 
           <div className="grid md:grid-cols-4 gap-8">
             {[
-              { num: "01", title: "Consultation", desc: "Share your vision, dimensions, and inspiration. Our experts guide you on materials and feasibility." },
-              { num: "02", title: "Design & CAD", desc: "We translate your idea into a digital rendering, ensuring the colors and patterns are exactly as imagined." },
-              { num: "03", title: "Handcrafting", desc: "Our master artisans meticulously dye the yarn and weave your rug knot by knot on traditional looms." },
-              { num: "04", title: "Delivery", desc: "After washing, finishing, and strict quality checks, your bespoke masterpiece is delivered to your doorstep." }
+              { num: "01", title: "Tell Us Your Idea", desc: "Submit your inquiry with dimensions, material preference, and any colour or design references. No idea is too rough — we work with whatever you have." },
+              { num: "02", title: "We Design It", desc: "Our team prepares a design layout and material sample for your approval. You review and confirm before any production begins." },
+              { num: "03", title: "Woven by Hand", desc: "Once approved, your rug is woven on traditional looms using hand-dyed yarn. The process takes time — because quality cannot be rushed." },
+              { num: "04", title: "Inspected & Delivered", desc: "Every custom rug undergoes a thorough wash, finishing, and quality check before being carefully packed and shipped directly to you." }
             ].map((step) => (
               <div key={step.num} className="text-center group">
                 <div
@@ -138,7 +138,7 @@ export default function CustomRugsPage() {
               Request a Custom Quote
             </h2>
             <p className="text-base leading-relaxed mb-10" style={{ color: "#5C4A3D" }}>
-              Ready to create something extraordinary? Fill out the form below with as much detail as you have. Whether it&apos;s a rough sketch, a specific color palette, or exact dimensions for a unique space, we are here to bring your vision to life.
+              Fill in the form with as much or as little detail as you currently have. Our team reviews every inquiry personally and will get back to you with a clear proposal — no automated replies, no vague timelines.
             </p>
 
             <div className="space-y-6">
@@ -147,8 +147,8 @@ export default function CustomRugsPage() {
                   1
                 </div>
                 <div>
-                  <h4 className="font-jost text-lg" style={{ color: BRAND_BROWN }}>No Minimum Order</h4>
-                  <p className="text-sm mt-1" style={{ color: "#8a7a6a" }}>We craft single bespoke rugs for homes as well as bulk orders for hospitality.</p>
+                  <h4 className="font-jost text-lg" style={{ color: BRAND_BROWN }}>Single Pieces Welcome</h4>
+                  <p className="text-sm mt-1" style={{ color: "#8a7a6a" }}>We make custom rugs for individual homes, interior designers, and hotels alike. There is no minimum order quantity.</p>
                 </div>
               </div>
               <div className="flex items-start gap-4">
@@ -156,8 +156,8 @@ export default function CustomRugsPage() {
                   2
                 </div>
                 <div>
-                  <h4 className="font-jost text-lg" style={{ color: BRAND_BROWN }}>Material Guidance</h4>
-                  <p className="text-sm mt-1" style={{ color: "#8a7a6a" }}>Not sure about the material? We&apos;ll recommend the best blend based on your usage and aesthetic.</p>
+                  <h4 className="font-jost text-lg" style={{ color: BRAND_BROWN }}>We Help You Choose</h4>
+                  <p className="text-sm mt-1" style={{ color: "#8a7a6a" }}>Not sure which fibre or weave style suits your space? Our team will guide you based on your room, usage, and budget.</p>
                 </div>
               </div>
             </div>
