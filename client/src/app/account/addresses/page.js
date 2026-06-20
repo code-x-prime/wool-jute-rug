@@ -92,9 +92,10 @@ export default function AddressesPage() {
   if (loading && addresses.length === 0) {
     return (
       <div className="p-6 max-w-4xl mx-auto">
-        <h1 className="text-2xl font-bold mb-8">My Addresses</h1>
+        <h1 className="text-2xl font-light tracking-wide text-[#3D1C02] mb-2">My Addresses</h1>
+        <div className="h-0.5 w-12 bg-[#C9A84C] mb-8" />
         <div className="flex justify-center items-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <Loader2 className="h-8 w-8 animate-spin text-[#C9A84C]" />
         </div>
       </div>
     );
@@ -102,10 +103,17 @@ export default function AddressesPage() {
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
-      <div className="flex justify-between gap-2 items-center mb-8">
-        <h1 className=" text-xl lg:text-2xl font-semibold">My Addresses</h1>
+      <div className="flex justify-between gap-2 items-start mb-8">
+        <div>
+          <h1 className="text-2xl font-light tracking-wide text-[#3D1C02]">My Addresses</h1>
+          <div className="h-0.5 w-12 bg-[#C9A84C] mt-2" />
+        </div>
         {!showAddForm && !editingAddress && (
-          <Button onClick={() => setShowAddForm(true)} className="px-3 lg:px-4 text-wrap py-2">
+          <Button
+            onClick={() => setShowAddForm(true)}
+            variant="outline"
+            className="px-4 py-2 border border-[#3D1C02] text-[#3D1C02] bg-transparent hover:bg-[#3D1C02] hover:text-white transition-colors rounded-lg text-sm font-medium tracking-wide"
+          >
             <Plus className="h-4 w-4 mr-2" />
             Add New Address
           </Button>
@@ -114,8 +122,9 @@ export default function AddressesPage() {
 
       {/* Add/Edit Form */}
       {showAddForm && (
-        <div className="bg-white rounded-lg shadow p-6 mb-8 border">
-          <h2 className="text-xl font-semibold mb-4">Add New Address</h2>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-8">
+          <h2 className="text-lg font-light tracking-wide text-[#3D1C02] mb-1">Add New Address</h2>
+          <div className="h-0.5 w-8 bg-[#C9A84C] mb-5" />
           <AddressForm
             onSuccess={handleFormSuccess}
             onCancel={() => setShowAddForm(false)}
@@ -124,8 +133,9 @@ export default function AddressesPage() {
       )}
 
       {editingAddress && (
-        <div className="bg-white rounded-lg shadow p-6 mb-8 border">
-          <h2 className="text-xl font-semibold mb-4">Edit Address</h2>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-8">
+          <h2 className="text-lg font-light tracking-wide text-[#3D1C02] mb-1">Edit Address</h2>
+          <div className="h-0.5 w-8 bg-[#C9A84C] mb-5" />
           <AddressForm
             existingAddress={editingAddress}
             onSuccess={handleFormSuccess}
@@ -136,14 +146,18 @@ export default function AddressesPage() {
 
       {/* Address List */}
       {addresses.length === 0 && !showAddForm && !editingAddress ? (
-        <div className="bg-white rounded-lg shadow p-8 text-center border">
-          <MapPin className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-          <h2 className="text-xl font-semibold mb-2">No Addresses Found</h2>
-          <p className="text-gray-600 mb-6">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-10 text-center">
+          <MapPin className="h-14 w-14 mx-auto text-[#C9A84C]/40 mb-4" />
+          <h2 className="text-lg font-light tracking-wide text-[#3D1C02] mb-2">No Addresses Found</h2>
+          <p className="text-sm text-gray-500 mb-6 max-w-xs mx-auto">
             You haven&apos;t added any addresses yet. Add one to make checkout
             faster.
           </p>
-          <Button onClick={() => setShowAddForm(true)}>
+          <Button
+            onClick={() => setShowAddForm(true)}
+            variant="outline"
+            className="border border-[#3D1C02] text-[#3D1C02] bg-transparent hover:bg-[#3D1C02] hover:text-white transition-colors rounded-lg px-6 text-sm font-medium tracking-wide"
+          >
             <Plus className="h-4 w-4 mr-2" />
             Add New Address
           </Button>
@@ -153,37 +167,38 @@ export default function AddressesPage() {
           {addresses.map((address) => (
             <div
               key={address.id}
-              className="bg-white rounded-lg shadow p-5 border relative"
+              className={`bg-white rounded-xl border border-gray-100 shadow-sm p-5 relative transition-all hover:shadow-md ${address.isDefault ? "border-l-4 border-l-[#C9A84C]" : ""}`}
             >
               {address.isDefault && (
-                <div className="absolute top-3 right-3">
-                  <span className="bg-primary/10 text-primary text-xs font-semibold px-2 py-1 rounded-full flex items-center">
-                    <Check className="h-3 w-3 mr-1" />
+                <div className="absolute top-4 right-4">
+                  <span className="bg-[#C9A84C]/10 text-[#C9A84C] border border-[#C9A84C]/30 text-xs font-medium px-2.5 py-1 rounded-full flex items-center gap-1">
+                    <Check className="h-3 w-3" />
                     Default
                   </span>
                 </div>
               )}
 
-              <div className="mb-4">
-                <h3 className="font-semibold text-lg">{address.name}</h3>
-                <p className="text-gray-600">{address.street}</p>
-                <p className="text-gray-600">
+              <div className="mb-4 pr-20">
+                <h3 className="font-semibold text-[#3D1C02] mb-1">{address.name}</h3>
+                <p className="text-sm text-gray-600">{address.street}</p>
+                <p className="text-sm text-gray-600">
                   {address.city}, {address.state} {address.postalCode}
                 </p>
-                <p className="text-gray-600">{address.country}</p>
-                <p className="text-gray-600 mt-1">
-                  <span className="font-medium">Phone:</span> {address.phone}
+                <p className="text-sm text-gray-600">{address.country}</p>
+                <p className="text-sm text-gray-500 mt-1.5">
+                  <span className="font-medium text-gray-600">Phone:</span> {address.phone}
                 </p>
               </div>
 
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap border-t border-gray-50 pt-3">
                 {!address.isDefault && (
                   <Button
                     variant="outline"
                     size="sm"
+                    className="text-xs border-[#3D1C02]/30 text-[#3D1C02] hover:bg-[#3D1C02] hover:text-white transition-colors rounded-lg"
                     onClick={() => handleSetDefaultAddress(address.id)}
                   >
-                    <Home className="h-4 w-4 mr-2" />
+                    <Home className="h-3.5 w-3.5 mr-1.5" />
                     Set as Default
                   </Button>
                 )}
@@ -191,23 +206,24 @@ export default function AddressesPage() {
                 <Button
                   variant="outline"
                   size="sm"
+                  className="text-xs border-gray-200 text-gray-600 hover:border-[#3D1C02] hover:text-[#3D1C02] transition-colors rounded-lg"
                   onClick={() => setEditingAddress(address)}
                 >
-                  <Edit className="h-4 w-4 mr-2" />
+                  <Edit className="h-3.5 w-3.5 mr-1.5" />
                   Edit
                 </Button>
 
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-red-500 border-red-200 hover:bg-red-50 hover:text-red-600"
+                  className="text-xs text-red-500 border-red-200 hover:bg-red-50 hover:text-red-600 transition-colors rounded-lg"
                   onClick={() => handleDeleteAddress(address.id)}
                   disabled={deletingId === address.id}
                 >
                   {deletingId === address.id ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
                   ) : (
-                    <Trash2 className="h-4 w-4 mr-2" />
+                    <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                   )}
                   Delete
                 </Button>

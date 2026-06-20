@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ClientOnly } from "@/components/client-only";
-import { DynamicIcon } from "@/components/dynamic-icon";
 import { fetchApi, formatCurrency } from "@/lib/utils";
 import Image from "next/image";
 import { Eye, Heart, Star } from "lucide-react";
@@ -16,7 +15,8 @@ import ProductQuickView from "@/components/ProductQuickView";
 const getImageUrl = (image) => {
   if (!image) return "/placeholder.png";
   if (image.startsWith("http")) return image;
-  return `https://desirediv-storage.blr1.digitaloceanspaces.com/${image}`;
+  const base = process.env.NEXT_PUBLIC_STORAGE_URL || "https://desirediv-storage.blr1.digitaloceanspaces.com";
+  return `${base}/${image}`;
 };
 
 export default function WishlistPage() {
@@ -87,7 +87,7 @@ export default function WishlistPage() {
   if (loading) {
     return (
       <div className="container mx-auto py-10 flex justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#C9A84C]"></div>
       </div>
     );
   }
@@ -95,56 +95,61 @@ export default function WishlistPage() {
   return (
     <ClientOnly>
       <div className="container mx-auto py-10 px-4">
-        <h1 className="text-3xl font-bold mb-8">My Wishlist</h1>
+        <div className="mb-8">
+          <h1 className="text-2xl font-light tracking-wide text-[#3D1C02]">My Wishlist</h1>
+          <div className="h-0.5 w-12 bg-[#C9A84C] mt-2" />
+        </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm mb-6">
             {error}
           </div>
         )}
 
         {loadingItems ? (
-          <div className="bg-white rounded-lg shadow p-8 flex justify-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-10 flex justify-center">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#C9A84C]"></div>
           </div>
         ) : wishlistItems.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-8 text-center">
-            <DynamicIcon
-              name="Heart"
-              className="h-16 w-16 mx-auto text-gray-400 mb-4"
-            />
-            <h2 className="text-xl font-semibold mb-2">
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-12 text-center">
+            <Heart className="h-14 w-14 mx-auto text-[#C9A84C]/30 mb-4 stroke-[1.5]" />
+            <h2 className="text-lg font-light tracking-wide text-[#3D1C02] mb-2">
               Your Wishlist is Empty
             </h2>
-            <p className="text-gray-600 mb-6">
-              Save your favorite items to your wishlist for easy access later.
+            <p className="text-sm text-gray-500 mb-8 max-w-xs mx-auto">
+              Save your favorite pieces to your wishlist for easy access later.
             </p>
             <Link href="/products">
-              <Button>Explore Products</Button>
+              <Button
+                variant="outline"
+                className="border border-[#3D1C02] text-[#3D1C02] bg-transparent hover:bg-[#3D1C02] hover:text-white transition-colors rounded-lg px-8 text-sm font-medium tracking-wide"
+              >
+                Explore Collection
+              </Button>
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
             {wishlistItems.map((product) => (
               <div
                 key={product.id}
-                className="bg-white overflow-hidden transition-all hover:shadow-lg shadow-md rounded-sm group h-full"
+                className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-md transition-all group h-full flex flex-col"
               >
                 <Link href={`/products/${product.slug}`}>
-                  <div className="relative h-64 w-full  overflow-hidden">
+                  <div className="relative h-56 w-full overflow-hidden bg-gray-50">
                     <Image
                       src={getImageUrl(product.image || product.images?.[0])}
                       alt={product.name}
                       fill
-                      className="object-contain px-4 transition-transform group-hover:scale-100 scale-95"
-                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                      className="object-contain px-4 transition-transform group-hover:scale-105 scale-100"
+                      sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
                     />
 
-                    <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-0 group-hover:bg-opacity-70 backdrop-blur-[2px] flex justify-center py-3 translate-y-full group-hover:translate-y-0 transition-transform">
+                    <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-0 group-hover:bg-opacity-60 backdrop-blur-[2px] flex justify-center py-3 translate-y-full group-hover:translate-y-0 transition-transform">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-white hover:text-white hover:bg-primary/80 rounded-full p-2"
+                        className="text-white hover:text-white hover:bg-[#C9A84C]/80 rounded-full p-2"
                         onClick={(e) => {
                           e.preventDefault();
                           handleQuickView(product);
@@ -161,19 +166,19 @@ export default function WishlistPage() {
                           removeFromWishlist(product.id);
                         }}
                       >
-                        <Heart className="h-5 w-5" />
+                        <Heart className="h-5 w-5 fill-current" />
                       </Button>
                     </div>
                   </div>
                 </Link>
 
-                <div className="p-4 text-center">
+                <div className="p-4 text-center flex flex-col flex-1">
                   <div className="flex items-center justify-center mb-2">
-                    <div className="flex text-yellow-400">
+                    <div className="flex text-[#C9A84C]">
                       {[...Array(5)].map((_, i) => (
                         <Star
                           key={i}
-                          className="h-4 w-4"
+                          className="h-3.5 w-3.5"
                           fill={
                             i < Math.round(product.avgRating || 0)
                               ? "currentColor"
@@ -182,27 +187,27 @@ export default function WishlistPage() {
                         />
                       ))}
                     </div>
-                    <span className="text-xs text-gray-500 ml-2">
+                    <span className="text-xs text-gray-400 ml-1.5">
                       ({product.reviewCount || 0})
                     </span>
                   </div>
 
                   <Link
                     href={`/products/${product.slug}`}
-                    className="hover:text-primary"
+                    className="hover:text-[#C9A84C] transition-colors"
                   >
-                    <h3 className="font-medium uppercase mb-2 line-clamp-2 text-sm">
+                    <h3 className="text-sm font-medium text-[#3D1C02] line-clamp-2 mb-2 leading-snug">
                       {product.name}
                     </h3>
                   </Link>
 
                   {(product.price != null || product.regularPrice != null) && (
                     <div className="flex items-center justify-center gap-2 mb-3 flex-wrap">
-                      <span className="font-bold text-gray-900">
+                      <span className="font-semibold text-[#3D1C02] text-sm">
                         {formatCurrency(product.price ?? product.regularPrice)}
                       </span>
                       {product.hasSale && product.regularPrice > product.price && (
-                        <span className="text-gray-400 line-through text-sm">
+                        <span className="text-gray-400 line-through text-xs">
                           {formatCurrency(product.regularPrice)}
                         </span>
                       )}
@@ -210,19 +215,21 @@ export default function WishlistPage() {
                   )}
 
                   {product.variants && product.variants.length > 1 && (
-                    <span className="text-xs text-gray-500 block mb-3">
+                    <span className="text-xs text-gray-400 block mb-3">
                       {product.variants.length} variants
                     </span>
                   )}
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 hover:text-red-600"
-                    onClick={() => removeFromWishlist(product.id)}
-                  >
-                    Remove from Wishlist
-                  </Button>
+                  <div className="mt-auto">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-xs text-red-500 border-red-200 hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors rounded-lg"
+                      onClick={() => removeFromWishlist(product.id)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}

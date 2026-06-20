@@ -8,7 +8,7 @@ import { ClientOnly } from "@/components/client-only";
 import { DynamicIcon } from "@/components/dynamic-icon";
 
 export default function AccountLayout({ children }) {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -21,8 +21,8 @@ export default function AccountLayout({ children }) {
 
   if (loading) {
     return (
-      <div className="container mx-auto py-10 flex justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-brown"></div>
+      <div className="min-h-screen flex justify-center items-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3D1C02]"></div>
       </div>
     );
   }
@@ -49,7 +49,7 @@ export default function AccountLayout({ children }) {
 
   return (
     <ClientOnly>
-      <div className="container mx-auto py-5 md:py-10 px-4">
+      <div className="max-w-6xl mx-auto py-8 px-4">
         {isSpecialPage ? (
           // For pages like order details, just render the children
           children
@@ -58,28 +58,40 @@ export default function AccountLayout({ children }) {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             {/* Sidebar */}
             <div className="md:col-span-1">
-              <div className="bg-white rounded-lg shadow p-6 sticky top-24">
-                <div className="space-y-1">
-                  <h2 className="text-xl font-semibold mb-4">Account</h2>
-                  <nav className="space-y-1">
-                    {navItems.map((item) => (
-                      <Link
-                        key={item.path}
-                        href={item.path}
-                        className={`flex items-center p-2 rounded-md ${isActive(item.path)
-                            ? "bg-brand-brown/10 text-brand-brown"
-                            : "hover:bg-gray-100"
-                          }`}
-                      >
-                        <DynamicIcon
-                          name={item.icon}
-                          className="mr-2 h-5 w-5"
-                        />
-                        <span>{item.label}</span>
-                      </Link>
-                    ))}
-                  </nav>
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 sticky top-24">
+                {/* Avatar + name */}
+                <div className="flex flex-col items-center mb-6 pb-6 border-b border-gray-100">
+                  <div className="h-14 w-14 rounded-full bg-[#3D1C02] flex items-center justify-center mb-3 shadow-sm">
+                    <span className="text-white text-lg font-semibold tracking-wide">
+                      {user?.name ? user.name.charAt(0).toUpperCase() : "A"}
+                    </span>
+                  </div>
+                  {user?.name && (
+                    <p className="text-sm font-medium text-gray-900 text-center truncate max-w-full">
+                      {user.name}
+                    </p>
+                  )}
+                  <p className="text-xs text-[#C9A84C] uppercase tracking-widest mt-0.5">My Account</p>
                 </div>
+                <nav className="space-y-1">
+                  {navItems.map((item) => (
+                    <Link
+                      key={item.path}
+                      href={item.path}
+                      className={`flex items-center px-3 py-2.5 rounded-full text-sm font-medium transition-colors ${
+                        isActive(item.path)
+                          ? "bg-[#3D1C02] text-white"
+                          : "text-gray-600 hover:bg-[#3D1C02]/10 hover:text-[#3D1C02]"
+                      }`}
+                    >
+                      <DynamicIcon
+                        name={item.icon}
+                        className="mr-2.5 h-4 w-4 flex-shrink-0"
+                      />
+                      <span>{item.label}</span>
+                    </Link>
+                  ))}
+                </nav>
               </div>
             </div>
 

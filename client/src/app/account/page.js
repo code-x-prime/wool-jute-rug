@@ -123,328 +123,326 @@ export default function AccountPage() {
   return (
     <ProtectedRoute>
       <ClientOnly>
-        <div className="container mx-auto py-10 px-4">
-          <h1 className="text-3xl font-bold mb-8">My Profile</h1>
+        <div>
+          <h1 className="text-2xl font-semibold text-[#3D1C02] mb-6 tracking-tight">My Profile</h1>
 
           {/* Profile information */}
-          <div className="bg-white rounded-lg shadow mb-8">
-            <div className="p-4 lg:p-6">
-              <div className="flex justify-between gap-2 items-center mb-6">
-                <h2 className="text-xl font-semibold">Profile Information</h2>
-                {!isEditing && (
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsEditing(true)}
-                    size="sm"
-                  >
-                    <DynamicIcon name="Edit" className="mr-2 h-4 w-4" />
-                    Edit Profile
-                  </Button>
-                )}
-              </div>
-
-              {message.text && (
-                <div
-                  className={`mb-4 p-3 rounded ${message.type === "success"
-                    ? "bg-brand-cream text-brand-brown border border-brand-gold"
-                    : "bg-red-50 text-red-800 border border-red-200"
-                    }`}
+          <div className="rounded-xl border border-gray-100 shadow-sm bg-white p-6 mb-6">
+            <div className="flex justify-between gap-2 items-center mb-6">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">
+                Profile Information
+              </h2>
+              {!isEditing && (
+                <Button
+                  variant="outline"
+                  onClick={() => setIsEditing(true)}
+                  size="sm"
+                  className="border-[#3D1C02] text-[#3D1C02] hover:bg-[#3D1C02] hover:text-white transition-colors"
                 >
-                  {message.text}
-                </div>
-              )}
-
-              {isEditing ? (
-                <form onSubmit={handleSubmit} className="mt-4">
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div>
-                      <label
-                        htmlFor="name"
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Full Name
-                      </label>
-                      <Input
-                        id="name"
-                        name="name"
-                        type="text"
-                        value={formData.name}
-                        onChange={handleChange}
-                      />
-                    </div>
-                    <div>
-                      <label
-                        htmlFor="phone"
-                        className="block text-sm font-medium text-gray-700 mb-1"
-                      >
-                        Phone Number
-                      </label>
-                      <Input
-                        id="phone"
-                        name="phone"
-                        type="tel"
-                        value={formData.phone}
-                        onChange={handleChange}
-                      />
-                    </div>
-                    <div className="lg:col-span-2 flex gap-2 justify-end mt-4">
-                      <Button type="submit" disabled={isSubmitting}>
-                        {isSubmitting ? "Saving..." : "Save Changes"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          setIsEditing(false);
-                          setPreview(null);
-                          setFormData({
-                            name: user?.name || "",
-                            phone: user?.phone || "",
-                            profileImage: null,
-                          });
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                </form>
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-500">
-                        Full Name
-                      </h3>
-                      <p className="mt-1 text-base">
-                        {user?.name || "Not provided"}
-                      </p>
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-500">
-                        Email Address
-                      </h3>
-                      <p className="mt-1 text-base">
-                        {user?.email || "Not provided"}
-                      </p>
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-500">
-                        Phone Number
-                      </h3>
-                      <p className="mt-1 text-base">
-                        {user?.phone || "Not provided"}
-                      </p>
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-500">
-                        Member Since
-                      </h3>
-                      <p className="mt-1 text-base">
-                        {user?.createdAt
-                          ? formatDate(user.createdAt)
-                          : "Unknown"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                  <DynamicIcon name="Edit" className="mr-2 h-4 w-4" />
+                  Edit Profile
+                </Button>
               )}
             </div>
+
+            {message.text && (
+              <div
+                className={`mb-4 p-3 rounded-lg text-sm ${
+                  message.type === "success"
+                    ? "bg-[#FDF8F0] text-[#3D1C02] border border-[#C9A84C]/40"
+                    : "bg-red-50 text-red-800 border border-red-200"
+                }`}
+              >
+                {message.text}
+              </div>
+            )}
+
+            {isEditing ? (
+              <form onSubmit={handleSubmit} className="mt-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div>
+                    <label
+                      htmlFor="name"
+                      className="block text-xs font-medium uppercase tracking-widest text-gray-400 mb-1.5"
+                    >
+                      Full Name
+                    </label>
+                    <Input
+                      id="name"
+                      name="name"
+                      type="text"
+                      value={formData.name}
+                      onChange={handleChange}
+                      className="border-gray-200 focus:border-[#C9A84C] focus:ring-[#C9A84C]/20"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="phone"
+                      className="block text-xs font-medium uppercase tracking-widest text-gray-400 mb-1.5"
+                    >
+                      Phone Number
+                    </label>
+                    <Input
+                      id="phone"
+                      name="phone"
+                      type="tel"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      className="border-gray-200 focus:border-[#C9A84C] focus:ring-[#C9A84C]/20"
+                    />
+                  </div>
+                  <div className="lg:col-span-2 flex gap-2 justify-end mt-4">
+                    <Button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="bg-[#3D1C02] hover:bg-[#3D1C02]/90 text-white"
+                    >
+                      {isSubmitting ? "Saving..." : "Save Changes"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-gray-200 text-gray-700 hover:bg-gray-50"
+                      onClick={() => {
+                        setIsEditing(false);
+                        setPreview(null);
+                        setFormData({
+                          name: user?.name || "",
+                          phone: user?.phone || "",
+                          profileImage: null,
+                        });
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-gray-400 mb-1">Full Name</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {user?.name || "Not provided"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-gray-400 mb-1">Email Address</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {user?.email || "Not provided"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-gray-400 mb-1">Phone Number</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {user?.phone || "Not provided"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-gray-400 mb-1">Member Since</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {user?.createdAt ? formatDate(user.createdAt) : "Unknown"}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Recent addresses */}
-          <div className="bg-white rounded-lg shadow mb-8">
-            <div className="p-4 lg:p-6">
-              <div className="flex justify-between gap-2 items-center mb-4">
-                <h2 className="text-lg lg:text-xl font-semibold">
-                  Saved Addresses
-                </h2>
-                <Link href="/account/addresses">
+          <div className="rounded-xl border border-gray-100 shadow-sm bg-white p-6 mb-6">
+            <div className="flex justify-between gap-2 items-center mb-5">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">
+                Saved Addresses
+              </h2>
+              <Link href="/account/addresses">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-[#3D1C02] text-[#3D1C02] hover:bg-[#3D1C02] hover:text-white transition-colors text-wrap py-2"
+                >
+                  Manage Addresses
+                </Button>
+              </Link>
+            </div>
+
+            {addresses.length > 0 ? (
+              <div className="grid gap-3">
+                {addresses.slice(0, 2).map((address) => (
+                  <div
+                    key={address.id}
+                    className="border-l-4 border-[#C9A84C] rounded-r-lg bg-gray-50 p-4 flex justify-between items-start"
+                  >
+                    <div>
+                      {address.isDefault && (
+                        <span className="inline-block text-xs bg-[#3D1C02]/10 text-[#3D1C02] px-2 py-0.5 rounded-full mb-2 font-medium">
+                          Default
+                        </span>
+                      )}
+                      <p className="text-sm font-medium text-gray-900">
+                        {address.name || user?.name}
+                      </p>
+                      <p className="text-sm text-gray-500 mt-0.5">
+                        {address.street}, {address.city}, {address.state}{" "}
+                        {address.postalCode}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {address.country}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+
+                {addresses.length > 2 && (
+                  <p className="text-sm text-gray-400 pl-1">
+                    + {addresses.length - 2} more addresses
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8 border border-dashed border-gray-200 rounded-xl">
+                <DynamicIcon
+                  name="MapPin"
+                  className="h-8 w-8 mx-auto text-[#C9A84C] mb-2"
+                />
+                <p className="text-sm text-gray-500">No addresses added yet</p>
+                <Link href="/account/addresses" className="mt-3 inline-block">
                   <Button
                     variant="outline"
                     size="sm"
-                    className=" text-wrap py-2"
+                    className="mt-2 border-[#3D1C02] text-[#3D1C02] hover:bg-[#3D1C02] hover:text-white transition-colors"
                   >
-                    Manage Addresses
+                    Add Address
                   </Button>
                 </Link>
               </div>
-
-              {addresses.length > 0 ? (
-                <div className="grid gap-4">
-                  {addresses.slice(0, 2).map((address) => (
-                    <div
-                      key={address.id}
-                      className="border rounded-md p-3 flex justify-between items-start"
-                    >
-                      <div>
-                        {address.isDefault && (
-                          <span className="inline-block text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md mb-2">
-                            Default
-                          </span>
-                        )}
-                        <p className="font-medium">
-                          {address.name || user?.name}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          {address.street}, {address.city}, {address.state}{" "}
-                          {address.postalCode}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          {address.country}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-
-                  {addresses.length > 2 && (
-                    <p className="text-sm text-gray-600">
-                      + {addresses.length - 2} more addresses
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-6 border rounded-md">
-                  <DynamicIcon
-                    name="MapPin"
-                    className="h-8 w-8 mx-auto text-gray-400 mb-2"
-                  />
-                  <p className="text-gray-600">No addresses added yet</p>
-                  <Link href="/account/addresses" className="mt-2 inline-block">
-                    <Button variant="outline" size="sm" className="mt-2">
-                      Add Address
-                    </Button>
-                  </Link>
-                </div>
-              )}
-            </div>
+            )}
           </div>
 
           {/* Referral Program */}
-          <div className="bg-gradient-to-r from-brand-cream to-blue-50 rounded-lg shadow mb-8">
-            <div className="p-4 lg:p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <DynamicIcon name="Users" className="h-6 w-6 text-brand-brown" />
-                <h2 className="text-xl font-semibold">Referral Program</h2>
+          <div className="bg-[#FDF8F0] rounded-xl border border-[#C9A84C]/30 p-6 mb-6">
+            <div className="flex items-center gap-2.5 mb-3">
+              <DynamicIcon name="Users" className="h-5 w-5 text-[#3D1C02]" />
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">Referral Program</h2>
+            </div>
+            <p className="text-sm text-gray-600 mb-6">
+              Share your referral code with friends and earn rewards when they make their first order!
+            </p>
+
+            {isLoadingReferral ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A84C]"></div>
               </div>
-              <p className="text-gray-600 mb-6">
-                Share your referral code with friends and earn rewards when they make their first order!
-              </p>
-
-              {isLoadingReferral ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                </div>
-              ) : (
-                <>
-                  {/* Referral Code */}
-                  <div className="bg-white rounded-lg p-4 mb-6 border-2 border-brand-gold">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Your Referral Code
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={referralCode}
-                        readOnly
-                        className="font-mono text-lg font-bold bg-gray-50"
-                      />
-                      <Button
-                        onClick={() => {
-                          navigator.clipboard.writeText(referralCode);
-                          setCopied(true);
-                          setTimeout(() => setCopied(false), 2000);
-                        }}
-                        className="min-w-[100px]"
-                      >
-                        {copied ? (
-                          <>
-                            <DynamicIcon name="Check" className="h-4 w-4 mr-2" />
-                            Copied!
-                          </>
-                        ) : (
-                          <>
-                            <DynamicIcon name="Copy" className="h-4 w-4 mr-2" />
-                            Copy
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      Share this code with friends. You&apos;ll earn ₹{referralStats?.totalEarnings || "0"} when they place their first order!
-                    </p>
-                  </div>
-
-                  {/* Referral Stats */}
-                  {referralStats && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="bg-white rounded-lg p-4 text-center border">
-                        <p className="text-2xl font-bold text-brand-brown">
-                          {referralStats.totalReferrals || 0}
-                        </p>
-                        <p className="text-sm text-gray-600 mt-1">Total Referrals</p>
-                      </div>
-                      <div className="bg-white rounded-lg p-4 text-center border">
-                        <p className="text-2xl font-bold text-blue-600">
-                          {referralStats.completedReferrals || 0}
-                        </p>
-                        <p className="text-sm text-gray-600 mt-1">Completed</p>
-                      </div>
-                      <div className="bg-white rounded-lg p-4 text-center border">
-                        <p className="text-2xl font-bold text-yellow-600">
-                          {referralStats.pendingReferrals || 0}
-                        </p>
-                        <p className="text-sm text-gray-600 mt-1">Pending</p>
-                      </div>
-                      <div className="bg-white rounded-lg p-4 text-center border">
-                        <p className="text-2xl font-bold text-brand-brown flex items-center justify-center gap-1">
-                          <span>₹</span>
-                          {parseFloat(referralStats.totalEarnings || 0).toFixed(2)}
-                        </p>
-                        <p className="text-sm text-gray-600 mt-1">Total Earnings</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Share Buttons */}
-                  <div className="mt-6 flex flex-wrap gap-3">
+            ) : (
+              <>
+                {/* Referral Code */}
+                <div className="bg-white rounded-xl p-4 mb-6 border border-[#C9A84C]">
+                  <label className="block text-xs uppercase tracking-widest text-gray-400 mb-2">
+                    Your Referral Code
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={referralCode}
+                      readOnly
+                      className="font-mono text-lg font-bold bg-gray-50 border-[#C9A84C]/40 focus:border-[#C9A84C]"
+                    />
                     <Button
                       onClick={() => {
-                        const text = `Join me on Wool Jute Rug Co! Use my referral code: ${referralCode} and get amazing discounts on premium handcrafted rugs!`;
-                        if (navigator.share) {
-                          navigator.share({
-                            title: "Referral Code",
-                            text: text,
-                          });
-                        } else {
-                          navigator.clipboard.writeText(text);
-                          setCopied(true);
-                          setTimeout(() => setCopied(false), 2000);
-                        }
+                        navigator.clipboard.writeText(referralCode);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
                       }}
-                      className="bg-green-600 hover:bg-green-700"
+                      className="min-w-[100px] bg-[#3D1C02] hover:bg-[#3D1C02]/90 text-white"
                     >
-                      <DynamicIcon name="Share2" className="h-4 w-4 mr-2" />
-                      Share Referral Code
+                      {copied ? (
+                        <>
+                          <DynamicIcon name="Check" className="h-4 w-4 mr-2" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <DynamicIcon name="Copy" className="h-4 w-4 mr-2" />
+                          Copy
+                        </>
+                      )}
                     </Button>
                   </div>
-                </>
-              )}
-            </div>
+                  <p className="text-xs text-gray-400 mt-2">
+                    Share this code with friends. You&apos;ll earn ₹{referralStats?.totalEarnings || "0"} when they place their first order!
+                  </p>
+                </div>
+
+                {/* Referral Stats */}
+                {referralStats && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-white border border-gray-100 rounded-lg p-4 text-center">
+                      <p className="text-2xl font-bold text-[#3D1C02]">
+                        {referralStats.totalReferrals || 0}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1 uppercase tracking-wide">Total Referrals</p>
+                    </div>
+                    <div className="bg-white border border-gray-100 rounded-lg p-4 text-center">
+                      <p className="text-2xl font-bold text-[#3D1C02]">
+                        {referralStats.completedReferrals || 0}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1 uppercase tracking-wide">Completed</p>
+                    </div>
+                    <div className="bg-white border border-gray-100 rounded-lg p-4 text-center">
+                      <p className="text-2xl font-bold text-[#C9A84C]">
+                        {referralStats.pendingReferrals || 0}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1 uppercase tracking-wide">Pending</p>
+                    </div>
+                    <div className="bg-white border border-gray-100 rounded-lg p-4 text-center">
+                      <p className="text-2xl font-bold text-[#3D1C02] flex items-center justify-center gap-1">
+                        <span>₹</span>
+                        {parseFloat(referralStats.totalEarnings || 0).toFixed(2)}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1 uppercase tracking-wide">Total Earnings</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Share Buttons */}
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <Button
+                    onClick={() => {
+                      const text = `Join me on Wool Jute Rug Co! Use my referral code: ${referralCode} and get amazing discounts on premium handcrafted rugs!`;
+                      if (navigator.share) {
+                        navigator.share({
+                          title: "Referral Code",
+                          text: text,
+                        });
+                      } else {
+                        navigator.clipboard.writeText(text);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      }
+                    }}
+                    className="bg-[#3D1C02] hover:bg-[#3D1C02]/90 text-white"
+                  >
+                    <DynamicIcon name="Share2" className="h-4 w-4 mr-2" />
+                    Share Referral Code
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Security section - only for credential (email/password) users */}
           {user?.hasPassword !== false && (
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-6">
-                <h2 className="text-xl font-semibold mb-4">Security</h2>
-                <div className="space-y-4">
-                  <Link href="/account/change-password">
-                    <Button variant="outline" className="w-full sm:w-auto">
-                      <DynamicIcon name="Lock" className="mr-2 h-4 w-4" />
-                      Change Password
-                    </Button>
-                  </Link>
-                </div>
+            <div className="rounded-xl border border-gray-100 shadow-sm bg-white p-6">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-5">Security</h2>
+              <div className="space-y-4">
+                <Link href="/account/change-password">
+                  <Button
+                    variant="outline"
+                    className="w-full sm:w-auto border-[#3D1C02] text-[#3D1C02] hover:bg-[#3D1C02] hover:text-white transition-colors"
+                  >
+                    <DynamicIcon name="Lock" className="mr-2 h-4 w-4" />
+                    Change Password
+                  </Button>
+                </Link>
               </div>
             </div>
           )}

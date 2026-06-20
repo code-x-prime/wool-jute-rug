@@ -8,8 +8,6 @@ import { Button } from "@/components/ui/button";
 import { ClientOnly } from "@/components/client-only";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { fetchApi, formatCurrency, formatDate } from "@/lib/utils";
-import Image from "next/image";
-
 export default function OrderDetailsPage({ params }) {
   const { orderId } = params;
   const { isAuthenticated, loading } = useAuth();
@@ -189,30 +187,31 @@ export default function OrderDetailsPage({ params }) {
 
   if (loading || !isAuthenticated) {
     return (
-      <div className="container mx-auto py-10 flex justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <div className="min-h-screen flex justify-center items-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3D1C02]"></div>
       </div>
     );
   }
 
   return (
     <ClientOnly>
-      <div className="container mx-auto py-10 px-4">
-        <div className="flex items-center justify-between mb-8">
+      <div className="max-w-6xl mx-auto py-8 px-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
             <Link
               href="/account/orders"
-              className="inline-flex items-center text-sm text-gray-600 hover:text-primary mb-2"
+              className="inline-flex items-center text-sm text-gray-500 hover:text-[#3D1C02] mb-3 transition-colors"
             >
-              <DynamicIcon name="ArrowLeft" className="mr-1 h-4 w-4" />
+              <DynamicIcon name="ArrowLeft" className="mr-1.5 h-4 w-4" />
               Back to Orders
             </Link>
-            <h1 className="text-3xl font-bold">Order Details</h1>
+            <h1 className="text-2xl font-light tracking-wide text-[#3D1C02]">Order Details</h1>
+            <div className="h-0.5 w-12 bg-[#C9A84C] mt-2" />
           </div>
           {canCancel && !showCancelForm && (
             <Button
               variant="outline"
-              className="text-red-600 border-red-200 hover:bg-red-50"
+              className="text-red-600 border-red-200 hover:bg-red-50 self-start sm:self-auto"
               onClick={() => setShowCancelForm(true)}
             >
               <DynamicIcon name="X" className="mr-2 h-4 w-4" />
@@ -222,42 +221,42 @@ export default function OrderDetailsPage({ params }) {
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6 text-sm">
             {error}
           </div>
         )}
 
         {loadingOrder ? (
-          <div className="bg-white rounded-lg shadow p-8 flex justify-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-12 flex flex-col items-center gap-3">
+            <div className="animate-spin rounded-full h-10 w-10 border-2 border-[#C9A84C] border-t-transparent"></div>
+            <p className="text-sm text-gray-400">Loading order details...</p>
           </div>
         ) : !order ? (
-          <div className="bg-white rounded-lg shadow p-8 text-center">
-            <DynamicIcon
-              name="FileX"
-              className="h-16 w-16 mx-auto text-gray-400 mb-4"
-            />
-            <h2 className="text-xl font-semibold mb-2">Order Not Found</h2>
-            <p className="text-gray-600 mb-6">
-              The order you&apos;re looking for doesn&apos;t exist or you
-              don&apos;t have permission to view it.
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-12 text-center">
+            <div className="w-16 h-16 rounded-full bg-[#3D1C02]/5 flex items-center justify-center mx-auto mb-4">
+              <DynamicIcon name="FileX" className="h-8 w-8 text-[#3D1C02]/40" />
+            </div>
+            <h2 className="text-lg font-semibold text-[#3D1C02] mb-2">Order Not Found</h2>
+            <p className="text-gray-500 text-sm mb-6 max-w-xs mx-auto">
+              This order doesn&apos;t exist or you don&apos;t have permission to view it.
             </p>
             <Link href="/account/orders">
-              <Button>View All Orders</Button>
+              <Button className="bg-[#3D1C02] hover:bg-[#3D1C02]/90 text-white px-6">View All Orders</Button>
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Order details and status - Left column on desktop */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-2 space-y-5">
               {/* Order header */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="h-1.5 w-full" style={{ background: order.status === "DELIVERED" ? "#136C5B" : order.status === "CANCELLED" ? "#ef4444" : order.status === "SHIPPED" ? "#3b82f6" : "#f59e0b" }} />
+                <div className="h-1 w-full" style={{ background: order.status === "DELIVERED" ? "#C9A84C" : order.status === "CANCELLED" ? "#ef4444" : order.status === "SHIPPED" ? "#3b82f6" : "#f59e0b" }} />
                 <div className="p-6">
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-5">
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-900">
-                      Order #{order.orderNumber}
+                    <p className="text-xs uppercase tracking-widest text-gray-400 mb-1">Order Number</p>
+                    <h2 className="text-xl font-semibold text-[#3D1C02]">
+                      #{order.orderNumber}
                     </h2>
                     <p className="text-sm text-gray-500 mt-1">
                       Placed on {formatDate(order.date || order.createdAt)}
@@ -265,7 +264,7 @@ export default function OrderDetailsPage({ params }) {
                   </div>
                   <div className="mt-3 sm:mt-0">
                     <span
-                      className={`px-4 py-1.5 inline-flex text-sm font-bold rounded-full ${getStatusColor(
+                      className={`px-4 py-1.5 inline-flex text-sm font-semibold rounded-full ${getStatusColor(
                         order.status
                       )}`}
                     >
@@ -275,7 +274,7 @@ export default function OrderDetailsPage({ params }) {
                 </div>
 
                 {order.status === "CANCELLED" && order.cancelReason && (
-                  <div className="bg-red-50 border border-red-200 rounded-md p-3 mb-4">
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
                     <p className="text-sm text-red-700">
                       <span className="font-semibold">
                         Cancellation reason:
@@ -293,40 +292,42 @@ export default function OrderDetailsPage({ params }) {
 
                 {/* Cancel form */}
                 {showCancelForm && (
-                  <div className="mt-4 border rounded-md p-4">
-                    <h3 className="font-semibold mb-2">Cancel Order</h3>
-                    <p className="text-sm text-gray-600 mb-3">
-                      Please provide a reason for cancellation. This will help
-                      us improve our service.
+                  <div className="mt-4 border border-red-200 rounded-xl p-5 bg-red-50/50">
+                    <h3 className="font-semibold text-[#3D1C02] mb-1">Cancel Order</h3>
+                    <p className="text-sm text-gray-500 mb-4">
+                      Please provide a reason for cancellation.
                     </p>
                     <form onSubmit={handleCancelOrder}>
-                      <div className="mb-3">
+                      <div className="mb-4">
                         <label
                           htmlFor="cancelReason"
-                          className="block text-sm font-medium text-gray-700 mb-1"
+                          className="block text-xs font-medium uppercase tracking-widest text-gray-400 mb-1.5"
                         >
                           Reason for cancellation
                         </label>
                         <textarea
                           id="cancelReason"
-                          className="w-full border border-gray-300 rounded-md px-3 py-2"
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#3D1C02] focus:ring-1 focus:ring-[#3D1C02]/20 bg-white"
                           value={cancelReason}
                           onChange={(e) => setCancelReason(e.target.value)}
                           rows={3}
                           required
                         ></textarea>
                       </div>
-                      <div className="flex space-x-3">
+                      <div className="flex gap-2">
                         <Button
                           type="submit"
                           variant="destructive"
                           disabled={cancelling}
+                          size="sm"
                         >
                           {cancelling ? "Cancelling..." : "Cancel Order"}
                         </Button>
                         <Button
                           type="button"
                           variant="outline"
+                          size="sm"
+                          className="border-gray-200 text-gray-600"
                           onClick={() => {
                             setShowCancelForm(false);
                             setCancelReason("");
@@ -339,55 +340,39 @@ export default function OrderDetailsPage({ params }) {
                   </div>
                 )}
 
-                {/* Tracking info - from Shiprocket or manual tracking */}
+                {/* Tracking info */}
                 {(order.tracking || order.trackingUrl || order.awbCode) && (
-                  <div className="mt-4 border rounded-md p-4">
-                    <h3 className="font-semibold mb-2">Tracking Information</h3>
-                    <div className="space-y-2">
+                  <div className="mt-4 border border-[#C9A84C]/20 rounded-xl p-5 bg-[#FDF8F0]">
+                    <h3 className="text-xs font-semibold uppercase tracking-widest text-[#C9A84C] mb-3">Tracking Information</h3>
+                    <div className="space-y-2 text-sm">
                       {(order.courierName || order.tracking?.carrier) && (
-                        <div className="flex flex-col sm:flex-row sm:justify-between">
-                          <div className="text-sm">
-                            <span className="text-gray-600">Carrier:</span>{" "}
-                            {order.courierName || order.tracking?.carrier}
-                          </div>
-                          {order.tracking?.status && (
-                            <div className="text-sm">
-                              <span className="text-gray-600">Status:</span>{" "}
-                              <span
-                                className={`px-2 py-0.5 inline-flex text-xs font-semibold rounded-full ${getStatusColor(
-                                  order.tracking.status
-                                )}`}
-                              >
-                                {order.tracking.status}
-                              </span>
-                            </div>
-                          )}
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Carrier</span>
+                          <span className="font-medium text-gray-900">{order.courierName || order.tracking?.carrier}</span>
                         </div>
                       )}
                       {(order.awbCode || order.tracking?.trackingNumber) && (
-                        <span className="text-sm block">
-                          <span className="text-gray-600">Tracking Number:</span>{" "}
-                          <span className="font-mono">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Tracking No.</span>
+                          <span className="font-mono text-xs text-gray-900">
                             {order.awbCode || order.tracking?.trackingNumber}
                           </span>
-                        </span>
+                        </div>
                       )}
                       {order.tracking?.estimatedDelivery && (
-                        <span className="text-sm block">
-                          <span className="text-gray-600">
-                            Estimated Delivery:
-                          </span>{" "}
-                          {formatDate(order.tracking.estimatedDelivery)}
-                        </span>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Est. Delivery</span>
+                          <span className="font-medium text-gray-900">{formatDate(order.tracking.estimatedDelivery)}</span>
+                        </div>
                       )}
                       {order.trackingUrl && (
                         <a
                           href={order.trackingUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-sm text-primary hover:underline font-medium"
+                          className="inline-flex items-center gap-1 text-sm text-[#3D1C02] hover:underline font-medium mt-1"
                         >
-                          Track Shipment →
+                          Track Shipment <DynamicIcon name="ArrowRight" className="h-3.5 w-3.5" />
                         </a>
                       )}
                     </div>
@@ -395,24 +380,24 @@ export default function OrderDetailsPage({ params }) {
                     {order.tracking?.updates &&
                       order.tracking.updates.length > 0 && (
                         <div className="mt-4">
-                          <h4 className="text-sm font-semibold mb-2">
-                            Tracking Updates
+                          <h4 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">
+                            Updates
                           </h4>
                           <div className="space-y-3">
                             {order.tracking.updates.map((update, index) => (
                               <div
                                 key={index}
-                                className="border-l-2 border-gray-200 pl-3 py-1"
+                                className="border-l-2 border-[#C9A84C]/40 pl-3 py-1"
                               >
-                                <p className="text-sm font-medium">
+                                <p className="text-sm font-medium text-[#3D1C02]">
                                   {update.status}
                                 </p>
-                                <p className="text-xs text-gray-600">
+                                <p className="text-xs text-gray-500">
                                   {formatDate(update.timestamp)}{" "}
                                   {update.location && `• ${update.location}`}
                                 </p>
                                 {update.description && (
-                                  <p className="text-xs mt-1">
+                                  <p className="text-xs text-gray-600 mt-0.5">
                                     {update.description}
                                   </p>
                                 )}
@@ -428,23 +413,22 @@ export default function OrderDetailsPage({ params }) {
 
               {/* Order items */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
-                  <h2 className="text-base font-semibold text-gray-900 uppercase tracking-wide">Order Items ({order.items.length})</h2>
+                <div className="px-6 py-4 border-b border-gray-100">
+                  <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">Order Items ({order.items.length})</h2>
                 </div>
-                <div className="divide-y divide-gray-100">
+                <div className="divide-y divide-gray-50">
                   {order.items.map((item) => (
                     <div
                       key={item.id}
-                      className="flex gap-4 p-5 hover:bg-gray-50/50 transition-colors"
+                      className="flex gap-4 p-5 hover:bg-gray-50/30 transition-colors"
                     >
                       <Link
                         href={`/products/${item.slug}`}
-                        className="w-24 h-24 flex-shrink-0 bg-gray-100 rounded-xl overflow-hidden border border-gray-200"
+                        className="w-20 h-20 flex-shrink-0 bg-gray-50 rounded-xl overflow-hidden border border-gray-100"
                       >
                         {item.image ? (
-                          <Image
-                            width={96}
-                            height={96}
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
                             src={item.image}
                             alt={item.name}
                             className="w-full h-full object-cover"
@@ -453,13 +437,13 @@ export default function OrderDetailsPage({ params }) {
                           <div className="w-full h-full flex items-center justify-center">
                             <DynamicIcon
                               name="Package"
-                              className="h-8 w-8 text-gray-400"
+                              className="h-8 w-8 text-gray-300"
                             />
                           </div>
                         )}
                       </Link>
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-semibold text-gray-900 leading-snug mb-1">
+                        <h3 className="text-sm font-semibold text-[#3D1C02] leading-snug mb-1">
                           {item.name}
                         </h3>
                         <div className="text-sm text-gray-600 space-y-1">
@@ -540,7 +524,7 @@ export default function OrderDetailsPage({ params }) {
                           <div className="mt-3 space-y-2">
                             {/* Show return status if return request exists - Check if returnRequest exists and has status */}
                             {item.returnRequest && item.returnRequest.id ? (
-                              <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                              <div className="p-3 bg-[#FDF8F0] rounded-xl border border-[#C9A84C]/20">
                                 <div className="flex items-start justify-between mb-2">
                                   <div className="flex items-center gap-2">
                                     <DynamicIcon
@@ -583,7 +567,7 @@ export default function OrderDetailsPage({ params }) {
                                 </div>
                                 <Link
                                   href="/account/returns"
-                                  className="mt-2 inline-flex items-center text-xs text-primary hover:underline"
+                                  className="mt-2 inline-flex items-center text-xs text-[#3D1C02] hover:underline"
                                 >
                                   View Return Details
                                   <DynamicIcon
@@ -610,12 +594,9 @@ export default function OrderDetailsPage({ params }) {
                               // Only show button if no return request exists and days are left
                               if (!canReturn) {
                                 return (
-                                  <div className="p-2 bg-gray-50 rounded border border-gray-200">
-                                    <p className="text-sm text-gray-500 flex items-center gap-1">
-                                      <DynamicIcon
-                                        name="XCircle"
-                                        className="h-4 w-4"
-                                      />
+                                  <div className="p-2.5 bg-gray-50 rounded-lg border border-gray-200">
+                                    <p className="text-xs text-gray-400 flex items-center gap-1.5">
+                                      <DynamicIcon name="XCircle" className="h-3.5 w-3.5" />
                                       Return period expired
                                     </p>
                                   </div>
@@ -631,12 +612,9 @@ export default function OrderDetailsPage({ params }) {
                                     setSelectedItem(item);
                                     setShowReturnForm(true);
                                   }}
-                                  className="w-full sm:w-auto"
+                                  className="text-xs border-[#3D1C02] text-[#3D1C02] hover:bg-[#3D1C02] hover:text-white transition-colors"
                                 >
-                                  <DynamicIcon
-                                    name="RotateCcw"
-                                    className="h-4 w-4 mr-2"
-                                  />
+                                  <DynamicIcon name="RotateCcw" className="h-3.5 w-3.5 mr-1.5" />
                                   Request Return ({daysLeft} {daysLeft === 1 ? 'day' : 'days'} left)
                                 </Button>
                               );
@@ -654,42 +632,42 @@ export default function OrderDetailsPage({ params }) {
             <div className="space-y-5">
               {/* Order summary */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
-                  <h2 className="text-base font-semibold text-gray-900 uppercase tracking-wide">Order Summary</h2>
+                <div className="px-5 py-4 border-b border-gray-100">
+                  <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">Order Summary</h2>
                 </div>
                 <div className="p-5 space-y-3 text-sm">
-                  <div className="flex justify-between text-gray-600">
+                  <div className="flex justify-between text-gray-500">
                     <span>Subtotal</span>
-                    <span className="font-medium text-gray-900">{formatCurrency(order.subTotal)}</span>
+                    <span className="font-medium text-gray-800">{formatCurrency(order.subTotal)}</span>
                   </div>
-                  <div className="flex justify-between text-gray-600">
+                  <div className="flex justify-between text-gray-500">
                     <span>Shipping</span>
                     {parseFloat(order.shippingCost) > 0 ? (
-                      <span className="font-medium text-gray-900">{formatCurrency(order.shippingCost)}</span>
+                      <span className="font-medium text-gray-800">{formatCurrency(order.shippingCost)}</span>
                     ) : (
-                      <span className="text-green-600 font-semibold">FREE</span>
+                      <span className="text-[#C9A84C] font-semibold">FREE</span>
                     )}
                   </div>
                   {parseFloat(order.codCharge) > 0 && (
-                    <div className="flex justify-between text-gray-600">
+                    <div className="flex justify-between text-gray-500">
                       <span>COD Surcharge</span>
-                      <span className="font-medium text-gray-900">{formatCurrency(order.codCharge)}</span>
+                      <span className="font-medium text-gray-800">{formatCurrency(order.codCharge)}</span>
                     </div>
                   )}
                   {order.discount > 0 && (
-                    <div className="flex justify-between text-green-600 font-medium">
+                    <div className="flex justify-between text-[#C9A84C] font-medium">
                       <span>Discount</span>
                       <span>-{formatCurrency(order.discount)}</span>
                     </div>
                   )}
                   {(order.couponCode || order.couponDetails) && (
-                    <div className="p-3 bg-green-50 border border-green-100 rounded-lg">
-                      <div className="flex items-center text-green-700 text-xs font-semibold mb-1">
+                    <div className="p-3 bg-[#FDF8F0] border border-[#C9A84C]/30 rounded-lg">
+                      <div className="flex items-center text-[#C9A84C] text-xs font-semibold mb-1">
                         <DynamicIcon name="Tag" className="h-3.5 w-3.5 mr-1" />
                         Coupon: {order.couponCode || order.couponDetails?.code}
                       </div>
                       {order.couponDetails && (
-                        <p className="text-xs text-green-600">
+                        <p className="text-xs text-[#3D1C02]/70">
                           {order.couponDetails.discountType === "PERCENTAGE"
                             ? `${order.couponDetails.discountValue}% off`
                             : `${formatCurrency(order.couponDetails.discountValue)} off`}
@@ -697,16 +675,15 @@ export default function OrderDetailsPage({ params }) {
                       )}
                     </div>
                   )}
-                  <div className="border-t border-gray-200 pt-3 mt-1 flex justify-between">
-                    <span className="font-bold text-gray-900 text-base">Total</span>
-                    <span className="font-bold text-[#136C5B] text-xl">{formatCurrency(order.total)}</span>
+                  <div className="border-t border-gray-100 pt-3 mt-1 flex justify-between">
+                    <span className="font-semibold text-[#3D1C02]">Total</span>
+                    <span className="font-bold text-[#3D1C02] text-lg">{formatCurrency(order.total)}</span>
                   </div>
                 </div>
 
                 {/* Payment Info */}
                 <div className="px-5 pb-5 border-t border-gray-100 pt-4">
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Payment</h3>
-                  {/* Payment source badge */}
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">Payment</h3>
                   <div className="flex gap-2 flex-wrap mb-3">
                     {(order.paymentMethod === "PAYPAL" || order.paymentGateway === "PAYPAL") && (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200">
@@ -724,8 +701,8 @@ export default function OrderDetailsPage({ params }) {
                       </span>
                     )}
                     {order.paymentMethod === "CASH" && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-800 border border-green-200">
-                        🇮🇳 Cash on Delivery
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#C9A84C]/10 text-[#3D1C02] border border-[#C9A84C]/30">
+                        Cash on Delivery
                       </span>
                     )}
                   </div>
@@ -738,14 +715,14 @@ export default function OrderDetailsPage({ params }) {
                     </div>
                     {order.paymentId && (
                       <div>
-                        <span className="text-gray-500 text-xs">Payment ID</span>
-                        <p className="font-mono text-xs text-gray-700 break-all mt-0.5">{order.paymentId}</p>
+                        <span className="text-gray-400 text-xs">Payment ID</span>
+                        <p className="font-mono text-xs text-gray-600 break-all mt-0.5">{order.paymentId}</p>
                       </div>
                     )}
                     {order.paypalCaptureId && (
                       <div>
-                        <span className="text-gray-500 text-xs">PayPal Capture ID</span>
-                        <p className="font-mono text-xs text-gray-700 break-all mt-0.5">{order.paypalCaptureId}</p>
+                        <span className="text-gray-400 text-xs">PayPal Capture ID</span>
+                        <p className="font-mono text-xs text-gray-600 break-all mt-0.5">{order.paypalCaptureId}</p>
                       </div>
                     )}
                     {order.awbCode && (
@@ -756,7 +733,7 @@ export default function OrderDetailsPage({ params }) {
                     )}
                     {order.trackingUrl && (
                       <a href={order.trackingUrl} target="_blank" rel="noopener noreferrer"
-                        className="block text-xs text-[#136C5B] hover:underline font-medium mt-1">
+                        className="block text-xs text-[#3D1C02] hover:underline font-medium mt-1">
                         Track your shipment →
                       </a>
                     )}
@@ -766,19 +743,19 @@ export default function OrderDetailsPage({ params }) {
 
               {/* Shipping address */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
-                  <h2 className="text-base font-semibold text-gray-900 uppercase tracking-wide">Shipping Address</h2>
+                <div className="px-5 py-4 border-b border-gray-100">
+                  <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">Shipping Address</h2>
                 </div>
                 <div className="p-5">
                   {order.shippingAddress ? (
-                    <div className="text-sm space-y-1 text-gray-700">
-                      <p className="font-semibold text-gray-900 text-base">{order.shippingAddress.name || ""}</p>
-                      <p>{order.shippingAddress.street}</p>
-                      <p>{order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.postalCode}</p>
-                      <p className="text-gray-500">{order.shippingAddress.country}</p>
+                    <div className="text-sm space-y-1">
+                      <p className="font-semibold text-[#3D1C02]">{order.shippingAddress.name || ""}</p>
+                      <p className="text-gray-600">{order.shippingAddress.street}</p>
+                      <p className="text-gray-600">{order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.postalCode}</p>
+                      <p className="text-gray-400">{order.shippingAddress.country}</p>
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-500">No shipping address available</p>
+                    <p className="text-sm text-gray-400">No shipping address available</p>
                   )}
                 </div>
               </div>
@@ -786,8 +763,8 @@ export default function OrderDetailsPage({ params }) {
               {/* Order notes */}
               {order.notes && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                  <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Order Notes</h2>
-                  <p className="text-sm text-gray-700">{order.notes}</p>
+                  <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Order Notes</h2>
+                  <p className="text-sm text-gray-600">{order.notes}</p>
                 </div>
               )}
             </div>
@@ -796,11 +773,14 @@ export default function OrderDetailsPage({ params }) {
 
         {/* Return Request Modal */}
         {showReturnForm && selectedItem && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
               <div className="p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-semibold">Request Return</h2>
+                <div className="flex justify-between items-center mb-5">
+                  <div>
+                    <h2 className="text-lg font-semibold text-[#3D1C02]">Request Return</h2>
+                    <div className="h-0.5 w-8 bg-[#C9A84C] mt-1.5" />
+                  </div>
                   <button
                     onClick={() => {
                       setShowReturnForm(false);
@@ -811,27 +791,26 @@ export default function OrderDetailsPage({ params }) {
                         images: [],
                       });
                     }}
-                    className="text-gray-400 hover:text-gray-600"
+                    className="text-gray-400 hover:text-gray-600 rounded-lg p-1 hover:bg-gray-100 transition-colors"
                   >
                     <DynamicIcon name="X" className="h-5 w-5" />
                   </button>
                 </div>
 
-                <div className="mb-4 p-3 bg-gray-50 rounded">
-                  <p className="text-sm font-medium">{selectedItem.name}</p>
-                  <p className="text-sm text-gray-600">
-                    {formatCurrency(selectedItem.price)} ×{" "}
-                    {selectedItem.quantity}
+                <div className="mb-5 p-4 bg-[#FDF8F0] border border-[#C9A84C]/20 rounded-xl">
+                  <p className="text-sm font-semibold text-[#3D1C02]">{selectedItem.name}</p>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    {formatCurrency(selectedItem.price)} × {selectedItem.quantity}
                   </p>
                 </div>
 
                 <form onSubmit={handleReturnRequest}>
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-xs font-medium uppercase tracking-widest text-gray-400 mb-1.5">
                       Reason for Return *
                     </label>
                     <select
-                      className="w-full border border-gray-300 rounded-md px-3 py-2"
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#3D1C02] focus:ring-1 focus:ring-[#3D1C02]/20 bg-white"
                       value={returnForm.reason}
                       onChange={(e) =>
                         setReturnForm({ ...returnForm, reason: e.target.value })
@@ -849,11 +828,11 @@ export default function OrderDetailsPage({ params }) {
 
                   {returnForm.reason === "Other" && (
                     <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-xs font-medium uppercase tracking-widest text-gray-400 mb-1.5">
                         Please specify *
                       </label>
                       <textarea
-                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#3D1C02] focus:ring-1 focus:ring-[#3D1C02]/20"
                         rows={3}
                         value={returnForm.customReason}
                         onChange={(e) =>
@@ -872,13 +851,14 @@ export default function OrderDetailsPage({ params }) {
                     <Button
                       type="submit"
                       disabled={submittingReturn}
-                      className="flex-1"
+                      className="flex-1 bg-[#3D1C02] hover:bg-[#3D1C02]/90 text-white"
                     >
                       {submittingReturn ? "Submitting..." : "Submit Request"}
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
+                      className="border-gray-200 text-gray-600 hover:bg-gray-50"
                       onClick={() => {
                         setShowReturnForm(false);
                         setSelectedItem(null);
