@@ -131,6 +131,7 @@ export function ProductForm({
   >({});
   const [brandsList, setBrandsList] = useState<any[]>([]);
   const [hasVariants, setHasVariants] = useState(false);
+  const [activeTab, setActiveTab] = useState("media");
 
   // ── Inline quick-create state ──────────────────────────────────────────────
   const [showQuickBrand, setShowQuickBrand] = useState(false);
@@ -1989,25 +1990,39 @@ export function ProductForm({
 
       <Card className="overflow-hidden bg-[var(--bg-card)] border-[var(--border-color)]">
         <form onSubmit={handleSubmit} className="space-y-8 p-6">
-          {/* Basic Information */}
+          {/* ── Tab Navigation ── */}
+          <div className="sticky top-0 z-10 bg-[var(--bg-card)] border-b border-[var(--border-color)] -mx-6 px-6 mb-6">
+            <div className="flex overflow-x-auto gap-0 scrollbar-hide">
+              {[
+                { key: "media", label: "Photo & Video" },
+                { key: "category", label: "Category" },
+                { key: "details", label: "Item Details" },
+                { key: "pricing", label: "Pricing & Delivery" },
+                { key: "howmade", label: "How It's Made" },
+                { key: "settings", label: "Settings" },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                    activeTab === tab.key
+                      ? "border-[var(--accent)] text-[var(--accent)]"
+                      : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Category Tab ── */}
+          {activeTab === "category" && (
           <div className="space-y-4 rounded-lg border border-[var(--border-color)] p-4 bg-[var(--bg-secondary)]">
-            <h2 className="text-xl font-semibold border-b border-[var(--border-color)] pb-2 text-[var(--text-primary)]">
-              {t("products.form.sections.basic_info")}
-            </h2>
+            <h2 className="text-xl font-semibold border-b border-[var(--border-color)] pb-2 text-[var(--text-primary)]">Category</h2>
 
             <div className="space-y-4 grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-[var(--text-primary)]">{t("products.form.labels.name")} *</Label>
-                <Input
-                  id="name"
-                  name="name"
-                  value={product.name}
-                  onChange={handleChange}
-                  placeholder={t("products.form.placeholders.enter_name")}
-                  required
-                />
-              </div>
-
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="categories">{t("products.form.labels.category")} *</Label>
@@ -2208,6 +2223,26 @@ export function ProductForm({
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+          )}
+
+          {/* ── Details Tab ── */}
+          {activeTab === "details" && (
+          <div className="space-y-4 rounded-lg border border-[var(--border-color)] p-4 bg-[var(--bg-secondary)]">
+            <h2 className="text-xl font-semibold border-b border-[var(--border-color)] pb-2 text-[var(--text-primary)]">Item Details</h2>
+            <div className="space-y-4 grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="name" className="text-[var(--text-primary)]">{t("products.form.labels.name")} *</Label>
+                <Input
+                  id="name"
+                  name="name"
+                  value={product.name}
+                  onChange={handleChange}
+                  placeholder={t("products.form.placeholders.enter_name")}
+                  required
+                />
+              </div>
 
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="description" className="text-[var(--text-primary)]">{t("products.form.labels.description")}</Label>
@@ -2314,114 +2349,205 @@ export function ProductForm({
                   className="h-6 w-6 border-[var(--border-color)] cursor-pointer"
                 />
               </div>
+            </div>
+          </div>
+          )}
 
-              {/* Product Settings */}
+          {/* ── Media Tab ── */}
+          {activeTab === "media" && (
+          <div className="space-y-4 rounded-lg border border-[var(--border-color)] p-4 bg-[var(--bg-secondary)]">
+            <h2 className="text-xl font-semibold border-b border-[var(--border-color)] pb-2 text-[var(--text-primary)]">Photo & Video</h2>
+
+            {/* Product Images - Dropzone - Only show when variants are NOT enabled */}
+            {!hasVariants && (
               <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
-                <h3 className="text-lg font-semibold text-[var(--text-primary)]">{t("products.form.settings.product_settings")}</h3>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="isActive"
-                      name="isActive"
-                      checked={product.isActive}
-                      onCheckedChange={(checked) =>
-                        setProduct((prev) => ({ ...prev, isActive: !!checked }))
-                      }
-                    />
-                    <Label htmlFor="isActive" className="text-[var(--text-primary)]">{t("products.form.labels.active")}</Label>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="ourProduct"
-                      name="ourProduct"
-                      checked={product.ourProduct}
-                      onCheckedChange={(checked) =>
-                        setProduct((prev) => ({
-                          ...prev,
-                          ourProduct: !!checked,
-                        }))
-                      }
-                    />
-                    <Label htmlFor="ourProduct" className="text-[var(--text-primary)]">
-                      {t("products.form.labels.our_product")}
-                    </Label>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="readyToShip"
-                      checked={product.readyToShip}
-                      onCheckedChange={(checked) => setProduct((prev) => ({ ...prev, readyToShip: !!checked }))}
-                    />
-                    <Label htmlFor="readyToShip" className="text-[var(--text-primary)]">Ready to Ship</Label>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="acceptOrders"
-                      checked={product.acceptOrders}
-                      onCheckedChange={(checked) => setProduct((prev) => ({ ...prev, acceptOrders: !!checked }))}
-                    />
-                    <Label htmlFor="acceptOrders" className="text-[var(--text-primary)]">Accept / Possible Orders</Label>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="isCustomizable"
-                      checked={product.isCustomizable}
-                      onCheckedChange={(checked) => setProduct((prev) => ({ ...prev, isCustomizable: !!checked }))}
-                    />
-                    <Label htmlFor="isCustomizable" className="text-[var(--text-primary)]">Customizable</Label>
-                  </div>
-                </div>
-
-                {/* Product Type Selection */}
+                <h2 className="text-xl font-semibold border-b pb-2">
+                  Product Images
+                </h2>
                 <div className="space-y-2">
-                  <Label>{t("products.form.settings.product_type")}</Label>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    {t("products.form.settings.select_type_hint")}
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {[
-                      { key: "featured", label: t("products.form.settings.types.featured"), icon: "⭐" },
-                      { key: "bestseller", label: t("products.form.settings.types.bestseller"), icon: "📈" },
-                      { key: "trending", label: t("products.form.settings.types.trending"), icon: "🔥" },
-                      { key: "new", label: t("products.form.settings.types.new"), icon: "🆕" },
-                    ].map((type) => (
-                      <div key={type.key} className="flex items-center gap-2">
-                        <Checkbox
-                          id={`productType-${type.key}`}
-                          checked={
-                            Array.isArray(product.productType) &&
-                            product.productType.includes(type.key)
-                          }
-                          onCheckedChange={(checked) => {
-                            setProduct((prev) => ({
-                              ...prev,
-                              productType: checked
-                                ? [...prev.productType, type.key]
-                                : prev.productType.filter(
-                                  (t) => t !== type.key
-                                ),
-                            }));
-                          }}
-                          className="h-6 w-6 border-[var(--border-color)] cursor-pointer"
-                        />
-                        <Label
-                          htmlFor={`productType-${type.key}`}
-                          className="flex items-center gap-1 cursor-pointer"
-                        >
-                          <span>{type.icon}</span>
-                          {type.label}
-                        </Label>
-                      </div>
-                    ))}
+                  <div className="flex flex-col gap-1">
+                    <p className="text-sm font-medium">{t("products.form.media.upload_title")}</p>
+                    <p className="text-xs text-[var(--text-secondary)]">
+                      {t("products.form.media.drag_drop_hint")}
+                    </p>
                   </div>
-                </div>
-              </div>
+                  <div
+                    {...getRootProps()}
+                    className={`border-2 border-dashed rounded-md p-8 cursor-pointer transition-colors text-center bg-[var(--bg-card)] ${isDragActive
+                      ? "border-blue-400 bg-blue-50"
+                      : "border-[var(--border-color)] hover:border-[var(--border-color)] hover:bg-[var(--bg-secondary)]"
+                      }`}
+                  >
+                    <input {...getInputProps()} />
+                    <ImageIcon className="h-10 w-10 mx-auto mb-2 text-[var(--text-secondary)]" />
+                    {isDragActive ? (
+                      <p className="text-blue-600 font-medium">
+                        {t("products.form.media.drop_here")}
+                        {t("products.form.media.drop_text")}
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-[var(--text-secondary)]">
+                          {t("products.form.media.drop_multiple_images")}
+                        </p>
+                        <p className="text-xs text-[var(--text-secondary)] mt-1">
+                          {t("products.form.media.upload_hint")}
+                        </p>
+                      </>
+                    )}
+                  </div>
 
+                  {/* Fallback file input */}
+                  <div className="mt-2">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      multiple
+                      onChange={(e) => {
+                        if (e.target.files) {
+                          const files = Array.from(e.target.files);
+                          onDrop(files);
+                          // Clear the input so the same file can be selected again
+                          e.target.value = "";
+                        }
+                      }}
+                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      {t("products.form.media.alternative_input_hint")}
+                    </p>
+                  </div>
+
+                  {/* Manual File Input as Fallback */}
+                </div>
+
+                {/* Image previews */}
+                {imagePreviews.length > 0 && (
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <Label className="text-[var(--text-primary)]">{t("products.form.sections.product_images")}</Label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-[var(--text-secondary)]">Drag to reorder</span>
+                        <Badge variant="outline" className="text-xs">
+                          {imagePreviews.length} {t("products.form.media.image")}
+                          {imagePreviews.length !== 1 ? "s" : ""}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                      {imagePreviews.map((preview, index) => (
+                        <div
+                          key={preview.id || preview.url}
+                          draggable
+                          onDragStart={(e) => handleProductImageDragStart(e, index)}
+                          onDragOver={(e) => handleProductImageDragOver(e, index)}
+                          onDragLeave={handleProductImageDragLeave}
+                          onDrop={(e) => handleProductImageDrop(e, index)}
+                          className={`relative group cursor-move transition-all ${
+                            draggedImageIndex === index ? "opacity-50 scale-95" : ""
+                          } ${
+                            dragOverImageIndex === index && draggedImageIndex !== index
+                              ? "ring-2 ring-primary ring-offset-2"
+                              : ""
+                          }`}
+                        >
+                          <div
+                            className={`relative h-32 rounded-md overflow-hidden border-2 ${preview.isPrimary ? "border-primary" : "border-[var(--border-color)]"}`}
+                          >
+                            <img
+                              src={preview.url}
+                              alt={`Product preview ${index + 1}`}
+                              className="h-full w-full object-cover"
+                            />
+                            {preview.isPrimary && (
+                              <span className="absolute top-2 left-2 bg-primary text-white text-xs py-1 px-2 rounded-full">
+                                {t("products.form.media.primary_image")}
+                              </span>
+                            )}
+                          </div>
+                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 flex space-x-1">
+                            {!preview.isPrimary && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-7 w-7 bg-[var(--bg-card)] hover:bg-primary hover:text-white"
+                                onClick={() => setPrimaryImage(index)}
+                              >
+                                <Star className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7 bg-[var(--bg-card)] hover:bg-destructive hover:text-white"
+                              onClick={() => removeImage(index)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Product Video */}
+            <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
+              <h2 className="text-xl font-semibold border-b pb-2">
+                Product Video (Optional)
+              </h2>
+              <p className="text-sm text-[var(--text-secondary)]">
+                Add a product video (MP4 or WebM, max 10MB). Same storage as product images.
+              </p>
+              {videoPreviewUrl ? (
+                <div className="relative inline-block">
+                  <video
+                    src={videoPreviewUrl}
+                    controls
+                    className="max-h-48 rounded-lg border"
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute top-2 right-2 h-8 w-8"
+                    onClick={removeVideo}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div
+                  {...getVideoRootProps()}
+                  className={`border-2 border-dashed rounded-md p-6 cursor-pointer transition-colors text-center bg-[var(--bg-card)] ${
+                    isVideoDragActive
+                      ? "border-blue-400 bg-blue-50"
+                      : "border-[var(--border-color)] hover:border-[var(--border-color)] hover:bg-[var(--bg-secondary)]"
+                  }`}
+                >
+                  <input {...getVideoInputProps()} />
+                  <Video className="h-10 w-10 mx-auto mb-2 text-[var(--text-secondary)]" />
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    {isVideoDragActive ? "Drop video here..." : "Drop video or click to upload"}
+                  </p>
+                  <p className="text-xs text-[var(--text-secondary)] mt-1">
+                    MP4 or WebM, max 10MB
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+          )}
+
+          {/* ── Pricing Tab ── */}
+          {activeTab === "pricing" && (
+          <div className="space-y-4 rounded-lg border border-[var(--border-color)] p-4 bg-[var(--bg-secondary)]">
+            <h2 className="text-xl font-semibold border-b border-[var(--border-color)] pb-2 text-[var(--text-primary)]">Pricing & Delivery</h2>
+            <div className="space-y-4 grid gap-4 sm:grid-cols-2">
               {!hasVariants && (
                 <>
                   <div className="grid gap-2">
@@ -2499,8 +2625,146 @@ export function ProductForm({
                 </div>
               )}
             </div>
-          </div>
 
+            {/* MOQ Settings Section */}
+            <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
+              <h2 className="text-xl font-semibold border-b pb-2">
+                {t("products.form.sections.moq_settings")}
+              </h2>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 border rounded-lg bg-[var(--bg-card)]">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="product-moq-enabled" className="text-base font-medium">
+                      {t("products.form.moq.enable_moq_label")}
+                    </Label>
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      {t("products.form.moq.enable_moq_hint")}
+                    </p>
+                  </div>
+                  <Switch
+                    id="product-moq-enabled"
+                    checked={productMOQ.isActive}
+                    onCheckedChange={(checked) =>
+                      setProductMOQ({ ...productMOQ, isActive: checked })
+                    }
+                  />
+                </div>
+
+                {productMOQ.isActive && (
+                  <div className="space-y-2">
+                    <Label htmlFor="product-min-quantity">
+                      {t("products.form.moq.minimum_quantity_label")} <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="product-min-quantity"
+                      type="number"
+                      min="1"
+                      value={productMOQ.minQuantity}
+                      onChange={(e) =>
+                        setProductMOQ({
+                          ...productMOQ,
+                          minQuantity: parseInt(e.target.value) || 1,
+                        })
+                      }
+                      placeholder={t("products.form.moq.minimum_quantity_placeholder")}
+                      className="max-w-xs"
+                    />
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      {t("products.form.moq.minimum_quantity_hint")}
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-blue-900">
+                      {t("products.form.moq.moq_priority_title")}
+                    </p>
+                    <p className="text-sm text-blue-800">
+                      {t("products.form.moq.moq_priority_hint")}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Shipping Dimensions Section - Only show when Shiprocket is enabled and no variants */}
+            {shiprocketEnabled && !hasVariants && (
+              <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-semibold">
+                    {t("products.form.shipping.title")}
+                  </h2>
+                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
+                    {t("common.optional") || "Optional"}
+                  </Badge>
+                </div>
+                <p className="text-sm text-[var(--text-secondary)]">
+                  {t("products.form.shipping.description")}
+                </p>
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="shipping-length">{t("products.form.shipping.length_label")}</Label>
+                    <Input
+                      id="shipping-length"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={product.shippingLength || ""}
+                      onChange={(e) => setProduct({ ...product, shippingLength: e.target.value })}
+                      placeholder="e.g. 10"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="shipping-breadth">{t("products.form.shipping.breadth_label")}</Label>
+                    <Input
+                      id="shipping-breadth"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={product.shippingBreadth || ""}
+                      onChange={(e) => setProduct({ ...product, shippingBreadth: e.target.value })}
+                      placeholder="e.g. 10"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="shipping-height">{t("products.form.shipping.height_label")}</Label>
+                    <Input
+                      id="shipping-height"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={product.shippingHeight || ""}
+                      onChange={(e) => setProduct({ ...product, shippingHeight: e.target.value })}
+                      placeholder="e.g. 10"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="shipping-weight">{t("products.form.shipping.weight_label")}</Label>
+                    <Input
+                      id="shipping-weight"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={product.shippingWeight || ""}
+                      onChange={(e) => setProduct({ ...product, shippingWeight: e.target.value })}
+                      placeholder="e.g. 0.5"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {t("products.form.shipping.optional_hint")}
+                </p>
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* ── How It's Made Tab ── */}
+          {activeTab === "howmade" && (
+          <div className="space-y-4 rounded-lg border border-[var(--border-color)] p-4 bg-[var(--bg-secondary)]">
+            <h2 className="text-xl font-semibold border-b border-[var(--border-color)] pb-2 text-[var(--text-primary)]">How It's Made</h2>
             <Card className="p-6">
               <h3 className="text-lg font-medium mb-4">Additional Information (Dynamic Sections)</h3>
               <div className="space-y-4">
@@ -2540,296 +2804,229 @@ export function ProductForm({
                 </div>
               </div>
             </Card>
-
-          {/* Product Images - Dropzone - Only show when variants are NOT enabled */}
-          {!hasVariants && (
-            <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
-              <h2 className="text-xl font-semibold border-b pb-2">
-                Product Images
-              </h2>
-              <div className="space-y-2">
-                <div className="flex flex-col gap-1">
-                  <p className="text-sm font-medium">{t("products.form.media.upload_title")}</p>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    {t("products.form.media.drag_drop_hint")}
-                  </p>
-                </div>
-                <div
-                  {...getRootProps()}
-                  className={`border-2 border-dashed rounded-md p-8 cursor-pointer transition-colors text-center bg-[var(--bg-card)] ${isDragActive
-                    ? "border-blue-400 bg-blue-50"
-                    : "border-[var(--border-color)] hover:border-[var(--border-color)] hover:bg-[var(--bg-secondary)]"
-                    }`}
-                >
-                  <input {...getInputProps()} />
-                  <ImageIcon className="h-10 w-10 mx-auto mb-2 text-[var(--text-secondary)]" />
-                  {isDragActive ? (
-                    <p className="text-blue-600 font-medium">
-                      {t("products.form.media.drop_here")}
-                      {t("products.form.media.drop_text")}
-                    </p>
-                  ) : (
-                    <>
-                      <p className="text-[var(--text-secondary)]">
-                        {t("products.form.media.drop_multiple_images")}
-                      </p>
-                      <p className="text-xs text-[var(--text-secondary)] mt-1">
-                        {t("products.form.media.upload_hint")}
-                      </p>
-                    </>
-                  )}
-                </div>
-
-                {/* Fallback file input */}
-                <div className="mt-2">
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
-                    multiple
-                    onChange={(e) => {
-                      if (e.target.files) {
-                        const files = Array.from(e.target.files);
-                        onDrop(files);
-                        // Clear the input so the same file can be selected again
-                        e.target.value = "";
-                      }
-                    }}
-                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    {t("products.form.media.alternative_input_hint")}
-                  </p>
-                </div>
-
-                {/* Manual File Input as Fallback */}
-              </div>
-
-              {/* Image previews */}
-              {imagePreviews.length > 0 && (
-                <div className="mt-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <Label className="text-[var(--text-primary)]">{t("products.form.sections.product_images")}</Label>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-[var(--text-secondary)]">Drag to reorder</span>
-                      <Badge variant="outline" className="text-xs">
-                        {imagePreviews.length} {t("products.form.media.image")}
-                        {imagePreviews.length !== 1 ? "s" : ""}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                    {imagePreviews.map((preview, index) => (
-                      <div
-                        key={preview.id || preview.url}
-                        draggable
-                        onDragStart={(e) => handleProductImageDragStart(e, index)}
-                        onDragOver={(e) => handleProductImageDragOver(e, index)}
-                        onDragLeave={handleProductImageDragLeave}
-                        onDrop={(e) => handleProductImageDrop(e, index)}
-                        className={`relative group cursor-move transition-all ${
-                          draggedImageIndex === index ? "opacity-50 scale-95" : ""
-                        } ${
-                          dragOverImageIndex === index && draggedImageIndex !== index
-                            ? "ring-2 ring-primary ring-offset-2"
-                            : ""
-                        }`}
-                      >
-                        <div
-                          className={`relative h-32 rounded-md overflow-hidden border-2 ${preview.isPrimary ? "border-primary" : "border-[var(--border-color)]"}`}
-                        >
-                          <img
-                            src={preview.url}
-                            alt={`Product preview ${index + 1}`}
-                            className="h-full w-full object-cover"
-                          />
-                          {preview.isPrimary && (
-                            <span className="absolute top-2 left-2 bg-primary text-white text-xs py-1 px-2 rounded-full">
-                              {t("products.form.media.primary_image")}
-                            </span>
-                          )}
-                        </div>
-                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 flex space-x-1">
-                          {!preview.isPrimary && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              className="h-7 w-7 bg-[var(--bg-card)] hover:bg-primary hover:text-white"
-                              onClick={() => setPrimaryImage(index)}
-                            >
-                              <Star className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="h-7 w-7 bg-[var(--bg-card)] hover:bg-destructive hover:text-white"
-                            onClick={() => removeImage(index)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+          </div>
           )}
 
-          {/* Product Video - Optional (max 10MB) */}
-          <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
-            <h2 className="text-xl font-semibold border-b pb-2">
-              Product Video (Optional)
-            </h2>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Add a product video (MP4 or WebM, max 10MB). Same storage as product images.
-            </p>
-            {videoPreviewUrl ? (
-              <div className="relative inline-block">
-                <video
-                  src={videoPreviewUrl}
-                  controls
-                  className="max-h-48 rounded-lg border"
-                />
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="icon"
-                  className="absolute top-2 right-2 h-8 w-8"
-                  onClick={removeVideo}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ) : (
-              <div
-                {...getVideoRootProps()}
-                className={`border-2 border-dashed rounded-md p-6 cursor-pointer transition-colors text-center bg-[var(--bg-card)] ${
-                  isVideoDragActive
-                    ? "border-blue-400 bg-blue-50"
-                    : "border-[var(--border-color)] hover:border-[var(--border-color)] hover:bg-[var(--bg-secondary)]"
-                }`}
-              >
-                <input {...getVideoInputProps()} />
-                <Video className="h-10 w-10 mx-auto mb-2 text-[var(--text-secondary)]" />
-                <p className="text-sm text-[var(--text-secondary)]">
-                  {isVideoDragActive ? "Drop video here..." : "Drop video or click to upload"}
-                </p>
-                <p className="text-xs text-[var(--text-secondary)] mt-1">
-                  MP4 or WebM, max 10MB
-                </p>
-              </div>
-            )}
-          </div>
+          {/* ── Settings Tab ── */}
+          {activeTab === "settings" && (
+          <div className="space-y-4 rounded-lg border border-[var(--border-color)] p-4 bg-[var(--bg-secondary)]">
+            <h2 className="text-xl font-semibold border-b border-[var(--border-color)] pb-2 text-[var(--text-primary)]">Settings</h2>
 
-          {/* SEO Section */}
-          <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
-            <h2 className="text-xl font-semibold border-b pb-2">
-              {t("products.form.sections.seo_information")}
-            </h2>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="metaTitle">{t("products.form.seo.title_label")}</Label>
-                <Input
-                  id="metaTitle"
-                  name="metaTitle"
-                  value={product.metaTitle}
-                  onChange={handleChange}
-                  placeholder={t("products.form.seo.title_placeholder")}
-                />
-                <p className="text-xs text-[var(--text-secondary)]">
-                  {t("products.form.seo.title_hint")}
-                </p>
-              </div>
+            {/* Product Settings */}
+            <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
+              <h3 className="text-lg font-semibold text-[var(--text-primary)]">{t("products.form.settings.product_settings")}</h3>
 
-              <div className="space-y-2">
-                <Label htmlFor="metaDescription">{t("products.form.seo.description_label")}</Label>
-                <Textarea
-                  id="metaDescription"
-                  name="metaDescription"
-                  value={product.metaDescription}
-                  onChange={handleChange}
-                  placeholder={t("products.form.seo.description_placeholder")}
-                  rows={3}
-                />
-                <p className="text-xs text-[var(--text-secondary)]">
-                  {t("products.form.seo.description_hint")}
-                </p>
-                <div className="text-xs text-[var(--text-secondary)]">
-                  {t("products.form.seo.current_length")}: {product.metaDescription?.length || 0} / 160
-                  {t("products.form.seo.characters")}
-                  {product.metaDescription &&
-                    product.metaDescription.length > 160 && (
-                      <span className="text-destructive ml-2">⚠️ {t("products.form.seo.too_long")}</span>
-                    )}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="isActive"
+                    name="isActive"
+                    checked={product.isActive}
+                    onCheckedChange={(checked) =>
+                      setProduct((prev) => ({ ...prev, isActive: !!checked }))
+                    }
+                  />
+                  <Label htmlFor="isActive" className="text-[var(--text-primary)]">{t("products.form.labels.active")}</Label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="ourProduct"
+                    name="ourProduct"
+                    checked={product.ourProduct}
+                    onCheckedChange={(checked) =>
+                      setProduct((prev) => ({
+                        ...prev,
+                        ourProduct: !!checked,
+                      }))
+                    }
+                  />
+                  <Label htmlFor="ourProduct" className="text-[var(--text-primary)]">
+                    {t("products.form.labels.our_product")}
+                  </Label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="readyToShip"
+                    checked={product.readyToShip}
+                    onCheckedChange={(checked) => setProduct((prev) => ({ ...prev, readyToShip: !!checked }))}
+                  />
+                  <Label htmlFor="readyToShip" className="text-[var(--text-primary)]">Ready to Ship</Label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="acceptOrders"
+                    checked={product.acceptOrders}
+                    onCheckedChange={(checked) => setProduct((prev) => ({ ...prev, acceptOrders: !!checked }))}
+                  />
+                  <Label htmlFor="acceptOrders" className="text-[var(--text-primary)]">Accept / Possible Orders</Label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="isCustomizable"
+                    checked={product.isCustomizable}
+                    onCheckedChange={(checked) => setProduct((prev) => ({ ...prev, isCustomizable: !!checked }))}
+                  />
+                  <Label htmlFor="isCustomizable" className="text-[var(--text-primary)]">Customizable</Label>
                 </div>
               </div>
 
+              {/* Product Type Selection */}
               <div className="space-y-2">
-                <Label htmlFor="keywords">{t("products.form.seo.keywords_label")}</Label>
-                <Input
-                  id="keywords"
-                  name="keywords"
-                  value={product.keywords}
-                  onChange={handleChange}
-                  placeholder={t("products.form.seo.keywords_placeholder")}
-                />
+                <Label>{t("products.form.settings.product_type")}</Label>
                 <p className="text-xs text-[var(--text-secondary)]">
-                  {t("products.form.seo.keywords_hint")}
+                  {t("products.form.settings.select_type_hint")}
                 </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {[
+                    { key: "featured", label: t("products.form.settings.types.featured"), icon: "⭐" },
+                    { key: "bestseller", label: t("products.form.settings.types.bestseller"), icon: "📈" },
+                    { key: "trending", label: t("products.form.settings.types.trending"), icon: "🔥" },
+                    { key: "new", label: t("products.form.settings.types.new"), icon: "🆕" },
+                  ].map((type) => (
+                    <div key={type.key} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`productType-${type.key}`}
+                        checked={
+                          Array.isArray(product.productType) &&
+                          product.productType.includes(type.key)
+                        }
+                        onCheckedChange={(checked) => {
+                          setProduct((prev) => ({
+                            ...prev,
+                            productType: checked
+                              ? [...prev.productType, type.key]
+                              : prev.productType.filter(
+                                (t) => t !== type.key
+                              ),
+                          }));
+                        }}
+                        className="h-6 w-6 border-[var(--border-color)] cursor-pointer"
+                      />
+                      <Label
+                        htmlFor={`productType-${type.key}`}
+                        className="flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>{type.icon}</span>
+                        {type.label}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
               </div>
+            </div>
 
-              <div className="space-y-2">
-                <Label>Tags</Label>
-                <div className="flex gap-2">
+            {/* SEO Section */}
+            <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
+              <h2 className="text-xl font-semibold border-b pb-2">
+                {t("products.form.sections.seo_information")}
+              </h2>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="metaTitle">{t("products.form.seo.title_label")}</Label>
                   <Input
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if ((e.key === "Enter" || e.key === ",") && tagInput.trim()) {
-                        e.preventDefault();
+                    id="metaTitle"
+                    name="metaTitle"
+                    value={product.metaTitle}
+                    onChange={handleChange}
+                    placeholder={t("products.form.seo.title_placeholder")}
+                  />
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    {t("products.form.seo.title_hint")}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="metaDescription">{t("products.form.seo.description_label")}</Label>
+                  <Textarea
+                    id="metaDescription"
+                    name="metaDescription"
+                    value={product.metaDescription}
+                    onChange={handleChange}
+                    placeholder={t("products.form.seo.description_placeholder")}
+                    rows={3}
+                  />
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    {t("products.form.seo.description_hint")}
+                  </p>
+                  <div className="text-xs text-[var(--text-secondary)]">
+                    {t("products.form.seo.current_length")}: {product.metaDescription?.length || 0} / 160
+                    {t("products.form.seo.characters")}
+                    {product.metaDescription &&
+                      product.metaDescription.length > 160 && (
+                        <span className="text-destructive ml-2">⚠️ {t("products.form.seo.too_long")}</span>
+                      )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="keywords">{t("products.form.seo.keywords_label")}</Label>
+                  <Input
+                    id="keywords"
+                    name="keywords"
+                    value={product.keywords}
+                    onChange={handleChange}
+                    placeholder={t("products.form.seo.keywords_placeholder")}
+                  />
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    {t("products.form.seo.keywords_hint")}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Tags</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if ((e.key === "Enter" || e.key === ",") && tagInput.trim()) {
+                          e.preventDefault();
+                          const tag = tagInput.trim().replace(/,$/, "");
+                          if (tag && !product.tags.includes(tag)) {
+                            setProduct((prev) => ({ ...prev, tags: [...prev.tags, tag] }));
+                          }
+                          setTagInput("");
+                        }
+                      }}
+                      placeholder="Type tag and press Enter"
+                    />
+                    <Button type="button" variant="outline" size="sm"
+                      onClick={() => {
                         const tag = tagInput.trim().replace(/,$/, "");
                         if (tag && !product.tags.includes(tag)) {
                           setProduct((prev) => ({ ...prev, tags: [...prev.tags, tag] }));
                         }
                         setTagInput("");
-                      }
-                    }}
-                    placeholder="Type tag and press Enter"
-                  />
-                  <Button type="button" variant="outline" size="sm"
-                    onClick={() => {
-                      const tag = tagInput.trim().replace(/,$/, "");
-                      if (tag && !product.tags.includes(tag)) {
-                        setProduct((prev) => ({ ...prev, tags: [...prev.tags, tag] }));
-                      }
-                      setTagInput("");
-                    }}>
-                    Add
-                  </Button>
-                </div>
-                {product.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {product.tags.map((tag) => (
-                      <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--accent)]/10 text-[var(--accent)] text-xs font-medium border border-[var(--accent)]/20">
-                        #{tag}
-                        <button type="button" onClick={() => setProduct((prev) => ({ ...prev, tags: prev.tags.filter((t) => t !== tag) }))}
-                          className="ml-0.5 hover:text-red-500 transition-colors">
-                          ×
-                        </button>
-                      </span>
-                    ))}
+                      }}>
+                      Add
+                    </Button>
                   </div>
-                )}
-                <p className="text-xs text-[var(--text-secondary)]">Press Enter or comma to add. Tags show on product page.</p>
+                  {product.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {product.tags.map((tag) => (
+                        <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--accent)]/10 text-[var(--accent)] text-xs font-medium border border-[var(--accent)]/20">
+                          #{tag}
+                          <button type="button" onClick={() => setProduct((prev) => ({ ...prev, tags: prev.tags.filter((t) => t !== tag) }))}
+                            className="ml-0.5 hover:text-red-500 transition-colors">
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-[var(--text-secondary)]">Press Enter or comma to add. Tags show on product page.</p>
+                </div>
               </div>
             </div>
           </div>
+          )}
 
-          {/* Variants Configuration */}
-          {hasVariants && (
+          {/* ── Details Tab: Variants Configuration ── */}
+          {activeTab === "details" && hasVariants && (
             <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
               <div className="flex items-center justify-between border-b pb-2">
                 <h2 className="text-xl font-semibold">
@@ -3064,139 +3261,6 @@ export function ProductForm({
                   )}
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* MOQ Settings Section */}
-          <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
-            <h2 className="text-xl font-semibold border-b pb-2">
-              {t("products.form.sections.moq_settings")}
-            </h2>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 border rounded-lg bg-[var(--bg-card)]">
-                <div className="space-y-0.5">
-                  <Label htmlFor="product-moq-enabled" className="text-base font-medium">
-                    {t("products.form.moq.enable_moq_label")}
-                  </Label>
-                  <p className="text-sm text-[var(--text-secondary)]">
-                    {t("products.form.moq.enable_moq_hint")}
-                  </p>
-                </div>
-                <Switch
-                  id="product-moq-enabled"
-                  checked={productMOQ.isActive}
-                  onCheckedChange={(checked) =>
-                    setProductMOQ({ ...productMOQ, isActive: checked })
-                  }
-                />
-              </div>
-
-              {productMOQ.isActive && (
-                <div className="space-y-2">
-                  <Label htmlFor="product-min-quantity">
-                    {t("products.form.moq.minimum_quantity_label")} <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="product-min-quantity"
-                    type="number"
-                    min="1"
-                    value={productMOQ.minQuantity}
-                    onChange={(e) =>
-                      setProductMOQ({
-                        ...productMOQ,
-                        minQuantity: parseInt(e.target.value) || 1,
-                      })
-                    }
-                    placeholder={t("products.form.moq.minimum_quantity_placeholder")}
-                    className="max-w-xs"
-                  />
-                  <p className="text-sm text-[var(--text-secondary)]">
-                    {t("products.form.moq.minimum_quantity_hint")}
-                  </p>
-                </div>
-              )}
-
-              <div className="flex gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-blue-900">
-                    {t("products.form.moq.moq_priority_title")}
-                  </p>
-                  <p className="text-sm text-blue-800">
-                    {t("products.form.moq.moq_priority_hint")}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Shipping Dimensions Section - Only show when Shiprocket is enabled and no variants */}
-          {shiprocketEnabled && !hasVariants && (
-            <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl font-semibold">
-                  {t("products.form.shipping.title")}
-                </h2>
-                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
-                  {t("common.optional") || "Optional"}
-                </Badge>
-              </div>
-              <p className="text-sm text-[var(--text-secondary)]">
-                {t("products.form.shipping.description")}
-              </p>
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                <div className="space-y-2">
-                  <Label htmlFor="shipping-length">{t("products.form.shipping.length_label")}</Label>
-                  <Input
-                    id="shipping-length"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={product.shippingLength || ""}
-                    onChange={(e) => setProduct({ ...product, shippingLength: e.target.value })}
-                    placeholder="e.g. 10"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="shipping-breadth">{t("products.form.shipping.breadth_label")}</Label>
-                  <Input
-                    id="shipping-breadth"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={product.shippingBreadth || ""}
-                    onChange={(e) => setProduct({ ...product, shippingBreadth: e.target.value })}
-                    placeholder="e.g. 10"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="shipping-height">{t("products.form.shipping.height_label")}</Label>
-                  <Input
-                    id="shipping-height"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={product.shippingHeight || ""}
-                    onChange={(e) => setProduct({ ...product, shippingHeight: e.target.value })}
-                    placeholder="e.g. 10"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="shipping-weight">{t("products.form.shipping.weight_label")}</Label>
-                  <Input
-                    id="shipping-weight"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={product.shippingWeight || ""}
-                    onChange={(e) => setProduct({ ...product, shippingWeight: e.target.value })}
-                    placeholder="e.g. 0.5"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-[var(--text-secondary)]">
-                {t("products.form.shipping.optional_hint")}
-              </p>
             </div>
           )}
 
