@@ -9,7 +9,7 @@ import { toast } from "sonner";
 const privateRoutes = ["/account", "/checkout", "/wishlist", "/orders"];
 
 // Define auth routes that should redirect to dashboard if already logged in
-const authRoutes = ["/auth", "/auth", "/forgot-password", "/reset-password"];
+const authRoutes = ["/auth", "/login", "/register", "/forgot-password", "/reset-password"];
 
 export function RouteGuard({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -58,17 +58,11 @@ export function RouteGuard({ children }) {
 
         router.push(`/auth?returnUrl=${encodeURIComponent(redirectPath)}`);
       } else if (isAuthRoute && isAuthenticated) {
-        // Check if user just logged in (to prevent double toast message)
+        // Clear the justLoggedIn flag if it exists
         const justLoggedIn =
           typeof window !== "undefined"
             ? sessionStorage.getItem("justLoggedIn") === "true"
             : false;
-
-        if (!firstRunRef.current && !justLoggedIn) {
-          toast.info("You are already logged in");
-        }
-
-        // Clear the justLoggedIn flag if it exists
         if (justLoggedIn) {
           sessionStorage.removeItem("justLoggedIn");
         }

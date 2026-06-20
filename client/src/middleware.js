@@ -6,7 +6,8 @@ const privateRoutes = ["/account", "/checkout", "/wishlist", "/orders"];
 // Define auth routes that should redirect to dashboard if already logged in
 const authRoutes = [
   "/auth",
-  "/auth",
+  "/login",
+  "/register",
   "/verify-email",
   "/resend-verification",
   "/forgot-password",
