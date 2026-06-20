@@ -855,7 +855,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
               </h2>
 
               {/* Price Section */}
-              <div className="mb-6">
+              <div className="mb-4">
                 <div className="flex items-baseline gap-3 mb-2 flex-wrap">
                   {getPriceDisplay()}
                   {discountPercentage && discountPercentage > 0 && (
@@ -872,7 +872,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
 
               {/* Rating */}
               {displayProduct.avgRating > 0 && (
-                <div className="flex items-center mb-4">
+                <div className="flex items-center mb-3">
                   <div className="flex">
                     {[1, 2, 3, 4, 5].map((star) => (
                       <Star
@@ -892,22 +892,20 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
 
               {/* Description */}
               <div
-                className="text-gray-600 text-sm mb-4 line-clamp-3 prose prose-sm max-w-none"
+                className="text-gray-500 text-xs mb-3 line-clamp-2 prose prose-sm max-w-none"
                 dangerouslySetInnerHTML={{ __html: stripInlineStyles(displayProduct.description || "No description available") }}
               />
 
               {/* Color Selection */}
               {productDetails?.colorOptions &&
                 productDetails.colorOptions.length > 0 && (
-                  <div className="mb-6">
-                    <label className="block text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wide">
-                      SELECT COLOR
+                  <div className="mb-4">
+                    <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-widest">
+                      Color
                     </label>
-                    <div className="flex flex-wrap gap-3">
+                    <div className="flex flex-wrap gap-2">
                       {productDetails.colorOptions.map((color) => {
-                        const availableSizeIds = getAvailableSizesForColor(
-                          color.id
-                        );
+                        const availableSizeIds = getAvailableSizesForColor(color.id);
                         const isAvailable = availableSizeIds.length > 0;
                         const isSelected = selectedColor?.id === color.id;
 
@@ -917,24 +915,14 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                             type="button"
                             onClick={() => handleColorChange(color)}
                             disabled={!isAvailable}
-                            className={`flex flex-col items-center gap-2 transition-all ${!isAvailable
-                              ? "opacity-50 cursor-not-allowed"
-                              : "cursor-pointer"
-                              }`}
+                            title={color.name}
+                            className={`flex flex-col items-center gap-1 transition-all ${!isAvailable ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
                           >
                             <div
-                              className={`w-12 h-12 rounded-full border-2 transition-all ${isSelected
-                                ? "border-[#3D1C02] shadow-lg scale-110"
-                                : "border-gray-300 hover:border-gray-400"
-                                }`}
-                              style={{
-                                backgroundColor: color.hexCode || "#ccc",
-                              }}
+                              className={`w-7 h-7 rounded-full border-2 transition-all ${isSelected ? "border-[#3D1C02] shadow-md scale-110" : "border-gray-300 hover:border-gray-400"}`}
+                              style={{ backgroundColor: color.hexCode || "#ccc" }}
                             />
-                            <span
-                              className={`text-xs font-medium ${isSelected ? "text-[#3D1C02]" : "text-gray-700"
-                                }`}
-                            >
+                            <span className={`text-[10px] font-medium leading-none ${isSelected ? "text-[#3D1C02]" : "text-gray-500"}`}>
                               {color.name}
                             </span>
                           </button>
@@ -947,11 +935,11 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
               {/* Size Selection */}
               {productDetails?.sizeOptions &&
                 productDetails.sizeOptions.length > 0 && (
-                  <div className="mb-4">
-                    <label className="block text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wide">
-                      SELECT SIZE
+                  <div className="mb-3">
+                    <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-widest">
+                      Size
                     </label>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5">
                       {productDetails.sizeOptions.map((size) => {
                         // Check if size is available
                         // If colors exist, check combination with selected color
@@ -973,11 +961,11 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                             type="button"
                             onClick={() => handleSizeChange(size)}
                             disabled={!isAvailable}
-                            className={`px-3 py-2 min-w-[3rem] rounded-lg border-2 text-sm font-semibold transition-all ${isSelected
-                              ? "border-[#3D1C02] bg-[#3D1C02] text-white shadow-md"
+                            className={`px-2.5 py-1 min-w-[2.5rem] rounded-md border text-xs font-medium transition-all ${isSelected
+                              ? "border-[#3D1C02] bg-[#3D1C02] text-white shadow-sm"
                               : isAvailable
-                                ? "border-gray-300 text-gray-700 hover:border-[#3D1C02]/40 bg-white"
-                                : "border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed"
+                                ? "border-gray-300 text-gray-600 hover:border-[#3D1C02]/50 bg-white"
+                                : "border-gray-200 text-gray-300 bg-gray-50 cursor-not-allowed"
                               }`}
                           >
                             {size.display || size.name}
@@ -1070,11 +1058,11 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                     };
 
                     return (
-                      <div key={attribute.id} className="mb-4">
-                        <label className="block text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wide">
-                          SELECT {attribute.name.toUpperCase()}
+                      <div key={attribute.id} className="mb-3">
+                        <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-widest">
+                          {attribute.name}
                         </label>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-1.5">
                           {attribute.values.map((attrValue) => {
                             const isAvailable = checkAvailability(attrValue.id);
                             const isSelected =
@@ -1088,11 +1076,11 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                                   handleAttributeChange(attrValue.id)
                                 }
                                 disabled={!isAvailable}
-                                className={`px-4 py-2 rounded-lg border-2 text-sm font-semibold transition-all ${isSelected
-                                  ? "border-[#3D1C02] bg-[#3D1C02] text-white shadow-md"
+                                className={`px-2.5 py-1 rounded-md border text-xs font-medium transition-all ${isSelected
+                                  ? "border-[#3D1C02] bg-[#3D1C02] text-white shadow-sm"
                                   : isAvailable
-                                    ? "border-gray-300 text-gray-700 hover:border-[#3D1C02]/40 bg-white"
-                                    : "border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed"
+                                    ? "border-gray-300 text-gray-600 hover:border-[#3D1C02]/50 bg-white"
+                                    : "border-gray-200 text-gray-300 bg-gray-50 cursor-not-allowed"
                                   }`}
                               >
                                 {attrValue.value}
@@ -1167,8 +1155,8 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
               )}
 
               {/* Quantity Selector */}
-              <div className="mb-4">
-                <label className="block text-sm font-semibold text-gray-900 mb-2 uppercase tracking-wide">
+              <div className="mb-3">
+                <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-widest">
                   Quantity
                 </label>
                 <div className="flex items-center">
