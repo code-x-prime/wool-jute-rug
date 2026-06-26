@@ -572,6 +572,8 @@ export const getProductBySlug = asyncHandler(async (req, res) => {
             attrData.values.set(attrValue.id, {
               id: attrValue.id,
               value: attrValue.value,
+              hexCode: attrValue.hexCode || null,
+              image: attrValue.image ? getFileUrl(attrValue.image) : null,
             });
           }
         });

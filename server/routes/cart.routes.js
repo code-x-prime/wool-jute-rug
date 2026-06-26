@@ -7,6 +7,7 @@ import {
   removeFromCart,
   clearCart,
 } from "../controllers/cart.controller.js";
+import { setCartItemAddons } from "../controllers/addon.controller.js";
 
 const router = express.Router();
 
@@ -27,5 +28,8 @@ router.delete("/remove/:cartItemId", removeFromCart);
 
 // Clear entire cart
 router.delete("/clear", clearCart);
+
+// Set addons on a cart item
+router.put("/addons/:cartItemId", setCartItemAddons);
 
 export default router;

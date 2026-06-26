@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ClientOnly } from "@/components/client-only";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { fetchApi, formatCurrency, formatDate } from "@/lib/utils";
+import AddonSvgIcon from "@/components/AddonSvgIcon";
 export default function OrderDetailsPage({ params }) {
   const { orderId } = params;
   const { isAuthenticated, loading } = useAuth();
@@ -519,6 +520,20 @@ export default function OrderDetailsPage({ params }) {
                             {formatCurrency(item.price)} × {item.quantity} ={" "}
                             {formatCurrency(item.subtotal)}
                           </p>
+                          {item.addons && item.addons.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-gray-100">
+                              <p className="text-xs font-medium text-gray-500 mb-1">Add-on Services:</p>
+                              {item.addons.map((addon) => (
+                                <div key={addon.id} className="flex items-center justify-between text-xs text-gray-600 py-0.5">
+                                  <span className="flex items-center gap-1.5">
+                                    <AddonSvgIcon icon={addon.icon} size={13} className="text-gray-500" />
+                                    {addon.name}
+                                  </span>
+                                  <span className="font-medium">{formatCurrency(addon.price)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         {order.status === "DELIVERED" && (
                           <div className="mt-3 space-y-2">

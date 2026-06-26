@@ -434,6 +434,7 @@ export const paymentVerification = asyncHandler(async (req, res) => {
     const cartItems = await prisma.cartItem.findMany({
       where: { userId },
       include: {
+        addons: { include: { addonService: true } },
         productVariant: {
           include: {
             product: {
@@ -742,6 +743,20 @@ export const paymentVerification = asyncHandler(async (req, res) => {
         });
         orderItems.push(orderItem);
 
+        // Save selected addons as OrderItemAddon (price snapshot)
+        if (item.addons && item.addons.length > 0) {
+          for (const cartAddon of item.addons) {
+            await tx.orderItemAddon.create({
+              data: {
+                orderItemId: orderItem.id,
+                addonServiceId: cartAddon.addonService.id,
+                name: cartAddon.addonService.name,
+                price: cartAddon.price,
+              },
+            });
+          }
+        }
+
         // Update inventory
         await tx.productVariant.update({
           where: { id: variant.id },
@@ -925,6 +940,7 @@ export const getOrderHistory = asyncHandler(async (req, res) => {
               },
             },
           },
+          addons: { include: { addonService: true } },
           returnRequests: {
             select: {
               id: true,
@@ -1024,6 +1040,12 @@ export const getOrderHistory = asyncHandler(async (req, res) => {
         price: parseFloat(item.price),
         quantity: item.quantity,
         subtotal: parseFloat(item.subtotal),
+        addons: (item.addons || []).map((a) => ({
+          id: a.addonServiceId,
+          name: a.name,
+          price: parseFloat(a.price),
+          icon: a.addonService?.icon || null,
+        })),
         // Include return request information
         returnRequest: item.returnRequests && item.returnRequests.length > 0
           ? {
@@ -1106,6 +1128,7 @@ export const getOrderDetails = asyncHandler(async (req, res) => {
               },
             },
           },
+          addons: true,
           // Include return requests for each item
           returnRequests: {
             orderBy: { createdAt: "desc" },
@@ -1186,6 +1209,11 @@ export const getOrderDetails = asyncHandler(async (req, res) => {
       price: parseFloat(item.price),
       quantity: item.quantity,
       subtotal: parseFloat(item.subtotal),
+      addons: (item.addons || []).map((a) => ({
+        id: a.addonServiceId,
+        name: a.name,
+        price: parseFloat(a.price),
+      })),
       // Include return request information
       returnRequest: item.returnRequests && item.returnRequests.length > 0
         ? {
@@ -1405,6 +1433,7 @@ export const phonePeCallback = asyncHandler(async (req, res) => {
       const cartItems = await prisma.cartItem.findMany({
         where: { userId },
         include: {
+          addons: { include: { addonService: true } },
           productVariant: {
             include: {
               product: true,
@@ -1542,6 +1571,7 @@ export const createCashOrder = asyncHandler(async (req, res) => {
     const cartItems = await prisma.cartItem.findMany({
       where: { userId },
       include: {
+        addons: { include: { addonService: true } },
         productVariant: {
           include: {
             product: {
@@ -1758,6 +1788,20 @@ export const createCashOrder = asyncHandler(async (req, res) => {
           },
         });
         orderItems.push(orderItem);
+
+        // Save selected addons as OrderItemAddon (price snapshot)
+        if (item.addons && item.addons.length > 0) {
+          for (const cartAddon of item.addons) {
+            await tx.orderItemAddon.create({
+              data: {
+                orderItemId: orderItem.id,
+                addonServiceId: cartAddon.addonService.id,
+                name: cartAddon.addonService.name,
+                price: cartAddon.price,
+              },
+            });
+          }
+        }
 
         // Update inventory
         await tx.productVariant.update({

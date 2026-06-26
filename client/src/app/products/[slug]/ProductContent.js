@@ -18,9 +18,11 @@ import {
   ZoomIn,
   ZoomOut,
   X,
+  Share2,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import ReviewSection from "./ReviewSection";
 import { useAddVariantToCart } from "@/lib/cart-utils";
 import {
@@ -30,6 +32,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { parseWashingCare, getIconByName } from "./WashingCareIcons";
+import AddonSvgIcon from "@/components/AddonSvgIcon";
 
 function WashingCareList({ raw }) {
   const rows = parseWashingCare(raw);
@@ -79,6 +82,9 @@ export default function ProductContent({ slug }) {
   const [initialLoading, setInitialLoading] = useState(true);
   const [priceVisibilitySettings, setPriceVisibilitySettings] = useState(null);
 
+  const [addonServices, setAddonServices] = useState([]);
+  const [selectedAddonIds, setSelectedAddonIds] = useState([]);
+
   const { addVariantToCart } = useAddVariantToCart();
 
   // Note: Attribute ordering is handled by the backend
@@ -98,6 +104,13 @@ export default function ProductContent({ slug }) {
 
         setProduct(productData);
         setRelatedProducts(response.data.relatedProducts || []);
+
+        // Fetch addon services for this product
+        if (productData.id) {
+          fetchApi(`/public/products/${productData.id}/addons`)
+            .then((r) => setAddonServices(r.data?.addons || []))
+            .catch(() => {});
+        }
 
         // Set main image
         if (productData.images && productData.images.length > 0) {
@@ -338,14 +351,12 @@ export default function ProductContent({ slug }) {
       const result = await addVariantToCart(
         selectedVariant,
         quantity,
-        product.name
+        product.name,
+        selectedAddonIds
       );
       if (result.success) {
         setCartSuccess(true);
-        // Clear success message after 3 seconds
-        setTimeout(() => {
-          setCartSuccess(false);
-        }, 3000);
+        setTimeout(() => { setCartSuccess(false); }, 3000);
       }
     } catch (err) {
       console.error("Error adding to cart:", err);
@@ -972,18 +983,19 @@ export default function ProductContent({ slug }) {
 
         {/* Right Column - Product Details */}
         <div className="flex flex-col lg:pl-10">
-          {/* Brand name (show plain text regardless of shape) */}
+          {/* Brand name */}
           {product.brand && (
             <Link
               href={`/brand/${product.brand.slug}`}
-              className="text-gray-500 uppercase tracking-widest text-[10px] font-semibold mb-3 hover:text-black"
+              className="text-gray-400 uppercase tracking-widest text-[10px] font-semibold mb-2 hover:text-gray-700 no-underline"
+              style={{ color: "#9ca3af", textDecoration: "none" }}
             >
               {product.brand?.name ?? product.brand ?? product.brandName ?? ""}
             </Link>
           )}
 
           {/* Product name */}
-          <h1 className="text-2xl md:text-3xl lg:text-4xl font-normal mb-4 font-serif text-[#3D1C02]">
+          <h1 className="text-2xl md:text-3xl lg:text-4xl font-normal mb-2 font-serif text-[#3D1C02] leading-tight">
             {product.name}
           </h1>
 
@@ -1043,13 +1055,55 @@ export default function ProductContent({ slug }) {
                           const isSelected = selectedValueId === value.id;
                           const isAvailable = true; // Values are already filtered
 
+                          // Image swatch
+                          if (value.image) {
+                            return (
+                              <button
+                                key={value.id}
+                                onClick={() => isAvailable && handleAttributeChange(attribute.id, value.id)}
+                                disabled={!isAvailable}
+                                title={value.value}
+                                className={`relative flex flex-col items-center gap-1.5 group/swatch transition-all ${!isAvailable ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+                              >
+                                <div className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${isSelected ? "border-[#3D1C02] ring-2 ring-[#3D1C02] ring-offset-1" : "border-gray-200 hover:border-[#3D1C02]"}`}>
+                                  <img src={value.image} alt={value.value} className="w-full h-full object-cover" />
+                                </div>
+                                <span className={`text-[10px] font-medium text-center leading-tight max-w-[64px] truncate ${isSelected ? "text-[#3D1C02]" : "text-gray-500"}`}>
+                                  {value.value}
+                                </span>
+                                {isSelected && <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#3D1C02] rounded-full flex items-center justify-center"><svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg></span>}
+                              </button>
+                            );
+                          }
+
+                          // HexCode color swatch
+                          if (value.hexCode) {
+                            return (
+                              <button
+                                key={value.id}
+                                onClick={() => isAvailable && handleAttributeChange(attribute.id, value.id)}
+                                disabled={!isAvailable}
+                                title={value.value}
+                                className={`relative flex flex-col items-center gap-1.5 transition-all ${!isAvailable ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+                              >
+                                <div className={`w-10 h-10 rounded-full border-2 transition-all ${isSelected ? "border-[#3D1C02] ring-2 ring-[#3D1C02] ring-offset-1" : "border-gray-300 hover:border-[#3D1C02]"}`}
+                                  style={{ backgroundColor: value.hexCode }} />
+                                <span className={`text-[10px] font-medium text-center leading-tight max-w-[48px] truncate ${isSelected ? "text-[#3D1C02]" : "text-gray-500"}`}>
+                                  {value.value}
+                                </span>
+                                {isSelected && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-[#3D1C02] rounded-full flex items-center justify-center"><svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg></span>}
+                              </button>
+                            );
+                          }
+
+                          // Default text pill
                           return (
                             <button
                               key={value.id}
                               className={`px-6 py-3 border text-sm font-medium transition-all ${isSelected
-                                ? "border-black bg-black text-white"
+                                ? "border-[#3D1C02] bg-[#3D1C02] text-white"
                                 : isAvailable
-                                  ? "border-gray-300 hover:border-black text-gray-700 bg-white"
+                                  ? "border-gray-300 hover:border-[#3D1C02] text-gray-700 bg-white"
                                   : "border-gray-200 text-gray-400 cursor-not-allowed"
                                 }`}
                               onClick={() => isAvailable && handleAttributeChange(attribute.id, value.id)}
@@ -1142,6 +1196,52 @@ export default function ProductContent({ slug }) {
             )}
           </div>
 
+          {/* Add-on Services */}
+          {addonServices.length > 0 && (
+            <div className="py-6 border-t border-gray-200">
+              <h3 className="text-xs font-semibold mb-4 text-gray-900 uppercase tracking-widest">
+                Yes, You Need Additional Services
+              </h3>
+              <div className="space-y-2">
+                {addonServices.map((addon) => {
+                  const isSelected = selectedAddonIds.includes(addon.id);
+                  return (
+                    <label
+                      key={addon.id}
+                      className={`flex items-center gap-3 p-3 border cursor-pointer transition-all ${isSelected ? "border-[#3D1C02] bg-[#3D1C02]/5" : "border-gray-200 hover:border-[#3D1C02]/40"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() =>
+                          setSelectedAddonIds((prev) =>
+                            isSelected ? prev.filter((id) => id !== addon.id) : [...prev, addon.id]
+                          )
+                        }
+                        className="h-4 w-4 accent-[#3D1C02]"
+                      />
+                      <AddonSvgIcon icon={addon.icon} size={20} className="text-gray-700" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium text-gray-900">{addon.name}</span>
+                        {addon.description && (
+                          <p className="text-xs text-gray-500 mt-0.5">{addon.description}</p>
+                        )}
+                      </div>
+                      <span className="text-sm font-semibold text-[#3D1C02] flex-shrink-0">
+                        {formatCurrency(addon.price)}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              {selectedAddonIds.length > 0 && (
+                <p className="text-xs text-gray-500 mt-2">
+                  Addon total: {formatCurrency(addonServices.filter((a) => selectedAddonIds.includes(a.id)).reduce((s, a) => s + a.price, 0))}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Quantity Selector */}
           <div className="mb-8 pt-6 border-t border-gray-200">
             <h3 className="text-xs font-semibold mb-4 text-gray-900 uppercase tracking-widest">Quantity</h3>
@@ -1213,6 +1313,23 @@ export default function ProductContent({ slug }) {
               <Heart
                 className={`h-6 w-6 text-black ${isInWishlist ? "fill-current text-red-600" : ""}`}
               />
+            </Button>
+
+            <Button
+              variant="outline"
+              className="rounded-none h-auto py-2 px-4 border border-gray-300 hover:border-black hover:text-black transition-all"
+              onClick={async () => {
+                const url = window.location.href;
+                if (navigator.share) {
+                  try { await navigator.share({ title: product.name, url }); } catch (_) {}
+                } else {
+                  await navigator.clipboard.writeText(url);
+                  toast.success("Link copied to clipboard!");
+                }
+              }}
+              title="Share this product"
+            >
+              <Share2 className="h-6 w-6 text-black" />
             </Button>
           </div>
 

@@ -71,12 +71,13 @@ export const useAddProductToCart = () => {
 
 // Function to handle variant selection and add to cart
 export const useAddVariantToCart = () => {
-  const { addToCart } = useCart();
+  const { addToCart, fetchCart } = useCart();
 
   const addVariantToCart = async (
     selectedVariant,
     quantity = 1,
-    productName = "Product"
+    productName = "Product",
+    addonServiceIds = []
   ) => {
     try {
       if (!selectedVariant) {
@@ -84,7 +85,29 @@ export const useAddVariantToCart = () => {
         return { success: false, error: "No variant selected" };
       }
 
-      await addToCart(selectedVariant.id, quantity);
+      const cartData = await addToCart(selectedVariant.id, quantity);
+
+      // Set addons on the cart item if any selected
+      // Server returns ApiResponsive: { statusCode, data: cartItem, message }
+      // cart-context addToCart returns res.data (the full ApiResponsive object)
+      const cartItemId =
+        cartData?.data?.id ||   // ApiResponsive wrapper: { data: { id } }
+        cartData?.id ||          // direct cartItem object
+        cartData?.cartItem?.id;  // legacy shape
+      if (addonServiceIds.length > 0 && cartItemId) {
+        try {
+          await fetchApi(`/cart/addons/${cartItemId}`, {
+            method: "PUT",
+            credentials: "include",
+            body: JSON.stringify({ addonServiceIds }),
+          });
+          // Refresh cart to pick up addon changes
+          if (fetchCart) await fetchCart();
+        } catch (e) {
+          console.error("Failed to set cart item addons", e);
+        }
+      }
+
       toast.success(`${productName} added to cart`);
       return { success: true };
     } catch (error) {

@@ -170,26 +170,24 @@ export const verifyPayoneerPayment = asyncHandler(async (req, res) => {
 
   if (!verified) throw new ApiError(402, "Payoneer payment not confirmed");
 
-  // Load address + cart
+  // Load address
   const shippingAddr = await prisma.address.findFirst({ where: { id: shippingAddressId, userId } });
   if (!shippingAddr) throw new ApiError(400, "Shipping address not found");
 
-  const cart = await prisma.cart.findUnique({
+  // ── Load cart items (CartItem model, not Cart) ─────────────────────────────
+  const cartItems = await prisma.cartItem.findMany({
     where: { userId },
     include: {
-      items: {
+      addons: { include: { addonService: true } },
+      productVariant: {
         include: {
-          variant: {
-            include: {
-              product: { include: { flashSales: { include: { flashSale: true } } } },
-              pricingSlabs: true,
-            },
-          },
+          product: { include: { flashSales: { include: { flashSale: true } } } },
+          pricingSlabs: true,
         },
       },
     },
   });
-  if (!cart?.items?.length) throw new ApiError(400, "Cart is empty");
+  if (!cartItems?.length) throw new ApiError(400, "Cart is empty");
 
   let couponRecord = null;
   if (couponCode) {
@@ -198,16 +196,31 @@ export const verifyPayoneerPayment = asyncHandler(async (req, res) => {
 
   const orderItems = [];
   let subtotal = 0;
-  for (const cartItem of cart.items) {
-    const variant = cartItem.variant;
+  for (const cartItem of cartItems) {
+    const variant = cartItem.productVariant;
     if (!variant?.isActive) continue;
     const flashSaleDiscount = variant.product?.flashSales?.[0]?.flashSale?.discountPercentage ?? null;
     const priceInfo = applyFlashSalePrice(variant, cartItem.quantity, flashSaleDiscount);
     const lineTotal = priceInfo.price * cartItem.quantity;
-    subtotal += lineTotal;
+
+    // Add addon prices
+    const addonsTotal = (cartItem.addons || []).reduce((sum, a) => {
+      return sum + parseFloat(a.addonService?.price || a.price || 0);
+    }, 0);
+
+    subtotal += lineTotal + addonsTotal;
+
     orderItems.push({
-      variantId: variant.id, productId: variant.productId,
-      quantity: cartItem.quantity, price: priceInfo.price, subtotal: lineTotal,
+      variantId: variant.id,
+      productId: variant.productId,
+      quantity: cartItem.quantity,
+      price: priceInfo.price,
+      subtotal: lineTotal + addonsTotal,
+      addons: (cartItem.addons || []).map((a) => ({
+        addonServiceId: a.addonServiceId,
+        name: a.addonService?.name || "",
+        price: parseFloat(a.addonService?.price || a.price || 0),
+      })),
     });
   }
   if (!orderItems.length) throw new ApiError(400, "No active items in cart");
@@ -237,24 +250,62 @@ export const verifyPayoneerPayment = asyncHandler(async (req, res) => {
         couponId: couponRecord?.id || null,
         couponCode: couponRecord?.code || null,
         notes: `${notes} [payoneer:${paymentRef}${payoneerPaymentId ? `:${payoneerPaymentId}` : ""}]`.trim(),
-        items: { create: orderItems.map(i => ({ variantId: i.variantId, productId: i.productId, quantity: i.quantity, price: i.price, subtotal: i.subtotal })) },
+        items: {
+          create: orderItems.map((i) => ({
+            variantId: i.variantId,
+            productId: i.productId,
+            quantity: i.quantity,
+            price: i.price,
+            subtotal: i.subtotal,
+          })),
+        },
       },
       include: { items: true, shippingAddress: true, user: true },
     });
 
-    for (const item of orderItems) {
-      await tx.productVariant.update({ where: { id: item.variantId }, data: { quantity: { decrement: item.quantity } } });
+    // Save OrderItemAddon records
+    for (let i = 0; i < order.items.length; i++) {
+      const orderItem = order.items[i];
+      const sourceItem = orderItems[i];
+      if (sourceItem?.addons?.length) {
+        await tx.orderItemAddon.createMany({
+          data: sourceItem.addons.map((a) => ({
+            orderItemId: orderItem.id,
+            addonServiceId: a.addonServiceId,
+            name: a.name,
+            price: a.price,
+          })),
+        });
+      }
     }
-    await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+
+    for (const item of orderItems) {
+      await tx.productVariant.update({
+        where: { id: item.variantId },
+        data: { quantity: { decrement: item.quantity } },
+      });
+    }
+
+    // Clear cart items for this user
+    await tx.cartItem.deleteMany({ where: { userId } });
+
     if (couponRecord) {
-      await tx.coupon.update({ where: { id: couponRecord.id }, data: { usageCount: { increment: 1 } } }).catch(() => {});
+      await tx.coupon.update({
+        where: { id: couponRecord.id },
+        data: { usageCount: { increment: 1 } },
+      }).catch(() => {});
     }
     return order;
   });
 
   // Email (non-blocking)
   prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true } })
-    .then(u => { if (u?.email) { const html = getOrderConfirmationTemplate({ ...dbOrder, user: u }); sendEmail({ to: u.email, subject: `Order Confirmed #${dbOrder.orderNumber}`, html }).catch(() => {}); } })
+    .then((u) => {
+      if (u?.email) {
+        const html = getOrderConfirmationTemplate({ ...dbOrder, user: u });
+        sendEmail({ to: u.email, subject: `Order Confirmed #${dbOrder.orderNumber}`, html }).catch(() => {});
+      }
+    })
     .catch(() => {});
 
   res.status(200).json(new ApiResponsive(200, {

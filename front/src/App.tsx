@@ -14,6 +14,7 @@ import OrderDetailsPage from "./pages/OrderDetailsPage";
 import CategoriesPage from "./pages/CategoriesPage";
 import AttributesPage from "./pages/AttributesPage";
 import AttributeValuesPage from "./pages/AttributeValuesPage";
+import AddonServicesPage from "./pages/AddonServicesPage";
 import CouponsPage from "./pages/CouponsPage";
 import AdminsPage from "./pages/AdminsPage";
 import AdminCreatePage from "./pages/AdminCreatePage";
@@ -286,6 +287,15 @@ const App = () => {
                   action={Action.UPDATE}
                 >
                   <AttributesPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="addon-services"
+              element={
+                <ProtectedRoute resource={Resource.PRODUCTS} action={Action.READ}>
+                  <AddonServicesPage />
                 </ProtectedRoute>
               }
             />

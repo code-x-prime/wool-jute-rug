@@ -62,11 +62,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { brands as brandsApi, categories as categoriesApi, attributes as attributesApi, attributeValues as attributeValuesApi } from "@/api/adminService";
+import { brands as brandsApi, categories as categoriesApi, attributes as attributesApi, attributeValues as attributeValuesApi, addonServices as addonServicesApi } from "@/api/adminService";
 
 import { useLanguage } from "@/context/LanguageContext";
 import { useTheme } from "@/hooks/useTheme";
 import { WASHING_CARE_ICONS, parseWashingCare } from "@/components/WashingCareIcons";
+import AddonSvgIcon from "@/components/AddonSvgIcon";
 
 function useCategories() {
   const [categoriesData, setCategoriesData] = useState<any[]>([]);
@@ -131,6 +132,22 @@ export function ProductForm({
   >({});
   const [brandsList, setBrandsList] = useState<any[]>([]);
   const [hasVariants, setHasVariants] = useState(false);
+  const [allAddonServices, setAllAddonServices] = useState<any[]>([]);
+  const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);
+  // Inline addon CRUD
+  const [showAddonCreate, setShowAddonCreate] = useState(false);
+  const [addonEditingId, setAddonEditingId] = useState<string | null>(null);
+  const [addonForm, setAddonForm] = useState({ name: "", description: "", price: "", icon: "", isActive: true });
+  const [addonSaving, setAddonSaving] = useState(false);
+  const [showAddonIconPicker, setShowAddonIconPicker] = useState(false);
+  const ADDON_ICON_PRESETS = [
+    { label: "Anti-Slip", icon: "🛡️" }, { label: "Stain Resist", icon: "✨" },
+    { label: "Wash", icon: "🧺" }, { label: "Custom Size", icon: "📐" },
+    { label: "Delivery", icon: "🚚" }, { label: "Install", icon: "🔧" },
+    { label: "Protect", icon: "🔒" }, { label: "Gift Wrap", icon: "🎁" },
+    { label: "Fragrance", icon: "🌸" }, { label: "Repair", icon: "🪡" },
+    { label: "Cleaning", icon: "🧹" }, { label: "Padding", icon: "📦" },
+  ];
 
   // ── Inline quick-create state ──────────────────────────────────────────────
   const [showQuickBrand, setShowQuickBrand] = useState(false);
@@ -655,6 +672,54 @@ export function ProductForm({
     fetchAttributes();
   }, []);
 
+  // Fetch addon services
+  const reloadAddonServices = () => {
+    addonServicesApi.getAll().then((res) => {
+      setAllAddonServices(res.data.data?.addons || []);
+    }).catch(() => {});
+  };
+  useEffect(() => { reloadAddonServices(); }, []);
+
+  const handleAddonSave = async (id?: string) => {
+    if (!addonForm.name.trim() || !addonForm.price) { toast.error("Name and price required"); return; }
+    setAddonSaving(true);
+    try {
+      const data = { name: addonForm.name.trim(), description: addonForm.description || undefined, price: parseFloat(addonForm.price), icon: addonForm.icon || undefined, isActive: addonForm.isActive };
+      if (id) {
+        await addonServicesApi.update(id, data);
+        toast.success("Addon updated");
+        setAddonEditingId(null);
+      } else {
+        const res = await addonServicesApi.create(data);
+        const newId = res.data.data?.addon?.id;
+        toast.success("Addon created");
+        setShowAddonCreate(false);
+        if (newId) setSelectedAddonIds((prev) => [...prev, newId]);
+      }
+      setAddonForm({ name: "", description: "", price: "", icon: "", isActive: true });
+      setShowAddonIconPicker(false);
+      reloadAddonServices();
+    } catch { toast.error("Save failed"); }
+    finally { setAddonSaving(false); }
+  };
+
+  const handleAddonDelete = async (id: string) => {
+    if (!confirm("Delete this addon service? It will be removed from all products.")) return;
+    try {
+      await addonServicesApi.delete(id);
+      toast.success("Deleted");
+      setSelectedAddonIds((prev) => prev.filter((x) => x !== id));
+      reloadAddonServices();
+    } catch { toast.error("Delete failed"); }
+  };
+
+  const startAddonEdit = (a: any) => {
+    setAddonEditingId(a.id);
+    setShowAddonCreate(false);
+    setShowAddonIconPicker(false);
+    setAddonForm({ name: a.name, description: a.description || "", price: String(a.price), icon: a.icon || "", isActive: a.isActive });
+  };
+
   // Fetch brands for selection
   useEffect(() => {
     const fetchBrands = async () => {
@@ -1160,6 +1225,12 @@ export function ProductForm({
       };
 
       fetchProductDetails();
+
+      // Fetch product addons
+      addonServicesApi.getProductAddons(productId).then((res) => {
+        const ids = (res.data.data?.addons || []).map((a: any) => a.id);
+        setSelectedAddonIds(ids);
+      }).catch(() => {});
 
       // Fetch Product MOQ
       if (mode === "edit" && productId) {
@@ -1752,6 +1823,15 @@ export function ProductForm({
             console.error("Error saving MOQ:", error);
             // Don't fail the whole operation if MOQ save fails
             toast.error("Product saved but MOQ settings failed to update");
+          }
+        }
+
+        // Save addon services for this product
+        if (savedProductId) {
+          try {
+            await addonServicesApi.setProductAddons(savedProductId, selectedAddonIds);
+          } catch {
+            toast.error("Product saved but addon services failed to update");
           }
         }
 
@@ -2946,12 +3026,12 @@ export function ProductForm({
                                       </div>
                                       {/* Image upload */}
                                       <div className="flex items-center gap-2">
-                                        {ev.imagePreview && (
-                                          <img src={ev.imagePreview} alt="preview" className="h-8 w-8 rounded object-cover border flex-shrink-0" />
+                                        {(ev.imagePreview || value.image) && (
+                                          <img src={ev.imagePreview || value.image} alt="preview" className="h-10 w-10 rounded-md object-cover border border-gray-200 shadow-sm flex-shrink-0" />
                                         )}
                                         <label className="flex items-center gap-1 cursor-pointer text-xs text-[var(--accent)] hover:underline">
                                           <ImageIcon className="h-3 w-3" />
-                                          {ev.imagePreview ? "Change image" : "Add image"}
+                                          {(ev.imagePreview || value.image) ? "Change image" : "Add image"}
                                           <input type="file" accept="image/*" className="hidden"
                                             onChange={(e) => {
                                               const file = e.target.files?.[0] || null;
@@ -2968,7 +3048,7 @@ export function ProductForm({
                                 }
                                 // ── Normal display row ───────────────────
                                 return (
-                                  <div key={value.id} className="flex items-center space-x-2 group py-0.5">
+                                  <div key={value.id} className="flex items-center gap-2 group py-1">
                                     <input
                                       type="checkbox"
                                       id={`attr-${attribute.id}-value-${value.id}`}
@@ -2976,15 +3056,18 @@ export function ProductForm({
                                       onChange={() => handleAttributeValueToggle(attribute.id, value.id)}
                                       className="h-5 w-5 rounded border-[var(--border-color)] text-[var(--accent)] focus:ring-[var(--accent)] cursor-pointer flex-shrink-0"
                                     />
-                                    {value.hexCode && (
-                                      <span className="inline-block h-4 w-4 rounded-full border border-gray-300 flex-shrink-0" style={{ background: value.hexCode }} />
-                                    )}
-                                    {value.image && !value.hexCode && (
-                                      <img src={value.image} alt={value.value} className="h-5 w-5 rounded object-cover flex-shrink-0 border" />
-                                    )}
+                                    {/* Image swatch — show if image exists */}
+                                    {value.image ? (
+                                      <img src={value.image} alt={value.value} className="h-10 w-10 rounded-md object-cover flex-shrink-0 border border-gray-200 shadow-sm" />
+                                    ) : value.hexCode ? (
+                                      <span className="inline-block h-7 w-7 rounded-full border-2 border-gray-300 flex-shrink-0 shadow-sm" style={{ background: value.hexCode }} />
+                                    ) : null}
                                     <Label htmlFor={`attr-${attribute.id}-value-${value.id}`}
                                       className="text-sm font-normal cursor-pointer text-[var(--text-primary)] flex-1">
                                       {value.value}
+                                      {value.hexCode && (
+                                        <span className="ml-1.5 text-xs text-gray-400 font-mono">{value.hexCode}</span>
+                                      )}
                                     </Label>
                                     <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity flex-shrink-0">
                                       <button type="button" title="Edit value"
@@ -3199,6 +3282,194 @@ export function ProductForm({
               </p>
             </div>
           )}
+
+          {/* Addon Services — inline CRUD + assign */}
+          <div className="rounded-lg border bg-[var(--bg-secondary)]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <div>
+                <h2 className="text-base font-semibold">Add-on Services</h2>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">Create services here, then check to assign to this product</p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1"
+                onClick={() => { setShowAddonCreate(true); setAddonEditingId(null); setAddonForm({ name: "", description: "", price: "", icon: "", isActive: true }); setShowAddonIconPicker(false); }}
+              >
+                <Plus className="h-3.5 w-3.5" /> New Service
+              </Button>
+            </div>
+
+            <div className="p-4 space-y-2">
+              {/* Inline create form */}
+              {showAddonCreate && (
+                <div className="rounded-lg border border-dashed border-[var(--accent)]/40 bg-[var(--bg-primary)] p-3 space-y-3 mb-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs mb-1 block">Name *</Label>
+                      <Input value={addonForm.name} onChange={(e) => setAddonForm({ ...addonForm, name: e.target.value })} placeholder="e.g. Anti-Slip Mat" className="h-8 text-sm" />
+                    </div>
+                    <div>
+                      <Label className="text-xs mb-1 block">Price (₹) *</Label>
+                      <Input type="number" value={addonForm.price} onChange={(e) => setAddonForm({ ...addonForm, price: e.target.value })} placeholder="5200" className="h-8 text-sm" min="0" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs mb-1 block">Description</Label>
+                      <Input value={addonForm.description} onChange={(e) => setAddonForm({ ...addonForm, description: e.target.value })} placeholder="Short description" className="h-8 text-sm" />
+                    </div>
+                    <div>
+                      <Label className="text-xs mb-1 block">Icon</Label>
+                      <div className="flex gap-1.5">
+                        <Input value={addonForm.icon} onChange={(e) => setAddonForm({ ...addonForm, icon: e.target.value })} placeholder="emoji" className="h-8 text-sm flex-1" maxLength={8} />
+                        <Button type="button" size="sm" variant="outline" className="h-8 px-2 text-xs" onClick={() => setShowAddonIconPicker((v) => !v)}>Pick</Button>
+                      </div>
+                      {showAddonIconPicker && (
+                        <div className="flex flex-wrap gap-1 mt-1.5 p-2 rounded border bg-[var(--bg-secondary)]">
+                          {ADDON_ICON_PRESETS.map((p) => (
+                            <button key={p.icon} type="button" title={p.label} onClick={() => { setAddonForm((f) => ({ ...f, icon: p.icon })); setShowAddonIconPicker(false); }}
+                              className={`flex flex-col items-center px-1.5 py-1 rounded text-center hover:bg-[var(--bg-primary)] transition-colors ${addonForm.icon === p.icon ? "ring-1 ring-[var(--accent)]" : ""}`}>
+                              <AddonSvgIcon icon={p.icon} size={22} className="text-gray-700" />
+                              <span className="text-[9px] text-[var(--text-secondary)]">{p.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={addonForm.isActive} onChange={(e) => setAddonForm({ ...addonForm, isActive: e.target.checked })} className="h-3.5 w-3.5" />
+                      <span className="text-xs">Active</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <Button type="button" size="sm" className="h-7 text-xs" onClick={() => handleAddonSave()} disabled={addonSaving}>
+                        {addonSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />} Create
+                      </Button>
+                      <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setShowAddonCreate(false); setShowAddonIconPicker(false); }}>
+                        <X className="h-3 w-3" /> Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Addon list */}
+              {allAddonServices.length === 0 ? (
+                <p className="text-sm text-[var(--text-secondary)] text-center py-4">No addon services yet — create one above.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {allAddonServices.map((addon) => {
+                    const isSelected = selectedAddonIds.includes(addon.id);
+                    const isEditing = addonEditingId === addon.id;
+                    return (
+                      <div key={addon.id} className={`rounded-lg border transition-colors ${isSelected ? "border-[var(--accent)] bg-[var(--accent)]/5" : "border-[var(--border-color)] bg-[var(--bg-primary)]"}`}>
+                        {isEditing ? (
+                          /* Inline edit form */
+                          <div className="p-3 space-y-3">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <Label className="text-xs mb-1 block">Name *</Label>
+                                <Input value={addonForm.name} onChange={(e) => setAddonForm({ ...addonForm, name: e.target.value })} className="h-8 text-sm" />
+                              </div>
+                              <div>
+                                <Label className="text-xs mb-1 block">Price (₹) *</Label>
+                                <Input type="number" value={addonForm.price} onChange={(e) => setAddonForm({ ...addonForm, price: e.target.value })} className="h-8 text-sm" min="0" />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <Label className="text-xs mb-1 block">Description</Label>
+                                <Input value={addonForm.description} onChange={(e) => setAddonForm({ ...addonForm, description: e.target.value })} className="h-8 text-sm" />
+                              </div>
+                              <div>
+                                <Label className="text-xs mb-1 block">Icon</Label>
+                                <div className="flex gap-1.5">
+                                  <Input value={addonForm.icon} onChange={(e) => setAddonForm({ ...addonForm, icon: e.target.value })} placeholder="emoji" className="h-8 text-sm flex-1" maxLength={8} />
+                                  <Button type="button" size="sm" variant="outline" className="h-8 px-2 text-xs" onClick={() => setShowAddonIconPicker((v) => !v)}>Pick</Button>
+                                </div>
+                                {showAddonIconPicker && (
+                                  <div className="flex flex-wrap gap-1 mt-1.5 p-2 rounded border bg-[var(--bg-secondary)]">
+                                    {ADDON_ICON_PRESETS.map((p) => (
+                                      <button key={p.icon} type="button" title={p.label} onClick={() => { setAddonForm((f) => ({ ...f, icon: p.icon })); setShowAddonIconPicker(false); }}
+                                        className={`flex flex-col items-center px-1.5 py-1 rounded text-center hover:bg-[var(--bg-primary)] transition-colors ${addonForm.icon === p.icon ? "ring-1 ring-[var(--accent)]" : ""}`}>
+                                        <AddonSvgIcon icon={p.icon} size={22} className="text-gray-700" />
+                                        <span className="text-[9px] text-[var(--text-secondary)]">{p.label}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" checked={addonForm.isActive} onChange={(e) => setAddonForm({ ...addonForm, isActive: e.target.checked })} className="h-3.5 w-3.5" />
+                                <span className="text-xs">Active</span>
+                              </label>
+                              <div className="flex gap-2">
+                                <Button type="button" size="sm" className="h-7 text-xs" onClick={() => handleAddonSave(addon.id)} disabled={addonSaving}>
+                                  {addonSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : null} Save
+                                </Button>
+                                <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setAddonEditingId(null); setShowAddonIconPicker(false); }}>
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          /* Normal row */
+                          <label className="flex items-center gap-3 p-3 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => setSelectedAddonIds((prev) => isSelected ? prev.filter((id) => id !== addon.id) : [...prev, addon.id])}
+                              className="h-4 w-4 rounded flex-shrink-0"
+                            />
+                            <AddonSvgIcon icon={addon.icon} size={18} className="text-gray-700 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium flex items-center gap-2">
+                                {addon.name}
+                                {!addon.isActive && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--text-secondary)]/20 text-[var(--text-secondary)]">Inactive</span>}
+                              </div>
+                              {addon.description && <div className="text-xs text-[var(--text-secondary)] truncate">{addon.description}</div>}
+                            </div>
+                            <div className="text-sm font-mono font-semibold text-[var(--accent)] flex-shrink-0 mr-1">
+                              ₹{parseFloat(String(addon.price)).toLocaleString("en-IN")}
+                            </div>
+                            <div className="flex gap-0.5 flex-shrink-0" onClick={(e) => e.preventDefault()}>
+                              <Button
+                                type="button" size="sm" variant="ghost"
+                                className="h-7 w-7 p-0 hover:bg-[var(--bg-secondary)]"
+                                onClick={(e) => { e.preventDefault(); startAddonEdit(addon); }}
+                              >
+                                <Edit className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                type="button" size="sm" variant="ghost"
+                                className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-50"
+                                onClick={(e) => { e.preventDefault(); handleAddonDelete(addon.id); }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </label>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {selectedAddonIds.length > 0 && (
+                <p className="text-xs text-[var(--text-secondary)] pt-1">
+                  {selectedAddonIds.length} service{selectedAddonIds.length > 1 ? "s" : ""} selected for this product
+                </p>
+              )}
+            </div>
+          </div>
 
           {/* Submit Buttons */}
           <div className="flex justify-end gap-2">

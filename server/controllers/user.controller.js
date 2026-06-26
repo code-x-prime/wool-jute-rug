@@ -1249,6 +1249,7 @@ export const getOrderDetails = asyncHandler(async (req, res, next) => {
               },
             },
           },
+          addons: { include: { addonService: true } },
         },
       },
       tracking: {
@@ -1283,13 +1284,18 @@ export const getOrderDetails = asyncHandler(async (req, res, next) => {
       subtotal: parseFloat(item.subtotal),
       variant: item.variant ? {
         ...item.variant,
-        // Map attributes for consistent UI
         options: item.variant.attributes?.map(attr => ({
           name: attr.attributeValue.attribute.name,
           value: attr.attributeValue.value,
           hexCode: attr.attributeValue.hexCode
         })) || []
-      } : null
+      } : null,
+      addons: (item.addons || []).map(a => ({
+        id: a.addonServiceId,
+        name: a.name,
+        price: parseFloat(a.price),
+        icon: a.addonService?.icon || null,
+      }))
     }))
   };
 

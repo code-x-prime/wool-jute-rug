@@ -1,7 +1,7 @@
 "use client";
 
 import { formatCurrency, fetchApi } from "@/lib/utils";
-import { Eye, Heart } from "lucide-react";
+import { Eye, Heart, Share2 } from "lucide-react";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 import { useState, useEffect, useMemo } from "react";
@@ -79,6 +79,20 @@ const ProductCard = ({ product }) => {
   const handleQuickView = (product) => {
     setQuickViewProduct(product);
     setQuickViewOpen(true);
+  };
+
+  const handleShare = async (product, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const url = `${window.location.origin}/products/${product.slug}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: product.name, url });
+      } catch (_) {}
+    } else {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copied!");
+    }
   };
 
   const handleAddToWishlist = async (product, e) => {
@@ -451,44 +465,42 @@ const ProductCard = ({ product }) => {
             </div>
           )}
 
-          {/* Heart button - Top Right without background */}
-          <div className="absolute top-2 right-2 md:top-3 md:right-3 z-30 opacity-100 transition-all duration-300">
+          {/* Action icons - Top Right */}
+          <div className="absolute top-2 right-2 md:top-3 md:right-3 z-30 flex flex-col gap-1.5">
             <button
-              className={`hover:text-red-500 p-1 transition-colors ${wishlistItems[product.id] ? "text-red-500" : "text-gray-400"
-                }`}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleAddToWishlist(product, e);
-              }}
+              className={`hover:text-red-500 p-1 transition-colors ${wishlistItems[product.id] ? "text-red-500" : "text-gray-400"}`}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleAddToWishlist(product, e); }}
               disabled={isAddingToWishlist[product.id]}
-              title={
-                wishlistItems[product.id]
-                  ? "Remove from wishlist"
-                  : "Add to wishlist"
-              }
+              title={wishlistItems[product.id] ? "Remove from wishlist" : "Add to wishlist"}
             >
               <Heart
-                className={`h-5 w-5 md:h-6 md:w-6 ${wishlistItems[product.id] ? "fill-current" : ""
-                  }`}
+                className={`h-5 w-5 md:h-6 md:w-6 ${wishlistItems[product.id] ? "fill-current" : ""}`}
                 strokeWidth={1.5}
               />
             </button>
+            <button
+              className="text-gray-400 hover:text-gray-700 p-1 transition-colors"
+              onClick={(e) => handleShare(product, e)}
+              title="Share product"
+            >
+              <Share2 className="h-4 w-4 md:h-5 md:w-5" strokeWidth={1.5} />
+            </button>
           </div>
 
-          {/* View Similar Button - Bottom Right on Hover */}
-          {/* <div className="absolute bottom-2 right-2 z-30 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0">
+          {/* Quick View Button - Bottom on Hover */}
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0">
             <button
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                handleQuickView(product); // Repurposed for quick view
+                handleQuickView(product);
               }}
-              className="bg-white/90 hover:bg-white text-gray-800 text-[10px] md:text-xs font-medium px-3 py-1.5 rounded-full shadow-sm backdrop-blur-sm transition-colors"
+              className="bg-white/90 hover:bg-white text-gray-800 text-[10px] md:text-xs font-medium px-4 py-1.5 shadow-sm backdrop-blur-sm transition-colors whitespace-nowrap border border-gray-200 flex items-center gap-1.5"
             >
+              <Eye className="h-3 w-3" />
               Quick View
             </button>
-          </div> */}
+          </div>
         </div>
       </Link>
 

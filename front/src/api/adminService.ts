@@ -949,6 +949,19 @@ export const attributeValues = {
   },
 };
 
+// Addon Services Management
+export const addonServices = {
+  getAll: () => api.get("/api/admin/addon-services"),
+  create: (data: { name: string; description?: string; price: number; isActive?: boolean }) =>
+    api.post("/api/admin/addon-services", data),
+  update: (id: string, data: { name?: string; description?: string; price?: number; isActive?: boolean }) =>
+    api.put(`/api/admin/addon-services/${id}`, data),
+  delete: (id: string) => api.delete(`/api/admin/addon-services/${id}`),
+  getProductAddons: (productId: string) => api.get(`/api/admin/products/${productId}/addons`),
+  setProductAddons: (productId: string, addonServiceIds: string[]) =>
+    api.put(`/api/admin/products/${productId}/addons`, { addonServiceIds }),
+};
+
 // Product Sections Management
 export const productSections = {
   getProductSections: () => {

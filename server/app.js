@@ -46,6 +46,7 @@ import adminOAuthRoutes from "./routes/admin.oauth.routes.js";
 import adminMenuRoutes from "./routes/admin.menu.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import easyshipRoutes from "./routes/easyship.routes.js";
+import adminAddonRoutes from "./routes/admin.addon.routes.js";
 
 const app = express();
 
@@ -171,6 +172,7 @@ app.use("/api/admin", adminSiteSettingsRoutes);
 app.use("/api/admin", adminShoppableCarouselRoutes);
 app.use("/api/admin", adminOAuthRoutes);
 app.use("/api/admin", adminMenuRoutes);
+app.use("/api/admin", adminAddonRoutes);
 
 // Shiprocket webhook (public endpoint)
 app.use("/api/webhooks/shiprocket", adminShiprocketRoutes);

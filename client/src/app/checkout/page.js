@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import Link from "next/link";
 import AddressForm from "@/components/AddressForm";
 import Image from "next/image";
+import AddonSvgIcon from "@/components/AddonSvgIcon";
 
 // Helper function to format image URLs correctly
 const getImageUrl = (image) => {
@@ -1215,6 +1216,17 @@ export default function CheckoutPage() {
                           <p className="text-xs text-blue-600 mt-1">
                             Min. Order: {item.moq} units
                           </p>
+                        )}
+                        {item.addons && item.addons.length > 0 && (
+                          <div className="mt-1 space-y-0.5">
+                            {item.addons.map((addon) => (
+                              <div key={addon.id} className="flex items-center gap-1 text-xs text-gray-500">
+                                <AddonSvgIcon icon={addon.addonService?.icon || addon.icon} size={11} className="text-gray-400" />
+                                <span>{addon.addonService?.name || addon.name}</span>
+                                <span className="ml-auto">+{formatCurrency(addon.addonService?.price || addon.price)}</span>
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </div>
                       <p className="font-medium text-sm">

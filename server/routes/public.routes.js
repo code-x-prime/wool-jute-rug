@@ -28,6 +28,7 @@ import {
   submitRugServiceRequest,
   submitContactEnquiry,
 } from "../controllers/content.controller.js";
+import { getPublicProductAddons } from "../controllers/addon.controller.js";
 
 const router = express.Router();
 
@@ -77,6 +78,9 @@ router.get("/settings", getPublicSettings);
 
 // Public Menu Navigation
 router.get("/menus", getPublicMenus);
+
+// Product add-on services (public)
+router.get("/products/:productId/addons", getPublicProductAddons);
 
 // Public submissions
 router.post("/rug-services", submitRugServiceRequest);

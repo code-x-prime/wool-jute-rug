@@ -28,6 +28,7 @@ import {
   Globe,
   Cloud,
   Layers,
+  Plus,
 } from "lucide-react";
 import { HiVideoCamera } from "react-icons/hi";
 import { useTheme } from "@/hooks/useTheme";
@@ -401,6 +402,12 @@ export default function DashboardLayout() {
                     ),
                   },
                   {
+                    href: "/addon-services",
+                    title: "Addon Services",
+                    icon: <Plus className="h-3 w-3" />,
+                    hasPermission: hasPermissionFor(admin, Resource.PRODUCTS, Action.READ),
+                  },
+                  {
                     href: "/product-sections",
                     title: t("nav.product_sections"),
                     icon: <LayoutGrid className="h-3 w-3" />,
@@ -755,6 +762,12 @@ export default function DashboardLayout() {
                       Resource.PRODUCTS,
                       Action.READ
                     ),
+                  },
+                  {
+                    href: "/addon-services",
+                    title: "Addon Services",
+                    icon: <Plus className="h-3 w-3" />,
+                    hasPermission: hasPermissionFor(admin, Resource.PRODUCTS, Action.READ),
                   },
                   {
                     href: "/product-sections",

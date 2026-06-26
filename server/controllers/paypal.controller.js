@@ -172,27 +172,24 @@ export const capturePayPalPayment = asyncHandler(async (req, res) => {
   const shippingAddr = await prisma.address.findFirst({ where: { id: shippingAddressId, userId } });
   if (!shippingAddr) throw new ApiError(400, "Shipping address not found");
 
-  // ── Load cart ──────────────────────────────────────────────────────────────
-  const cart = await prisma.cart.findUnique({
+  // ── Load cart items (CartItem model, not Cart) ─────────────────────────────
+  const cartItems = await prisma.cartItem.findMany({
     where: { userId },
     include: {
-      items: {
+      addons: { include: { addonService: true } },
+      productVariant: {
         include: {
-          variant: {
+          product: {
             include: {
-              product: {
-                include: {
-                  flashSales: { include: { flashSale: true } },
-                },
-              },
-              pricingSlabs: true,
+              flashSales: { include: { flashSale: true } },
             },
           },
+          pricingSlabs: true,
         },
       },
     },
   });
-  if (!cart?.items?.length) throw new ApiError(400, "Cart is empty");
+  if (!cartItems?.length) throw new ApiError(400, "Cart is empty");
 
   // ── Coupon ─────────────────────────────────────────────────────────────────
   let couponRecord = null;
@@ -206,21 +203,32 @@ export const capturePayPalPayment = asyncHandler(async (req, res) => {
   const orderItems = [];
   let subtotal = 0;
 
-  for (const cartItem of cart.items) {
-    const variant = cartItem.variant;
+  for (const cartItem of cartItems) {
+    const variant = cartItem.productVariant;
     if (!variant || !variant.isActive) continue;
 
     const flashSaleDiscount = variant.product?.flashSales?.[0]?.flashSale?.discountPercentage ?? null;
     const priceInfo = applyFlashSalePrice(variant, cartItem.quantity, flashSaleDiscount);
     const lineTotal = priceInfo.price * cartItem.quantity;
-    subtotal += lineTotal;
+
+    // Add addon prices to line total
+    const addonsTotal = (cartItem.addons || []).reduce((sum, a) => {
+      return sum + parseFloat(a.addonService?.price || a.price || 0);
+    }, 0);
+
+    subtotal += lineTotal + addonsTotal;
 
     orderItems.push({
       variantId: variant.id,
       productId: variant.productId,
       quantity: cartItem.quantity,
       price: priceInfo.price,
-      subtotal: lineTotal,
+      subtotal: lineTotal + addonsTotal,
+      addons: (cartItem.addons || []).map((a) => ({
+        addonServiceId: a.addonServiceId,
+        name: a.addonService?.name || "",
+        price: parseFloat(a.addonService?.price || a.price || 0),
+      })),
     });
   }
 
@@ -275,7 +283,7 @@ export const capturePayPalPayment = asyncHandler(async (req, res) => {
         discount,
         tax,
         total,
-        shippingProvider: "EASYSHIP", // international order uses Easyship
+        shippingProvider: "EASYSHIP",
         shippingAddressId: shippingAddr.id,
         couponId: couponRecord?.id || null,
         couponCode: couponRecord?.code || null,
@@ -294,7 +302,23 @@ export const capturePayPalPayment = asyncHandler(async (req, res) => {
       include: { items: true, shippingAddress: true, user: true },
     });
 
-    // Deduct inventory (no silent catch — must succeed)
+    // Save OrderItemAddon records for each order item
+    for (let i = 0; i < order.items.length; i++) {
+      const orderItem = order.items[i];
+      const sourceItem = orderItems[i];
+      if (sourceItem?.addons?.length) {
+        await tx.orderItemAddon.createMany({
+          data: sourceItem.addons.map((a) => ({
+            orderItemId: orderItem.id,
+            addonServiceId: a.addonServiceId,
+            name: a.name,
+            price: a.price,
+          })),
+        });
+      }
+    }
+
+    // Deduct inventory
     for (const item of orderItems) {
       await tx.productVariant.update({
         where: { id: item.variantId },
@@ -302,8 +326,8 @@ export const capturePayPalPayment = asyncHandler(async (req, res) => {
       });
     }
 
-    // Clear cart
-    await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+    // Clear cart items for this user
+    await tx.cartItem.deleteMany({ where: { userId } });
 
     // Apply coupon usage
     if (couponRecord) {

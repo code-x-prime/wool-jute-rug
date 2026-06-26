@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
+import AddonSvgIcon from "@/components/AddonSvgIcon";
 
 // Helper function to format image URLs correctly
 const getImageUrl = (image) => {
@@ -137,6 +138,18 @@ const CartItem = React.memo(
             {item.pricingSlabs && item.pricingSlabs.length > 0 && (
               <div className="text-xs text-gray-500 mt-1">
                 Bulk pricing available
+              </div>
+            )}
+            {/* Addon Services */}
+            {item.addons && item.addons.length > 0 && (
+              <div className="mt-2 space-y-0.5">
+                {item.addons.map((addon) => (
+                  <div key={addon.id} className="flex items-center gap-1.5 text-xs text-gray-600">
+                    <AddonSvgIcon icon={addon.addonService?.icon || addon.icon} size={13} className="text-gray-500" />
+                    <span>{addon.addonService?.name || addon.name}</span>
+                    <span className="ml-auto font-medium">+{formatCurrency(addon.addonService?.price || addon.price)}</span>
+                  </div>
+                ))}
               </div>
             )}
           </div>

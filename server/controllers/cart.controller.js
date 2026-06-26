@@ -14,6 +14,7 @@ export const getUserCart = asyncHandler(async (req, res) => {
   const cartItems = await prisma.cartItem.findMany({
     where: { userId },
     include: {
+      addons: { include: { addonService: true } },
       productVariant: {
         include: {
           product: {
@@ -154,7 +155,8 @@ export const getUserCart = asyncHandler(async (req, res) => {
       );
 
       const itemTotal = Math.round(effectivePrice * item.quantity);
-      subtotal += itemTotal;
+      const addonsTotal = Math.round((item.addons || []).reduce((sum, a) => sum + parseFloat(a.price), 0));
+      subtotal += itemTotal + addonsTotal;
 
       // Enhanced image handling with fallback logic
       let imageUrl = null;
@@ -178,7 +180,7 @@ export const getUserCart = asyncHandler(async (req, res) => {
         quantity: item.quantity,
         price: effectivePrice,
         originalPrice,
-        subtotal: itemTotal,
+        subtotal: itemTotal + addonsTotal,
         moq: effectiveMOQ,
         moqSource,
         pricingSlabs: allSlabs.map((slab) => ({
@@ -216,6 +218,20 @@ export const getUserCart = asyncHandler(async (req, res) => {
             name: pc.category?.name,
           })),
         },
+        addons: (item.addons || []).map((a) => ({
+          id: a.id,
+          addonServiceId: a.addonServiceId,
+          name: a.addonService.name,
+          price: parseFloat(a.price),
+          icon: a.addonService.icon || null,
+          addonService: {
+            id: a.addonService.id,
+            name: a.addonService.name,
+            price: parseFloat(a.addonService.price),
+            icon: a.addonService.icon || null,
+          },
+        })),
+        addonsTotal: (item.addons || []).reduce((sum, a) => sum + parseFloat(a.price), 0),
       };
     })
   );

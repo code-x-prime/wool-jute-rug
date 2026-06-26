@@ -2078,31 +2078,22 @@ export const updateProduct = asyncHandler(async (req, res, next) => {
             try {
               const moqSettings = JSON.parse(req.body.moqSettings);
               if (moqSettings && moqSettings.isActive) {
-                await prisma.mOQSetting.upsert({
-                  where: {
-                    scope_productId_variantId: {
-                      scope: "PRODUCT",
-                      productId: productId,
-                      variantId: null
-                    }
-                  },
-                  create: {
-                    scope: "PRODUCT",
-                    productId: productId,
-                    minQuantity: parseInt(moqSettings.minQuantity) || 1,
-                    isActive: true
-                  },
-                  update: {
-                    minQuantity: parseInt(moqSettings.minQuantity) || 1,
-                    isActive: true
-                  }
+                const existingMOQ = await prisma.mOQSetting.findFirst({
+                  where: { scope: "PRODUCT", productId: productId, variantId: null }
                 });
+                if (existingMOQ) {
+                  await prisma.mOQSetting.update({
+                    where: { id: existingMOQ.id },
+                    data: { minQuantity: parseInt(moqSettings.minQuantity) || 1, isActive: true }
+                  });
+                } else {
+                  await prisma.mOQSetting.create({
+                    data: { scope: "PRODUCT", productId: productId, minQuantity: parseInt(moqSettings.minQuantity) || 1, isActive: true }
+                  });
+                }
               } else {
                 await prisma.mOQSetting.deleteMany({
-                  where: {
-                    scope: "PRODUCT",
-                    productId: productId
-                  }
+                  where: { scope: "PRODUCT", productId: productId }
                 });
               }
             } catch (e) { }
@@ -2253,31 +2244,22 @@ export const updateProduct = asyncHandler(async (req, res, next) => {
                 : req.body.moqSettings;
 
               if (moqSettings && moqSettings.isActive) {
-                await prisma.mOQSetting.upsert({
-                  where: {
-                    scope_productId_variantId: {
-                      scope: "PRODUCT",
-                      productId: productId,
-                      variantId: null
-                    }
-                  },
-                  create: {
-                    scope: "PRODUCT",
-                    productId: productId,
-                    minQuantity: parseInt(moqSettings.minQuantity) || 1,
-                    isActive: true
-                  },
-                  update: {
-                    minQuantity: parseInt(moqSettings.minQuantity) || 1,
-                    isActive: true
-                  }
+                const existingMOQ = await prisma.mOQSetting.findFirst({
+                  where: { scope: "PRODUCT", productId: productId, variantId: null }
                 });
+                if (existingMOQ) {
+                  await prisma.mOQSetting.update({
+                    where: { id: existingMOQ.id },
+                    data: { minQuantity: parseInt(moqSettings.minQuantity) || 1, isActive: true }
+                  });
+                } else {
+                  await prisma.mOQSetting.create({
+                    data: { scope: "PRODUCT", productId: productId, minQuantity: parseInt(moqSettings.minQuantity) || 1, isActive: true }
+                  });
+                }
               } else {
                 await prisma.mOQSetting.deleteMany({
-                  where: {
-                    scope: "PRODUCT",
-                    productId: productId
-                  }
+                  where: { scope: "PRODUCT", productId: productId }
                 });
               }
             } catch (e) { }
