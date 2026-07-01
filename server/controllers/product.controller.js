@@ -6,6 +6,205 @@ import { getFileUrl } from "../utils/deleteFromS3.js";
 import { formatVariantWithAttributes } from "../utils/variant-attributes.js";
 import { applyFlashSalePrice } from "../utils/flashSaleHelpers.js";
 
+const expandProductsToVariants = async (products, query = {}) => {
+  const {
+    search = "",
+    minPrice,
+    maxPrice,
+    color,
+    size,
+    attributeValueIds,
+  } = query;
+
+  const normalizedSearch = typeof search === "string" ? search.replace(/\+/g, " ").toLowerCase().trim() : "";
+
+  // Parse filter attribute value IDs
+  const filterValueIds = [];
+  if (color) filterValueIds.push(color);
+  if (size) filterValueIds.push(size);
+  if (attributeValueIds) {
+    attributeValueIds.split(",").map((id) => id.trim()).filter(Boolean).forEach(id => filterValueIds.push(id));
+  }
+  const uniqueFilterValueIds = [...new Set(filterValueIds)];
+
+  const list = [];
+  for (const product of products) {
+    const primaryCategory =
+      product.categories && product.categories.length > 0
+        ? product.categories[0].category
+        : null;
+
+    const categoryData = primaryCategory
+      ? {
+          id: primaryCategory.id,
+          name: primaryCategory.name,
+          slug: primaryCategory.slug,
+        }
+      : null;
+
+    // Filter variants based on whether they match the active filters
+    let variantsToProcess = product.variants || [];
+
+    if (variantsToProcess.length > 0) {
+      variantsToProcess = variantsToProcess.filter((variant) => {
+        // 1. Attribute filter matching
+        if (uniqueFilterValueIds.length > 0) {
+          const hasAllAttrs = uniqueFilterValueIds.every((id) =>
+            variant.attributes && variant.attributes.some((attr) => attr.attributeValueId === id)
+          );
+          if (!hasAllAttrs) return false;
+        }
+
+        // 2. Price filter matching
+        const priceVal = parseFloat(variant.salePrice || variant.price);
+        if (minPrice && priceVal < parseFloat(minPrice)) return false;
+        if (maxPrice && priceVal > parseFloat(maxPrice)) return false;
+
+        // 3. Search query matching
+        if (normalizedSearch) {
+          const attrNames = variant.attributes
+            ? variant.attributes.map((a) => a.attributeValue.value).join(" ")
+            : "";
+          const variantName = attrNames ? `${product.name} (${attrNames})` : product.name;
+
+          const matchesSearch =
+            product.name.toLowerCase().includes(normalizedSearch) ||
+            product.description?.toLowerCase().includes(normalizedSearch) ||
+            variantName.toLowerCase().includes(normalizedSearch) ||
+            variant.sku?.toLowerCase().includes(normalizedSearch) ||
+            (categoryData && categoryData.name.toLowerCase().includes(normalizedSearch));
+
+          if (!matchesSearch) return false;
+        }
+
+        return true;
+      });
+    }
+
+    // Only expand variants that have their own images AND matched the filters
+    const variantsWithImages = variantsToProcess.filter((v) => v.images && v.images.length > 0);
+
+    if (variantsWithImages.length > 0) {
+      for (const variant of variantsWithImages) {
+        const attrNames = variant.attributes
+          ? variant.attributes.map((a) => a.attributeValue.value).join(" / ")
+          : "";
+        const variantName = attrNames ? `${product.name} (${attrNames})` : product.name;
+
+        const imageUrl = variant.images[0].url;
+
+        const priceVal = parseFloat(variant.salePrice || variant.price);
+        const fs = await applyFlashSalePrice(priceVal, product.id);
+
+        list.push({
+          id: `${product.id}-${variant.id}`,
+          productId: product.id,
+          variantId: variant.id,
+          name: variantName,
+          slug: product.slug,
+          featured: product.featured,
+          description: product.description,
+          category: categoryData,
+          image: imageUrl ? getFileUrl(imageUrl) : null,
+          variants: product.variants.map((v) => ({
+            ...v,
+            images: v.images
+              ? v.images.map((img) => ({
+                  ...img,
+                  url: getFileUrl(img.url),
+                }))
+              : [],
+          })),
+          basePrice: fs.hasFlashSale ? fs.price : priceVal,
+          hasSale: fs.hasFlashSale || variant.salePrice !== null,
+          regularPrice: fs.hasFlashSale ? fs.originalPrice : parseFloat(variant.price),
+          variantCount: product._count.variants,
+          reviewCount: product._count.reviews,
+        });
+      }
+    } else if (product.variants && product.variants.length > 0) {
+      const firstMatchingVariant = variantsToProcess.length > 0 ? variantsToProcess[0] : product.variants[0];
+
+      if (normalizedSearch && variantsToProcess.length === 0) {
+        const productMatches =
+          product.name.toLowerCase().includes(normalizedSearch) ||
+          product.description?.toLowerCase().includes(normalizedSearch) ||
+          (categoryData && categoryData.name.toLowerCase().includes(normalizedSearch));
+        if (!productMatches) continue;
+      }
+
+      let imageUrl = null;
+      if (product.images && product.images.length > 0) {
+        imageUrl = product.images[0].url;
+      } else {
+        const firstVarWithImg = product.variants.find(v => v.images && v.images.length > 0);
+        if (firstVarWithImg) imageUrl = firstVarWithImg.images[0].url;
+      }
+
+      const priceVal = parseFloat(firstMatchingVariant.salePrice || firstMatchingVariant.price);
+      const fs = await applyFlashSalePrice(priceVal, product.id);
+
+      list.push({
+        id: product.id,
+        productId: product.id,
+        variantId: firstMatchingVariant.id,
+        name: product.name,
+        slug: product.slug,
+        featured: product.featured,
+        description: product.description,
+        category: categoryData,
+        image: imageUrl ? getFileUrl(imageUrl) : null,
+        variants: product.variants.map((v) => ({
+          ...v,
+          images: v.images
+            ? v.images.map((img) => ({
+                ...img,
+                url: getFileUrl(img.url),
+              }))
+            : [],
+        })),
+        basePrice: fs.hasFlashSale ? fs.price : priceVal,
+        hasSale: fs.hasFlashSale || firstMatchingVariant.salePrice !== null,
+        regularPrice: fs.hasFlashSale ? fs.originalPrice : parseFloat(firstMatchingVariant.price),
+        variantCount: product._count.variants,
+        reviewCount: product._count.reviews,
+      });
+    } else {
+      if (normalizedSearch) {
+        const matchesSearch =
+          product.name.toLowerCase().includes(normalizedSearch) ||
+          product.description?.toLowerCase().includes(normalizedSearch) ||
+          (categoryData && categoryData.name.toLowerCase().includes(normalizedSearch));
+        if (!matchesSearch) continue;
+      }
+
+      let imageUrl = null;
+      if (product.images && product.images.length > 0) {
+        imageUrl = product.images[0].url;
+      }
+
+      list.push({
+        id: product.id,
+        productId: product.id,
+        variantId: null,
+        name: product.name,
+        slug: product.slug,
+        featured: product.featured,
+        description: product.description,
+        category: categoryData,
+        image: imageUrl ? getFileUrl(imageUrl) : null,
+        variants: [],
+        basePrice: null,
+        hasSale: false,
+        regularPrice: null,
+        variantCount: 0,
+        reviewCount: product._count.reviews,
+      });
+    }
+  }
+  return list;
+};
+
 // Get all products with filtering, pagination and sorting
 export const getAllProducts = asyncHandler(async (req, res) => {
   const {
@@ -248,78 +447,8 @@ export const getAllProducts = asyncHandler(async (req, res) => {
     take: parseInt(limit),
   });
 
-  // Format products for response (apply flash sale)
-  const formattedProducts = await Promise.all(
-    products.map(async (product) => {
-      const primaryCategory =
-        product.categories.length > 0 ? product.categories[0].category : null;
-
-      let imageUrl = null;
-      if (product.images && product.images.length > 0) {
-        const primaryImage = product.images.find((img) => img.isPrimary);
-        imageUrl = primaryImage ? primaryImage.url : product.images[0].url;
-      } else if (product.variants && product.variants.length > 0) {
-        const variantWithImages = product.variants.find(
-          (variant) => variant.images && variant.images.length > 0
-        );
-        if (variantWithImages) {
-          const primaryImage = variantWithImages.images.find(
-            (img) => img.isPrimary
-          );
-          imageUrl = primaryImage
-            ? primaryImage.url
-            : variantWithImages.images[0].url;
-        }
-      }
-
-      const baseVariantPrice =
-        product.variants.length > 0
-          ? parseFloat(
-              product.variants[0].salePrice || product.variants[0].price
-            )
-          : null;
-      const fs =
-        baseVariantPrice != null
-          ? await applyFlashSalePrice(baseVariantPrice, product.id)
-          : { price: null, originalPrice: null, hasFlashSale: false };
-
-      return {
-        id: product.id,
-        name: product.name,
-        slug: product.slug,
-        featured: product.featured,
-        description: product.description,
-        category: primaryCategory
-          ? {
-              id: primaryCategory.id,
-              name: primaryCategory.name,
-              slug: primaryCategory.slug,
-            }
-          : null,
-        image: imageUrl ? getFileUrl(imageUrl) : null,
-        variants: product.variants.map((variant) => ({
-          ...variant,
-          images: variant.images
-            ? variant.images.map((image) => ({
-                ...image,
-                url: getFileUrl(image.url),
-              }))
-            : [],
-        })),
-        basePrice: fs.hasFlashSale ? fs.price : baseVariantPrice,
-        hasSale:
-          fs.hasFlashSale ||
-          (product.variants.length > 0 && product.variants[0].salePrice !== null),
-        regularPrice: fs.hasFlashSale
-          ? fs.originalPrice
-          : product.variants.length > 0
-            ? parseFloat(product.variants[0].price)
-            : null,
-        variantCount: product._count.variants,
-        reviewCount: product._count.reviews,
-      };
-    })
-  );
+  // Format products for response (expand each variant to its own card)
+  const formattedProducts = await expandProductsToVariants(products, req.query);
 
   res.status(200).json(
     new ApiResponsive(
@@ -1013,75 +1142,8 @@ export const getProductsByType = asyncHandler(async (req, res) => {
     take: parseInt(limit),
   });
 
-  // Format the response data
-  const formattedProducts = products.map((product) => {
-    // Get primary category
-    const primaryCategory =
-      product.categories.length > 0 ? product.categories[0].category : null;
-
-    // Get image with fallback logic
-    let imageUrl = null;
-
-    // Priority 1: Product images
-    if (product.images && product.images.length > 0) {
-      const primaryImage = product.images.find((img) => img.isPrimary);
-      imageUrl = primaryImage ? primaryImage.url : product.images[0].url;
-    }
-    // Priority 2: Any variant images
-    else if (product.variants && product.variants.length > 0) {
-      const variantWithImages = product.variants.find(
-        (variant) => variant.images && variant.images.length > 0
-      );
-      if (variantWithImages) {
-        const primaryImage = variantWithImages.images.find(
-          (img) => img.isPrimary
-        );
-        imageUrl = primaryImage
-          ? primaryImage.url
-          : variantWithImages.images[0].url;
-      }
-    }
-
-    return {
-      id: product.id,
-      name: product.name,
-      slug: product.slug,
-      featured: product.featured,
-      description: product.description,
-      category: primaryCategory
-        ? {
-          id: primaryCategory.id,
-          name: primaryCategory.name,
-          slug: primaryCategory.slug,
-        }
-        : null,
-      image: imageUrl ? getFileUrl(imageUrl) : null,
-      // Add variants for frontend fallback
-      variants: product.variants.map((variant) => ({
-        ...variant,
-        images: variant.images
-          ? variant.images.map((image) => ({
-            ...image,
-            url: getFileUrl(image.url),
-          }))
-          : [],
-      })),
-      basePrice:
-        product.variants.length > 0
-          ? parseFloat(
-            product.variants[0].salePrice || product.variants[0].price
-          )
-          : null,
-      hasSale:
-        product.variants.length > 0 && product.variants[0].salePrice !== null,
-      regularPrice:
-        product.variants.length > 0
-          ? parseFloat(product.variants[0].price)
-          : null,
-      variantCount: product._count.variants,
-      reviewCount: product._count.reviews,
-    };
-  });
+  // Format the response data (expand each variant to its own card)
+  const formattedProducts = await expandProductsToVariants(products);
 
   res.status(200).json(
     new ApiResponsive(

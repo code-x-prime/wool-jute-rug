@@ -19,6 +19,7 @@ import {
   ZoomOut,
   X,
   Share2,
+  Play,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
@@ -130,16 +131,30 @@ export default function ProductContent({ slug }) {
 
           setAvailableCombinations(combinations);
 
+          // Check if variant query param exists
+          const urlParams = new URLSearchParams(window.location.search);
+          const variantIdParam = urlParams.get("variant");
+          let initialVariant = null;
+          if (variantIdParam) {
+            initialVariant = productData.variants.find((v) => v.id === variantIdParam);
+          }
+
           // Set default attributes if available
           if (productData.attributeOptions && productData.attributeOptions.length > 0) {
             const defaultSelections = {};
 
-            // Select first value for each attribute
-            productData.attributeOptions.forEach((attr) => {
-              if (attr.values && attr.values.length > 0) {
-                defaultSelections[attr.id] = attr.values[0].id;
-              }
-            });
+            if (initialVariant && initialVariant.attributes) {
+              initialVariant.attributes.forEach((attr) => {
+                defaultSelections[attr.attributeId] = attr.attributeValueId;
+              });
+            } else {
+              // Select first value for each attribute
+              productData.attributeOptions.forEach((attr) => {
+                if (attr.values && attr.values.length > 0) {
+                  defaultSelections[attr.id] = attr.values[0].id;
+                }
+              });
+            }
 
             setSelectedAttributes(defaultSelections);
 

@@ -34,6 +34,7 @@ const ProductCard = ({ product }) => {
   const [priceVisibilitySettings, setPriceVisibilitySettings] = useState(null);
   const { isAuthenticated } = useAuth();
   const router = useRouter();
+  const productLink = product.variantId ? `/products/${product.slug}?variant=${product.variantId}` : `/products/${product.slug}`;
 
   // Fetch wishlist status for this product
   useEffect(() => {
@@ -84,7 +85,7 @@ const ProductCard = ({ product }) => {
   const handleShare = async (product, e) => {
     e.preventDefault();
     e.stopPropagation();
-    const url = `${window.location.origin}/products/${product.slug}`;
+    const url = `${window.location.origin}${productLink}`;
     if (navigator.share) {
       try {
         await navigator.share({ title: product.name, url });
@@ -98,21 +99,23 @@ const ProductCard = ({ product }) => {
   const handleAddToWishlist = async (product, e) => {
     e.preventDefault();
     if (!isAuthenticated) {
-      router.push(`/auth?redirect=/products/${product.slug}`);
+      router.push(`/auth?redirect=${encodeURIComponent(productLink)}`);
       return;
     }
 
-    setIsAddingToWishlist((prev) => ({ ...prev, [product.id]: true }));
+    const actualProductId = product.productId || product.id;
+
+    setIsAddingToWishlist((prev) => ({ ...prev, [actualProductId]: true }));
 
     try {
-      if (wishlistItems[product.id]) {
+      if (wishlistItems[actualProductId]) {
         // Get wishlist to find the item ID
         const wishlistResponse = await fetchApi("/users/wishlist", {
           credentials: "include",
         });
 
         const wishlistItem = wishlistResponse.data?.wishlistItems?.find(
-          (item) => item.productId === product.id
+          (item) => item.productId === actualProductId
         );
 
         if (wishlistItem) {
@@ -121,7 +124,7 @@ const ProductCard = ({ product }) => {
             credentials: "include",
           });
 
-          setWishlistItems((prev) => ({ ...prev, [product.id]: false }));
+          setWishlistItems((prev) => ({ ...prev, [actualProductId]: false }));
           toast.success("Removed from wishlist");
         }
       } else {
@@ -129,17 +132,17 @@ const ProductCard = ({ product }) => {
         await fetchApi("/users/wishlist", {
           method: "POST",
           credentials: "include",
-          body: JSON.stringify({ productId: product.id }),
+          body: JSON.stringify({ productId: actualProductId }),
         });
 
-        setWishlistItems((prev) => ({ ...prev, [product.id]: true }));
+        setWishlistItems((prev) => ({ ...prev, [actualProductId]: true }));
         toast.success("Added to wishlist");
       }
     } catch (error) {
       console.error("Error updating wishlist:", error);
       toast.error("Failed to update wishlist");
     } finally {
-      setIsAddingToWishlist((prev) => ({ ...prev, [product.id]: false }));
+      setIsAddingToWishlist((prev) => ({ ...prev, [actualProductId]: false }));
     }
   };
 
@@ -147,30 +150,49 @@ const ProductCard = ({ product }) => {
     const images = [];
     const imageUrls = new Set();
 
-    if (
-      product.variants &&
-      Array.isArray(product.variants) &&
-      product.variants.length > 0
-    ) {
-      product.variants.forEach((variant) => {
-        // Handle variant.images array
-        if (
-          variant.images &&
-          Array.isArray(variant.images) &&
-          variant.images.length > 0
-        ) {
-          variant.images.forEach((img) => {
-            const url = img?.url || img;
-            if (url) {
-              const imageUrl = getImageUrl(url);
-              if (imageUrl && !imageUrls.has(imageUrl)) {
-                imageUrls.add(imageUrl);
-                images.push(imageUrl);
-              }
+    // If this is a specific variant card, prioritize that variant's images first
+    if (product.variantId && product.variants) {
+      const currentVariant = product.variants.find((v) => v.id === product.variantId);
+      if (currentVariant && currentVariant.images && currentVariant.images.length > 0) {
+        currentVariant.images.forEach((img) => {
+          const url = img?.url || img;
+          if (url) {
+            const imageUrl = getImageUrl(url);
+            if (imageUrl && !imageUrls.has(imageUrl)) {
+              imageUrls.add(imageUrl);
+              images.push(imageUrl);
             }
-          });
-        }
-      });
+          }
+        });
+      }
+    }
+
+    // Fallback: If no variant-specific images found (or not a variant card), use standard behavior
+    if (images.length === 0) {
+      if (
+        product.variants &&
+        Array.isArray(product.variants) &&
+        product.variants.length > 0
+      ) {
+        product.variants.forEach((variant) => {
+          if (
+            variant.images &&
+            Array.isArray(variant.images) &&
+            variant.images.length > 0
+          ) {
+            variant.images.forEach((img) => {
+              const url = img?.url || img;
+              if (url) {
+                const imageUrl = getImageUrl(url);
+                if (imageUrl && !imageUrls.has(imageUrl)) {
+                  imageUrls.add(imageUrl);
+                  images.push(imageUrl);
+                }
+              }
+            });
+          }
+        });
+      }
     }
 
     // Priority 2: Get product images array
@@ -396,7 +418,7 @@ const ProductCard = ({ product }) => {
       key={product.id}
       className="bg-white overflow-hidden transition-all duration-300 group"
     >
-      <Link href={`/products/${product.slug}`}>
+      <Link href={productLink}>
         <div
           className="relative aspect-[3/4] w-full overflow-hidden bg-gray-50"
           onMouseEnter={() => setIsHovered(true)}
@@ -468,13 +490,13 @@ const ProductCard = ({ product }) => {
           {/* Action icons - Top Right */}
           <div className="absolute top-2 right-2 md:top-3 md:right-3 z-30 flex flex-col gap-1.5">
             <button
-              className={`hover:text-red-500 p-1 transition-colors ${wishlistItems[product.id] ? "text-red-500" : "text-gray-400"}`}
+              className={`hover:text-red-500 p-1 transition-colors ${wishlistItems[product.productId || product.id] ? "text-red-500" : "text-gray-400"}`}
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleAddToWishlist(product, e); }}
-              disabled={isAddingToWishlist[product.id]}
-              title={wishlistItems[product.id] ? "Remove from wishlist" : "Add to wishlist"}
+              disabled={isAddingToWishlist[product.productId || product.id]}
+              title={wishlistItems[product.productId || product.id] ? "Remove from wishlist" : "Add to wishlist"}
             >
               <Heart
-                className={`h-5 w-5 md:h-6 md:w-6 ${wishlistItems[product.id] ? "fill-current" : ""}`}
+                className={`h-5 w-5 md:h-6 md:w-6 ${wishlistItems[product.productId || product.id] ? "fill-current" : ""}`}
                 strokeWidth={1.5}
               />
             </button>
@@ -507,7 +529,7 @@ const ProductCard = ({ product }) => {
       {/* Card Content - Centered */}
       <div className="p-4 flex flex-col items-center text-center">
         <Link
-          href={`/products/${product.slug}`}
+          href={productLink}
           className="block group-hover:text-black w-full"
         >
           {/* Category or Main Title */}
