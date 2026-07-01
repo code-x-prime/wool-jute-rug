@@ -169,27 +169,34 @@ export default function ProductContent({ slug }) {
 
             setSelectedAttributes(defaultSelections);
 
-            // Find matching variant with these attribute values
-            const matchingVariant = combinations.find((combo) => {
-              const comboIds = combo.attributeValueIds.sort().join(",");
-              const selectedIds = Object.values(defaultSelections).sort().join(",");
-              return comboIds === selectedIds;
-            });
+            if (initialVariant) {
+              setSelectedVariant(initialVariant);
+              const moq = initialVariant.moq || 1;
+              setQuantity(moq);
+              const priceInfo = getEffectivePrice(initialVariant, moq);
+              setEffectivePriceInfo(priceInfo);
+            } else {
+              // Find matching variant with these attribute values
+              const matchingVariant = combinations.find((combo) => {
+                const comboIds = combo.attributeValueIds.sort().join(",");
+                const selectedIds = Object.values(defaultSelections).sort().join(",");
+                return comboIds === selectedIds;
+              });
 
-            if (matchingVariant) {
-              setSelectedVariant(matchingVariant.variant);
-              // Set initial quantity to MOQ if available
-              const moq = matchingVariant.variant.moq || 1;
-              setQuantity(moq);
-              const priceInfo = getEffectivePrice(matchingVariant.variant, moq);
-              setEffectivePriceInfo(priceInfo);
-            } else if (productData.variants.length > 0) {
-              // Fallback: just pick the first variant
-              setSelectedVariant(productData.variants[0]);
-              const moq = productData.variants[0].moq || 1;
-              setQuantity(moq);
-              const priceInfo = getEffectivePrice(productData.variants[0], moq);
-              setEffectivePriceInfo(priceInfo);
+              if (matchingVariant) {
+                setSelectedVariant(matchingVariant.variant);
+                const moq = matchingVariant.variant.moq || 1;
+                setQuantity(moq);
+                const priceInfo = getEffectivePrice(matchingVariant.variant, moq);
+                setEffectivePriceInfo(priceInfo);
+              } else if (productData.variants.length > 0) {
+                // Fallback: just pick the first variant
+                setSelectedVariant(productData.variants[0]);
+                const moq = productData.variants[0].moq || 1;
+                setQuantity(moq);
+                const priceInfo = getEffectivePrice(productData.variants[0], moq);
+                setEffectivePriceInfo(priceInfo);
+              }
             }
           } else if (productData.variants.length > 0) {
             // Fallback: just pick the first variant
