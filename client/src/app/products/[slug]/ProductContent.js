@@ -109,7 +109,18 @@ export default function ProductContent({ slug }) {
         // Fetch addon services for this product
         if (productData.id) {
           fetchApi(`/public/products/${productData.id}/addons`)
-            .then((r) => setAddonServices(r.data?.addons || []))
+            .then((r) => {
+              const addons = r.data?.addons || [];
+              setAddonServices(addons);
+              
+              // Pre-select addons from query parameter
+              const urlParams = new URLSearchParams(window.location.search);
+              const addonsParam = urlParams.get("addons");
+              if (addonsParam) {
+                const preselectedIds = addonsParam.split(",").filter(id => addons.some(a => a.id === id));
+                setSelectedAddonIds(preselectedIds);
+              }
+            })
             .catch(() => {});
         }
 
@@ -202,6 +213,28 @@ export default function ProductContent({ slug }) {
       fetchProductDetails();
     }
   }, [slug]);
+
+  // Update URL search params in real-time when variant or addons change
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const url = new URL(window.location.href);
+    
+    if (selectedVariant?.id) {
+      url.searchParams.set("variant", selectedVariant.id);
+    } else {
+      url.searchParams.delete("variant");
+    }
+
+    if (selectedAddonIds && selectedAddonIds.length > 0) {
+      url.searchParams.set("addons", selectedAddonIds.join(","));
+    } else {
+      url.searchParams.delete("addons");
+    }
+
+    // Replace the current state in history silently
+    window.history.replaceState(null, "", url.toString());
+  }, [selectedVariant, selectedAddonIds]);
 
   // Fetch price visibility settings
   useEffect(() => {
