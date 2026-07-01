@@ -1,5 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
-import { useDropzone } from "react-dropzone";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +9,6 @@ import {
   ChevronDown,
   ChevronUp,
   Trash2,
-  Star,
   X,
   Plus,
   Image as ImageIcon,
@@ -152,10 +150,6 @@ export default function VariantCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [variant.id, isEditMode]);
 
-  const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(
-    null
-  );
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const handleInputChange = (field: string, value: string) => {
     onUpdate(index, field, value);
@@ -1023,11 +1017,10 @@ export default function VariantCard({
                   return (
                     <div
                       key={preview.id || preview.tempId || `variant-slot-${i}`}
-                      className={`relative group rounded-lg overflow-hidden border-2 transition-all aspect-square bg-[var(--bg-card)] ${
-                        preview.isPrimary
+                      className={`relative group rounded-lg overflow-hidden border-2 transition-all aspect-square bg-[var(--bg-card)] ${preview.isPrimary
                           ? "border-green-500 ring-2 ring-green-200 shadow-md"
                           : "border-[var(--border-color)]"
-                      }`}
+                        }`}
                     >
                       {/* Image */}
                       <img
