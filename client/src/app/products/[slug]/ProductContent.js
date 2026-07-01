@@ -132,7 +132,7 @@ export default function ProductContent({ slug }) {
         // Extract all available combinations from variants
         if (productData.variants && productData.variants.length > 0) {
           const combinations = productData.variants
-            .filter((v) => v.isActive && (v.stock > 0 || v.quantity > 0))
+            .filter((v) => v.isActive)
             .map((variant) => ({
               attributeValueIds: variant.attributes
                 ? variant.attributes.map((a) => a.attributeValueId)
