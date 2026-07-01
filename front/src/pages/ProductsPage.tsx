@@ -30,7 +30,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Image as ImageIcon,
-  Star,
   X,
   MoreVertical,
   Info,
@@ -101,7 +100,7 @@ function useCategories() {
     const handler = () => {
       categories.getCategories().then((r) => {
         if (r.data.success) setCategoriesData(r.data.data?.categories || []);
-      }).catch(() => {});
+      }).catch(() => { });
     };
     window.addEventListener("refetch-categories", handler);
     return () => window.removeEventListener("refetch-categories", handler);
@@ -197,7 +196,7 @@ export function ProductForm({
     open: boolean;
     label: string; // e.g. "Category: Hand-knotted Rugs"
     onConfirm: () => Promise<void>;
-  }>({ open: false, label: "", onConfirm: async () => {} });
+  }>({ open: false, label: "", onConfirm: async () => { } });
   const [confirmDeleteLoading, setConfirmDeleteLoading] = useState(false);
   const [product, setProduct] = useState({
     name: "",
@@ -239,7 +238,9 @@ export function ProductForm({
     shippingWeight: "",
   });
 
-  const [imagePreviews, setImagePreviews] = useState<ImagePreview[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<(ImagePreview | null)[]>(
+    Array(5).fill(null)
+  );
   const [tagInput, setTagInput] = useState("");
 
   // Video state (optional)
@@ -420,81 +421,50 @@ export function ProductForm({
     }
   }, [mode, product.description]);
 
-  // Define a proper interface for image previews
   interface ImagePreview {
     url: string;
     id?: string;
     isPrimary?: boolean;
-    file?: File; // For new images - enables reorder + FormData
+    file?: File;
   }
 
-  // Handle image drop for upload
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    console.log(
-      `📸 Files dropped/selected: ${acceptedFiles.length}`,
-      acceptedFiles
-    );
+  // Handle single file upload for a specific slot
+  const handleSlotFileChange = (slotIndex: number, file: File) => {
+    if (!file) return;
 
-    if (acceptedFiles.length === 0) {
-      toast.error("No valid files selected");
+    const isValidType = file.type.startsWith("image/");
+    const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB
+
+    if (!isValidType) {
+      toast.error(`${file.name} is not a valid image file`);
+      return;
+    }
+    if (!isValidSize) {
+      toast.error(`${file.name} is too large. Maximum size is 10MB`);
       return;
     }
 
-    // Validate files
-    const validFiles = acceptedFiles.filter((file) => {
-      const isValidType = file.type.startsWith("image/");
-      const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB
-
-      if (!isValidType) {
-        toast.error(`${file.name} is not a valid image file`);
-        return false;
-      }
-      if (!isValidSize) {
-        toast.error(`${file.name} is too large. Maximum size is 10MB`);
-        return false;
-      }
-      return true;
-    });
-
-    if (validFiles.length === 0) {
-      return;
-    }
-
-    // Create local previews with file reference for reorder + FormData
-    const newPreviews: ImagePreview[] = validFiles.map((file) => ({
+    const newPreview: ImagePreview = {
       url: URL.createObjectURL(file),
-      isPrimary: false,
       file,
-    }));
+      isPrimary: slotIndex === 0,
+    };
 
     setImagePreviews((prev) => {
-      const combined = [...prev, ...newPreviews];
-      if (prev.length === 0 && newPreviews.length > 0) {
-        combined[0].isPrimary = true;
-      }
-      return combined;
-    });
+      const next = [...prev];
+      next[slotIndex] = newPreview;
 
-    toast.success(`${validFiles.length} image(s) added successfully`);
-  }, []);
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      "image/jpeg": [],
-      "image/png": [],
-      "image/webp": [],
-      "image/gif": [],
-    },
-    maxSize: 10 * 1024 * 1024, // 10MB
-    multiple: true,
-    onDropRejected: (rejectedFiles) => {
-      rejectedFiles.forEach((file) => {
-        const errors = file.errors.map((e) => e.message).join(", ");
-        toast.error(`${file.file.name}: ${errors}`);
+      // First non-null is primary
+      const firstNonNullIdx = next.findIndex((p) => p !== null);
+      next.forEach((img, idx) => {
+        if (img) {
+          img.isPrimary = idx === firstNonNullIdx;
+        }
       });
-    },
-  });
+      return next;
+    });
+    toast.success(`Image added to Slot ${slotIndex + 1}`);
+  };
 
   // Video dropzone (optional, max 10MB)
   const onVideoDrop = useCallback((acceptedFiles: File[]) => {
@@ -538,100 +508,77 @@ export function ProductForm({
     setVideoRemoved(true);
   }, [videoFile, videoPreviewUrl]);
 
-  // Product image reorder (drag and drop)
-  const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
-  const [dragOverImageIndex, setDragOverImageIndex] = useState<number | null>(null);
-
-  const handleProductImageDragStart = (e: React.DragEvent, index: number) => {
-    setDraggedImageIndex(index);
-    e.dataTransfer.effectAllowed = "move";
-  };
-
-  const handleProductImageDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    setDragOverImageIndex(index);
-  };
-
-  const handleProductImageDragLeave = () => setDragOverImageIndex(null);
-
-  const handleProductImageDrop = async (e: React.DragEvent, dropIndex: number) => {
-    e.preventDefault();
-    setDragOverImageIndex(null);
-    if (draggedImageIndex === null || draggedImageIndex === dropIndex) {
-      setDraggedImageIndex(null);
-      return;
-    }
-    const newPreviews = [...imagePreviews];
-    const [dragged] = newPreviews.splice(draggedImageIndex, 1);
-    newPreviews.splice(dropIndex, 0, dragged);
-    setImagePreviews(newPreviews);
-    setDraggedImageIndex(null);
-
-    // If edit mode with existing images (all have id), persist order to server
-    const allHaveId = newPreviews.every((p) => p.id);
-    if (mode === "edit" && productId && allHaveId) {
-      try {
-        const imageOrders = newPreviews.map((p, i) => ({
-          imageId: p.id!,
-          order: i,
-        }));
-        await products.reorderProductImages(productId, imageOrders);
-        toast.success("Images reordered");
-      } catch (err) {
-        console.error("Failed to reorder product images:", err);
-        toast.error("Failed to save image order");
-      }
-    }
-  };
-
-  // Remove image from preview and files
-  const removeImage = (index: number) => {
-    // If there's an ID, it's an existing image from the server
+  // Remove image from specific slot and shift remaining left
+  const removeImageAt = async (index: number) => {
     const imageToRemove = imagePreviews[index];
+    if (!imageToRemove) return;
 
     if (imageToRemove.id) {
-      // Check if this is the only image
-      if (imagePreviews.length === 1) {
+      const activeCount = imagePreviews.filter((p) => p !== null).length;
+      if (activeCount === 1) {
         toast.error(
           "Cannot delete the only image. Products must have at least one image."
         );
         return;
       }
 
-      // This is an existing image, delete from server
-      products
-        .deleteImage(imageToRemove.id)
-        .then(() => {
-          toast.success("Image deleted successfully");
-          setImagePreviews((prev) => prev.filter((_, i) => i !== index));
-        })
-        .catch((error) => {
-          console.error("Error deleting image:", error);
-          if (error.response?.data?.message) {
-            toast.error(error.response.data.message);
-          } else {
-            toast.error("Failed to delete image");
-          }
-        });
-    } else {
-      // This is a local preview only
-      // Revoke the object URL to avoid memory leaks
-      URL.revokeObjectURL(imagePreviews[index].url);
-
-      setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+      try {
+        await products.deleteImage(imageToRemove.id);
+        toast.success("Image deleted successfully");
+      } catch (error: any) {
+        console.error("Error deleting image:", error);
+        toast.error(
+          error.response?.data?.message || "Failed to delete image from server"
+        );
+        return;
+      }
+    } else if (imageToRemove.url.startsWith("blob:")) {
+      URL.revokeObjectURL(imageToRemove.url);
     }
+
+    setImagePreviews((prev) => {
+      const next = [...prev];
+      next[index] = null;
+
+      const filtered: (ImagePreview | null)[] = next.filter((p) => p !== null);
+      while (filtered.length < 5) {
+        filtered.push(null);
+      }
+
+      // Re-assign primary
+      const first = filtered[0];
+      if (first) {
+        first.isPrimary = true;
+      }
+      for (let i = 1; i < filtered.length; i++) {
+        const item = filtered[i];
+        if (item) {
+          item.isPrimary = false;
+        }
+      }
+      return filtered;
+    });
   };
 
-  // Set an image as primary
-  const setPrimaryImage = (index: number) => {
-    // Update image previews with the new primary image
+  // Move image left/right to reorder
+  const moveImage = (index: number, direction: "left" | "right") => {
+    const targetIndex = direction === "left" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= 5) return;
+    if (!imagePreviews[index] || !imagePreviews[targetIndex]) return;
+
     setImagePreviews((prev) => {
-      const updated = prev.map((preview, i) => ({
-        ...preview,
-        isPrimary: i === index,
-      }));
-      return updated;
+      const next = [...prev];
+      const temp = next[index];
+      next[index] = next[targetIndex];
+      next[targetIndex] = temp;
+
+      // Re-assign primary status (index 0 is primary)
+      next.forEach((img, idx) => {
+        if (img) {
+          img.isPrimary = idx === 0;
+        }
+      });
+      return next;
     });
   };
 
@@ -676,7 +623,7 @@ export function ProductForm({
   const reloadAddonServices = () => {
     addonServicesApi.getAll().then((res) => {
       setAllAddonServices(res.data.data?.addons || []);
-    }).catch(() => {});
+    }).catch(() => { });
   };
   useEffect(() => { reloadAddonServices(); }, []);
 
@@ -773,7 +720,7 @@ export function ProductForm({
       // Re-fetch categories list to update CategorySelector
       try {
         window.dispatchEvent(new CustomEvent("refetch-categories"));
-      } catch {}
+      } catch { }
       setShowQuickCategory(false);
       setQuickCatName("");
       setQuickCatFile(null);
@@ -799,7 +746,7 @@ export function ProductForm({
           const vRes = await attributeValuesApi.createAttributeValue(newAttr.id, { value: val.trim() });
           const v = vRes.data.data?.value || vRes.data.data;
           if (v) addedValues.push(v);
-        } catch {}
+        } catch { }
       }
       setAttributesList((prev) => [...prev, newAttr]);
       setAttributeValuesMap((prev) => ({ ...prev, [newAttr.id]: addedValues }));
@@ -849,7 +796,7 @@ export function ProductForm({
     setConfirmDeleteLoading(true);
     try {
       await confirmDelete.onConfirm();
-      setConfirmDelete({ open: false, label: "", onConfirm: async () => {} });
+      setConfirmDelete({ open: false, label: "", onConfirm: async () => { } });
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Delete failed");
     } finally {
@@ -1124,19 +1071,20 @@ export function ProductForm({
             // Set selected categories (for radio buttons, not checkboxes)
             setSelectedCategories(productCategories);
 
-            // Setup image previews (sorted by order)
+            const loadedSlots: (ImagePreview | null)[] = Array(5).fill(null);
             if (productData.images && productData.images.length > 0) {
               const sorted = [...productData.images].sort(
                 (a: any, b: any) => (a.order ?? 999) - (b.order ?? 999)
               );
-              setImagePreviews(
-                sorted.map((img: any) => ({
+              sorted.slice(0, 5).forEach((img: any, idx: number) => {
+                loadedSlots[idx] = {
                   url: img.url,
                   id: img.id,
-                  isPrimary: img.isPrimary || false,
-                }))
-              );
+                  isPrimary: idx === 0,
+                };
+              });
             }
+            setImagePreviews(loadedSlots);
 
             // Setup video preview if product has video
             if (productData.videoUrl) {
@@ -1171,14 +1119,14 @@ export function ProductForm({
                       variant.isActive !== undefined ? variant.isActive : true,
                     images: Array.isArray(variant.images)
                       ? [...variant.images]
-                          .sort((a: any, b: any) => (a.order ?? 999) - (b.order ?? 999))
-                          .map((img: any) => ({
-                            url: img.url,
-                            id: img.id,
-                            isPrimary: img.isPrimary || false,
-                            isNew: false,
-                            order: img.order,
-                          }))
+                        .sort((a: any, b: any) => (a.order ?? 999) - (b.order ?? 999))
+                        .map((img: any) => ({
+                          url: img.url,
+                          id: img.id,
+                          isPrimary: img.isPrimary || false,
+                          isNew: false,
+                          order: img.order,
+                        }))
                       : [],
                   })
                 );
@@ -1230,7 +1178,7 @@ export function ProductForm({
       addonServicesApi.getProductAddons(productId).then((res) => {
         const ids = (res.data.data?.addons || []).map((a: any) => a.id);
         setSelectedAddonIds(ids);
-      }).catch(() => {});
+      }).catch(() => { });
 
       // Fetch Product MOQ
       if (mode === "edit" && productId) {
@@ -1440,7 +1388,8 @@ export function ProductForm({
     }
 
     // Validate images
-    if (!hasVariants && imagePreviews.length === 0) {
+    const activeImages = imagePreviews.filter((p) => p !== null);
+    if (!hasVariants && activeImages.length === 0) {
       toast.error("At least one product image is required");
       setIsLoading(false);
       return;
@@ -1594,11 +1543,12 @@ export function ProductForm({
       }
 
       // Add images (only for non-variant products)
-      const hasNewImages = imagePreviews.some((p) => p.file);
-      const allImagesAreNew = imagePreviews.length > 0 && imagePreviews.every((p) => p.file);
+      const activeImages = imagePreviews.filter((p): p is ImagePreview => p !== null);
+      const hasNewImages = activeImages.some((p) => p.file);
+      const allImagesAreNew = activeImages.length > 0 && activeImages.every((p) => p.file);
       if (!hasVariants && hasNewImages) {
         console.log(
-          `📸 Submitting ${imagePreviews.filter((p) => p.file).length} images for simple product`
+          `📸 Submitting ${activeImages.filter((p) => p.file).length} images for simple product`
         );
 
         // When editing and all images are new (user replaced all), tell backend to replace
@@ -1606,8 +1556,8 @@ export function ProductForm({
           formData.append("replaceAllImages", "true");
         }
 
-        // Add primary image index (index in full imagePreviews array)
-        const primaryIndex = imagePreviews.findIndex(
+        // Add primary image index (index in activeImages array)
+        const primaryIndex = activeImages.findIndex(
           (img) => img.isPrimary === true
         );
         if (primaryIndex >= 0) {
@@ -1619,7 +1569,7 @@ export function ProductForm({
         }
 
         // Append each image file in display order
-        imagePreviews.forEach((preview, idx) => {
+        activeImages.forEach((preview, idx) => {
           if (preview.file) {
             formData.append("images", preview.file);
             console.log(
@@ -2581,180 +2531,154 @@ export function ProductForm({
             </div>
           </div>
 
-            <Card className="p-6">
-              <h3 className="text-lg font-medium mb-4">Additional Information (Dynamic Sections)</h3>
-              <div className="space-y-4">
-                {/* Washing & Care — structured icon + text rows */}
-                <div className="space-y-2">
-                  <Label>Washing & Care</Label>
-                  <WashingCareEditor
-                    value={product.washingAndCare}
-                    onChange={(val) => setProduct((prev) => ({ ...prev, washingAndCare: val }))}
+          <Card className="p-6">
+            <h3 className="text-lg font-medium mb-4">Additional Information (Dynamic Sections)</h3>
+            <div className="space-y-4">
+              {/* Washing & Care — structured icon + text rows */}
+              <div className="space-y-2">
+                <Label>Washing & Care</Label>
+                <WashingCareEditor
+                  value={product.washingAndCare}
+                  onChange={(val) => setProduct((prev) => ({ ...prev, washingAndCare: val }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="shippingAndReturns">Shipping & Returns</Label>
+                <div className="border border-[var(--border-color)] rounded-md overflow-hidden [&_.jodit-container]:!bg-[var(--input-bg)] [&_.jodit-wysiwyg]:!bg-[var(--input-bg)] [&_.jodit-wysiwyg]:!text-[var(--input-text)] [&_.jodit-status-bar]:!bg-[var(--bg-secondary)] [&_.jodit-status-bar]:!text-[var(--text-secondary)] [&_.jodit-toolbar__box]:!bg-[var(--bg-secondary)] [&_.jodit-toolbar__box]:!border-[var(--border-color)]">
+                  <JoditEditor
+                    value={product.shippingAndReturns}
+                    config={editorConfig}
+                    onBlur={(content: string) => {
+                      setProduct((prev) => ({ ...prev, shippingAndReturns: content }));
+                    }}
+                    onChange={() => { }}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="shippingAndReturns">Shipping & Returns</Label>
-                  <div className="border border-[var(--border-color)] rounded-md overflow-hidden [&_.jodit-container]:!bg-[var(--input-bg)] [&_.jodit-wysiwyg]:!bg-[var(--input-bg)] [&_.jodit-wysiwyg]:!text-[var(--input-text)] [&_.jodit-status-bar]:!bg-[var(--bg-secondary)] [&_.jodit-status-bar]:!text-[var(--text-secondary)] [&_.jodit-toolbar__box]:!bg-[var(--bg-secondary)] [&_.jodit-toolbar__box]:!border-[var(--border-color)]">
-                    <JoditEditor
-                      value={product.shippingAndReturns}
-                      config={editorConfig}
-                      onBlur={(content: string) => {
-                        setProduct((prev) => ({ ...prev, shippingAndReturns: content }));
-                      }}
-                      onChange={() => {}}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="aboutThisDesign">About This Design</Label>
-                  <div className="border border-[var(--border-color)] rounded-md overflow-hidden [&_.jodit-container]:!bg-[var(--input-bg)] [&_.jodit-wysiwyg]:!bg-[var(--input-bg)] [&_.jodit-wysiwyg]:!text-[var(--input-text)] [&_.jodit-status-bar]:!bg-[var(--bg-secondary)] [&_.jodit-status-bar]:!text-[var(--text-secondary)] [&_.jodit-toolbar__box]:!bg-[var(--bg-secondary)] [&_.jodit-toolbar__box]:!border-[var(--border-color)]">
-                    <JoditEditor
-                      value={product.aboutThisDesign}
-                      config={editorConfig}
-                      onBlur={(content: string) => {
-                        setProduct((prev) => ({ ...prev, aboutThisDesign: content }));
-                      }}
-                      onChange={() => {}}
-                    />
-                  </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="aboutThisDesign">About This Design</Label>
+                <div className="border border-[var(--border-color)] rounded-md overflow-hidden [&_.jodit-container]:!bg-[var(--input-bg)] [&_.jodit-wysiwyg]:!bg-[var(--input-bg)] [&_.jodit-wysiwyg]:!text-[var(--input-text)] [&_.jodit-status-bar]:!bg-[var(--bg-secondary)] [&_.jodit-status-bar]:!text-[var(--text-secondary)] [&_.jodit-toolbar__box]:!bg-[var(--bg-secondary)] [&_.jodit-toolbar__box]:!border-[var(--border-color)]">
+                  <JoditEditor
+                    value={product.aboutThisDesign}
+                    config={editorConfig}
+                    onBlur={(content: string) => {
+                      setProduct((prev) => ({ ...prev, aboutThisDesign: content }));
+                    }}
+                    onChange={() => { }}
+                  />
                 </div>
               </div>
-            </Card>
+            </div>
+          </Card>
 
-          {/* Product Images - Dropzone - Only show when variants are NOT enabled */}
+          {/* Product Images - 5 sequential boxes - Only show when variants are NOT enabled */}
           {!hasVariants && (
             <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
               <h2 className="text-xl font-semibold border-b pb-2">
                 Product Images
               </h2>
-              <div className="space-y-2">
-                <div className="flex flex-col gap-1">
-                  <p className="text-sm font-medium">{t("products.form.media.upload_title")}</p>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    {t("products.form.media.drag_drop_hint")}
-                  </p>
-                </div>
-                <div
-                  {...getRootProps()}
-                  className={`border-2 border-dashed rounded-md p-8 cursor-pointer transition-colors text-center bg-[var(--bg-card)] ${isDragActive
-                    ? "border-blue-400 bg-blue-50"
-                    : "border-[var(--border-color)] hover:border-[var(--border-color)] hover:bg-[var(--bg-secondary)]"
-                    }`}
-                >
-                  <input {...getInputProps()} />
-                  <ImageIcon className="h-10 w-10 mx-auto mb-2 text-[var(--text-secondary)]" />
-                  {isDragActive ? (
-                    <p className="text-blue-600 font-medium">
-                      {t("products.form.media.drop_here")}
-                      {t("products.form.media.drop_text")}
-                    </p>
-                  ) : (
-                    <>
-                      <p className="text-[var(--text-secondary)]">
-                        {t("products.form.media.drop_multiple_images")}
-                      </p>
-                      <p className="text-xs text-[var(--text-secondary)] mt-1">
-                        {t("products.form.media.upload_hint")}
-                      </p>
-                    </>
-                  )}
-                </div>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Provide up to 5 images. The first box represents the primary image, and subsequent boxes represent secondary images in order.
+              </p>
 
-                {/* Fallback file input */}
-                <div className="mt-2">
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
-                    multiple
-                    onChange={(e) => {
-                      if (e.target.files) {
-                        const files = Array.from(e.target.files);
-                        onDrop(files);
-                        // Clear the input so the same file can be selected again
-                        e.target.value = "";
-                      }
-                    }}
-                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    {t("products.form.media.alternative_input_hint")}
-                  </p>
-                </div>
-
-                {/* Manual File Input as Fallback */}
-              </div>
-
-              {/* Image previews */}
-              {imagePreviews.length > 0 && (
-                <div className="mt-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <Label className="text-[var(--text-primary)]">{t("products.form.sections.product_images")}</Label>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-[var(--text-secondary)]">Drag to reorder</span>
-                      <Badge variant="outline" className="text-xs">
-                        {imagePreviews.length} {t("products.form.media.image")}
-                        {imagePreviews.length !== 1 ? "s" : ""}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                    {imagePreviews.map((preview, index) => (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                {imagePreviews.map((preview, i) => {
+                  const isSlotPrimary = i === 0;
+                  if (preview) {
+                    return (
                       <div
-                        key={preview.id || preview.url}
-                        draggable
-                        onDragStart={(e) => handleProductImageDragStart(e, index)}
-                        onDragOver={(e) => handleProductImageDragOver(e, index)}
-                        onDragLeave={handleProductImageDragLeave}
-                        onDrop={(e) => handleProductImageDrop(e, index)}
-                        className={`relative group cursor-move transition-all ${
-                          draggedImageIndex === index ? "opacity-50 scale-95" : ""
-                        } ${
-                          dragOverImageIndex === index && draggedImageIndex !== index
-                            ? "ring-2 ring-primary ring-offset-2"
-                            : ""
-                        }`}
+                        key={preview.id || preview.url || `slot-${i}`}
+                        className={`relative group rounded-lg overflow-hidden border-2 transition-all aspect-square bg-[var(--bg-card)] ${preview.isPrimary
+                          ? "border-green-500 ring-2 ring-green-200 shadow-md"
+                          : "border-[var(--border-color)]"
+                          }`}
                       >
-                        <div
-                          className={`relative h-32 rounded-md overflow-hidden border-2 ${preview.isPrimary ? "border-primary" : "border-[var(--border-color)]"}`}
-                        >
-                          <img
-                            src={preview.url}
-                            alt={`Product preview ${index + 1}`}
-                            className="h-full w-full object-cover"
-                          />
+                        {/* Image */}
+                        <img
+                          src={preview.url}
+                          alt={`Slot ${i + 1}`}
+                          className="h-full w-full object-cover"
+                        />
+
+                        {/* Top Overlay Badges */}
+                        <div className="absolute top-2 left-2 flex gap-1">
                           {preview.isPrimary && (
-                            <span className="absolute top-2 left-2 bg-primary text-white text-xs py-1 px-2 rounded-full">
-                              {t("products.form.media.primary_image")}
+                            <span className="bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                              PRIMARY
                             </span>
                           )}
                         </div>
-                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 flex space-x-1">
-                          {!preview.isPrimary && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              className="h-7 w-7 bg-[var(--bg-card)] hover:bg-primary hover:text-white"
-                              onClick={() => setPrimaryImage(index)}
-                            >
-                              <Star className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="h-7 w-7 bg-[var(--bg-card)] hover:bg-destructive hover:text-white"
-                            onClick={() => removeImage(index)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+
+                        {/* Delete Button (Top Right) */}
+                        <button
+                          type="button"
+                          onClick={() => removeImageAt(i)}
+                          className="absolute top-2 right-2 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors shadow-sm"
+                          title="Remove image"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+
+                        {/* Order Controls Overlay (Bottom) */}
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-1.5 flex items-center justify-between text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                          <span className="text-[10px] font-medium ml-1">Slot {i + 1}</span>
+                          <div className="flex gap-1">
+                            {i > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => moveImage(i, "left")}
+                                className="p-1 bg-white/20 hover:bg-white/40 rounded transition-colors"
+                                title="Move Left"
+                              >
+                                <ChevronLeft className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                            {i < 4 && imagePreviews[i + 1] !== null && (
+                              <button
+                                type="button"
+                                onClick={() => moveImage(i, "right")}
+                                className="p-1 bg-white/20 hover:bg-white/40 rounded transition-colors"
+                                title="Move Right"
+                              >
+                                <ChevronRight className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                    );
+                  } else {
+                    return (
+                      <label
+                        key={`empty-slot-${i}`}
+                        className="relative flex flex-col items-center justify-center border-2 border-dashed border-[var(--border-color)] hover:border-primary/50 hover:bg-[var(--bg-secondary)] rounded-lg cursor-pointer transition-all aspect-square bg-[var(--bg-card)] text-center p-4 group"
+                      >
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleSlotFileChange(i, e.target.files[0]);
+                            }
+                            // Clear input value
+                            e.target.value = "";
+                          }}
+                          className="hidden"
+                        />
+                        <div className="flex flex-col items-center space-y-1.5 text-[var(--text-secondary)] group-hover:text-primary transition-colors">
+                          <Plus className="h-6 w-6" />
+                          <span className="text-xs font-semibold">Image {i + 1}</span>
+                          {isSlotPrimary && (
+                            <span className="text-[9px] text-green-500 font-bold bg-green-50 px-1 rounded">
+                              (Primary)
+                            </span>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  }
+                })}
+              </div>
             </div>
           )}
 
@@ -2786,11 +2710,10 @@ export function ProductForm({
             ) : (
               <div
                 {...getVideoRootProps()}
-                className={`border-2 border-dashed rounded-md p-6 cursor-pointer transition-colors text-center bg-[var(--bg-card)] ${
-                  isVideoDragActive
-                    ? "border-blue-400 bg-blue-50"
-                    : "border-[var(--border-color)] hover:border-[var(--border-color)] hover:bg-[var(--bg-secondary)]"
-                }`}
+                className={`border-2 border-dashed rounded-md p-6 cursor-pointer transition-colors text-center bg-[var(--bg-card)] ${isVideoDragActive
+                  ? "border-blue-400 bg-blue-50"
+                  : "border-[var(--border-color)] hover:border-[var(--border-color)] hover:bg-[var(--bg-secondary)]"
+                  }`}
               >
                 <input {...getVideoInputProps()} />
                 <Video className="h-10 w-10 mx-auto mb-2 text-[var(--text-secondary)]" />
@@ -2950,152 +2873,152 @@ export function ProductForm({
                       const iav = inlineAddValue[attribute.id] || { open: false, value: "", hexCode: "", loading: false };
                       const isColor = attribute.name?.toLowerCase().includes("color");
                       return (
-                      <div key={attribute.id} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label>
-                            {attribute.name} <span className="text-[var(--text-secondary)] font-normal text-xs">({attribute.inputType})</span>
-                          </Label>
-                          <div className="flex items-center gap-1">
-                            <Button type="button" size="sm" variant="ghost" className="h-6 text-xs gap-1 text-[var(--accent)]"
-                              onClick={() => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { open: !iav.open, value: "", hexCode: "", loading: false } }))}>
-                              <Plus className="h-3 w-3" /> Add Value
-                            </Button>
-                            <button type="button" title="Delete attribute"
-                              className="text-red-500 hover:text-red-700 p-1"
-                              onClick={() => handleDeleteAttribute(attribute.id, attribute.name)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                        <div key={attribute.id} className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label>
+                              {attribute.name} <span className="text-[var(--text-secondary)] font-normal text-xs">({attribute.inputType})</span>
+                            </Label>
+                            <div className="flex items-center gap-1">
+                              <Button type="button" size="sm" variant="ghost" className="h-6 text-xs gap-1 text-[var(--accent)]"
+                                onClick={() => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { open: !iav.open, value: "", hexCode: "", loading: false } }))}>
+                                <Plus className="h-3 w-3" /> Add Value
+                              </Button>
+                              <button type="button" title="Delete attribute"
+                                className="text-red-500 hover:text-red-700 p-1"
+                                onClick={() => handleDeleteAttribute(attribute.id, attribute.name)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                        {iav.open && (
-                          <div className="flex items-center gap-2 p-2 rounded-md border border-dashed border-[var(--accent)]/40 bg-[var(--bg-secondary)]">
-                            <Input
-                              placeholder="Value name"
-                              value={iav.value}
-                              onChange={(e) => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { ...prev[attribute.id], value: e.target.value } }))}
-                              className="h-7 text-xs flex-1"
-                              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleInlineAddValue(attribute.id); } }}
-                            />
-                            {isColor && (
-                              <input type="color" title="Pick color"
-                                value={iav.hexCode || "#000000"}
-                                onChange={(e) => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { ...prev[attribute.id], hexCode: e.target.value } }))}
-                                className="h-7 w-7 rounded cursor-pointer border border-[var(--border-color)]"
+                          {iav.open && (
+                            <div className="flex items-center gap-2 p-2 rounded-md border border-dashed border-[var(--accent)]/40 bg-[var(--bg-secondary)]">
+                              <Input
+                                placeholder="Value name"
+                                value={iav.value}
+                                onChange={(e) => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { ...prev[attribute.id], value: e.target.value } }))}
+                                className="h-7 text-xs flex-1"
+                                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleInlineAddValue(attribute.id); } }}
                               />
-                            )}
-                            <Button type="button" size="sm" className="h-7 text-xs" disabled={iav.loading}
-                              onClick={() => handleInlineAddValue(attribute.id)}>
-                              {iav.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
-                            </Button>
-                            <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0"
-                              onClick={() => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { open: false, value: "", hexCode: "", loading: false } }))}>
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        )}
-                        <div className="space-y-1 rounded-md border p-3 max-h-52 overflow-y-auto bg-[var(--bg-card)]">
-                          {attributeValuesMap[attribute.id]?.length > 0 ? (
-                            attributeValuesMap[attribute.id].map(
-                              (value: { id: string; value: string; hexCode?: string; image?: string }) => {
-                                const ev = editingValue[value.id];
-                                if (ev) {
-                                  // ── Inline edit row ──────────────────────
-                                  return (
-                                    <div key={value.id} className="flex flex-col gap-1 p-2 rounded border border-[var(--accent)]/30 bg-[var(--bg-secondary)]">
-                                      <div className="flex items-center gap-2">
-                                        <Input value={ev.value} placeholder="Value name"
-                                          onChange={(e) => setEditingValue((prev) => ({ ...prev, [value.id]: { ...prev[value.id], value: e.target.value } }))}
-                                          className="h-7 text-xs flex-1"
-                                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveEditValue(attribute.id, value.id); } }}
-                                        />
-                                        {isColor && (
-                                          <input type="color" title="Color"
-                                            value={ev.hexCode || "#000000"}
-                                            onChange={(e) => setEditingValue((prev) => ({ ...prev, [value.id]: { ...prev[value.id], hexCode: e.target.value } }))}
-                                            className="h-7 w-7 rounded cursor-pointer border border-[var(--border-color)] flex-shrink-0"
+                              {isColor && (
+                                <input type="color" title="Pick color"
+                                  value={iav.hexCode || "#000000"}
+                                  onChange={(e) => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { ...prev[attribute.id], hexCode: e.target.value } }))}
+                                  className="h-7 w-7 rounded cursor-pointer border border-[var(--border-color)]"
+                                />
+                              )}
+                              <Button type="button" size="sm" className="h-7 text-xs" disabled={iav.loading}
+                                onClick={() => handleInlineAddValue(attribute.id)}>
+                                {iav.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
+                              </Button>
+                              <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0"
+                                onClick={() => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { open: false, value: "", hexCode: "", loading: false } }))}>
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
+                          <div className="space-y-1 rounded-md border p-3 max-h-52 overflow-y-auto bg-[var(--bg-card)]">
+                            {attributeValuesMap[attribute.id]?.length > 0 ? (
+                              attributeValuesMap[attribute.id].map(
+                                (value: { id: string; value: string; hexCode?: string; image?: string }) => {
+                                  const ev = editingValue[value.id];
+                                  if (ev) {
+                                    // ── Inline edit row ──────────────────────
+                                    return (
+                                      <div key={value.id} className="flex flex-col gap-1 p-2 rounded border border-[var(--accent)]/30 bg-[var(--bg-secondary)]">
+                                        <div className="flex items-center gap-2">
+                                          <Input value={ev.value} placeholder="Value name"
+                                            onChange={(e) => setEditingValue((prev) => ({ ...prev, [value.id]: { ...prev[value.id], value: e.target.value } }))}
+                                            className="h-7 text-xs flex-1"
+                                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveEditValue(attribute.id, value.id); } }}
                                           />
-                                        )}
-                                        <Button type="button" size="sm" className="h-7 text-xs" disabled={ev.loading}
-                                          onClick={() => saveEditValue(attribute.id, value.id)}>
-                                          {ev.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
-                                        </Button>
-                                        <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0"
-                                          onClick={() => cancelEditValue(value.id)}>
-                                          <X className="h-3 w-3" />
-                                        </Button>
+                                          {isColor && (
+                                            <input type="color" title="Color"
+                                              value={ev.hexCode || "#000000"}
+                                              onChange={(e) => setEditingValue((prev) => ({ ...prev, [value.id]: { ...prev[value.id], hexCode: e.target.value } }))}
+                                              className="h-7 w-7 rounded cursor-pointer border border-[var(--border-color)] flex-shrink-0"
+                                            />
+                                          )}
+                                          <Button type="button" size="sm" className="h-7 text-xs" disabled={ev.loading}
+                                            onClick={() => saveEditValue(attribute.id, value.id)}>
+                                            {ev.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+                                          </Button>
+                                          <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0"
+                                            onClick={() => cancelEditValue(value.id)}>
+                                            <X className="h-3 w-3" />
+                                          </Button>
+                                        </div>
+                                        {/* Image upload */}
+                                        <div className="flex items-center gap-2">
+                                          {(ev.imagePreview || value.image) && (
+                                            <img src={ev.imagePreview || value.image} alt="preview" className="h-10 w-10 rounded-md object-cover border border-gray-200 shadow-sm flex-shrink-0" />
+                                          )}
+                                          <label className="flex items-center gap-1 cursor-pointer text-xs text-[var(--accent)] hover:underline">
+                                            <ImageIcon className="h-3 w-3" />
+                                            {(ev.imagePreview || value.image) ? "Change image" : "Add image"}
+                                            <input type="file" accept="image/*" className="hidden"
+                                              onChange={(e) => {
+                                                const file = e.target.files?.[0] || null;
+                                                setEditingValue((prev) => ({
+                                                  ...prev,
+                                                  [value.id]: { ...prev[value.id], imageFile: file, imagePreview: file ? URL.createObjectURL(file) : prev[value.id].imagePreview },
+                                                }));
+                                              }}
+                                            />
+                                          </label>
+                                        </div>
                                       </div>
-                                      {/* Image upload */}
-                                      <div className="flex items-center gap-2">
-                                        {(ev.imagePreview || value.image) && (
-                                          <img src={ev.imagePreview || value.image} alt="preview" className="h-10 w-10 rounded-md object-cover border border-gray-200 shadow-sm flex-shrink-0" />
+                                    );
+                                  }
+                                  // ── Normal display row ───────────────────
+                                  return (
+                                    <div key={value.id} className="flex items-center gap-2 group py-1">
+                                      <input
+                                        type="checkbox"
+                                        id={`attr-${attribute.id}-value-${value.id}`}
+                                        checked={selectedAttributes[attribute.id]?.includes(value.id) || false}
+                                        onChange={() => handleAttributeValueToggle(attribute.id, value.id)}
+                                        className="h-5 w-5 rounded border-[var(--border-color)] text-[var(--accent)] focus:ring-[var(--accent)] cursor-pointer flex-shrink-0"
+                                      />
+                                      {/* Image swatch — show if image exists */}
+                                      {value.image ? (
+                                        <img src={value.image} alt={value.value} className="h-10 w-10 rounded-md object-cover flex-shrink-0 border border-gray-200 shadow-sm" />
+                                      ) : value.hexCode ? (
+                                        <span className="inline-block h-7 w-7 rounded-full border-2 border-gray-300 flex-shrink-0 shadow-sm" style={{ background: value.hexCode }} />
+                                      ) : null}
+                                      <Label htmlFor={`attr-${attribute.id}-value-${value.id}`}
+                                        className="text-sm font-normal cursor-pointer text-[var(--text-primary)] flex-1">
+                                        {value.value}
+                                        {value.hexCode && (
+                                          <span className="ml-1.5 text-xs text-gray-400 font-mono">{value.hexCode}</span>
                                         )}
-                                        <label className="flex items-center gap-1 cursor-pointer text-xs text-[var(--accent)] hover:underline">
-                                          <ImageIcon className="h-3 w-3" />
-                                          {(ev.imagePreview || value.image) ? "Change image" : "Add image"}
-                                          <input type="file" accept="image/*" className="hidden"
-                                            onChange={(e) => {
-                                              const file = e.target.files?.[0] || null;
-                                              setEditingValue((prev) => ({
-                                                ...prev,
-                                                [value.id]: { ...prev[value.id], imageFile: file, imagePreview: file ? URL.createObjectURL(file) : prev[value.id].imagePreview },
-                                              }));
-                                            }}
-                                          />
-                                        </label>
+                                      </Label>
+                                      <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity flex-shrink-0">
+                                        <button type="button" title="Edit value"
+                                          className="text-blue-500 hover:text-blue-700"
+                                          onClick={() => startEditValue(value)}>
+                                          <Edit className="h-3 w-3" />
+                                        </button>
+                                        <button type="button" title="Delete value"
+                                          className="text-red-500 hover:text-red-700"
+                                          onClick={() => handleDeleteAttributeValue(attribute.id, value.id, value.value)}>
+                                          <Trash2 className="h-3 w-3" />
+                                        </button>
                                       </div>
                                     </div>
                                   );
                                 }
-                                // ── Normal display row ───────────────────
-                                return (
-                                  <div key={value.id} className="flex items-center gap-2 group py-1">
-                                    <input
-                                      type="checkbox"
-                                      id={`attr-${attribute.id}-value-${value.id}`}
-                                      checked={selectedAttributes[attribute.id]?.includes(value.id) || false}
-                                      onChange={() => handleAttributeValueToggle(attribute.id, value.id)}
-                                      className="h-5 w-5 rounded border-[var(--border-color)] text-[var(--accent)] focus:ring-[var(--accent)] cursor-pointer flex-shrink-0"
-                                    />
-                                    {/* Image swatch — show if image exists */}
-                                    {value.image ? (
-                                      <img src={value.image} alt={value.value} className="h-10 w-10 rounded-md object-cover flex-shrink-0 border border-gray-200 shadow-sm" />
-                                    ) : value.hexCode ? (
-                                      <span className="inline-block h-7 w-7 rounded-full border-2 border-gray-300 flex-shrink-0 shadow-sm" style={{ background: value.hexCode }} />
-                                    ) : null}
-                                    <Label htmlFor={`attr-${attribute.id}-value-${value.id}`}
-                                      className="text-sm font-normal cursor-pointer text-[var(--text-primary)] flex-1">
-                                      {value.value}
-                                      {value.hexCode && (
-                                        <span className="ml-1.5 text-xs text-gray-400 font-mono">{value.hexCode}</span>
-                                      )}
-                                    </Label>
-                                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity flex-shrink-0">
-                                      <button type="button" title="Edit value"
-                                        className="text-blue-500 hover:text-blue-700"
-                                        onClick={() => startEditValue(value)}>
-                                        <Edit className="h-3 w-3" />
-                                      </button>
-                                      <button type="button" title="Delete value"
-                                        className="text-red-500 hover:text-red-700"
-                                        onClick={() => handleDeleteAttributeValue(attribute.id, value.id, value.value)}>
-                                        <Trash2 className="h-3 w-3" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              }
-                            )
-                          ) : (
-                            <p className="text-sm text-gray-500">
-                              No values yet.{" "}
-                              <button type="button" className="underline text-[var(--accent)]"
-                                onClick={() => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { open: true, value: "", hexCode: "", loading: false } }))}>
-                                Add first value
-                              </button>
-                            </p>
-                          )}
+                              )
+                            ) : (
+                              <p className="text-sm text-gray-500">
+                                No values yet.{" "}
+                                <button type="button" className="underline text-[var(--accent)]"
+                                  onClick={() => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { open: true, value: "", hexCode: "", loading: false } }))}>
+                                  Add first value
+                                </button>
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
                       );
                     })
                   )}
@@ -3732,7 +3655,7 @@ export function ProductForm({
         </Dialog>
 
         {/* ── Confirm Delete Dialog ───────────────────────────────────────────── */}
-        <Dialog open={confirmDelete.open} onOpenChange={(open) => { if (!open) setConfirmDelete({ open: false, label: "", onConfirm: async () => {} }); }}>
+        <Dialog open={confirmDelete.open} onOpenChange={(open) => { if (!open) setConfirmDelete({ open: false, label: "", onConfirm: async () => { } }); }}>
           <DialogContent className="sm:max-w-sm">
             <DialogHeader>
               <DialogTitle className="text-red-600">Confirm Delete</DialogTitle>
@@ -3744,7 +3667,7 @@ export function ProductForm({
               <p className="text-xs text-[var(--text-secondary)] mt-1">This cannot be undone.</p>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setConfirmDelete({ open: false, label: "", onConfirm: async () => {} })}
+              <Button variant="outline" onClick={() => setConfirmDelete({ open: false, label: "", onConfirm: async () => { } })}
                 disabled={confirmDeleteLoading}>
                 Cancel
               </Button>
@@ -4064,7 +3987,7 @@ function WashingCareEditor({ value, onChange }: { value: string; onChange: (v: s
                       {icon ? (
                         (() => { const IconSvg = icon.svg; return <IconSvg width={26} height={26} className="text-[var(--text-primary)]" />; })()
                       ) : (
-                        <span className="text-[var(--text-secondary)] text-[10px] leading-tight text-center">click<br/>icon</span>
+                        <span className="text-[var(--text-secondary)] text-[10px] leading-tight text-center">click<br />icon</span>
                       )}
                     </button>
                     {iconPickerOpen === i && (

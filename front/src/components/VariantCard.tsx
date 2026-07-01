@@ -16,6 +16,8 @@ import {
   Image as ImageIcon,
   Edit,
   Layers,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { products, moq, pricingSlabs } from "@/api/adminService";
@@ -292,9 +294,12 @@ export default function VariantCard({
   const currentImages = [...rawImages].sort(
     (a, b) => (a.order ?? 999) - (b.order ?? 999)
   );
+  const variantSlots: (ImageData | null)[] = Array(5).fill(null);
+  currentImages.slice(0, 5).forEach((img, idx) => {
+    variantSlots[idx] = img;
+  });
   const hasImages = currentImages.length > 0;
   const maxImages = 5;
-  const remainingSlots = maxImages - currentImages.length;
 
   // Collect attribute value images as suggestions (when variant has no images yet)
   const suggestedAttrImages: { url: string; label: string }[] = [];
@@ -321,309 +326,96 @@ export default function VariantCard({
     toast.success("Image added from attribute value. Upload your own to replace.");
   };
 
-  // Handle image upload via dropzone
-  const onDrop = useCallback(
-    async (acceptedFiles: File[]) => {
-      if (acceptedFiles.length === 0) {
-        toast.error("No valid files selected");
-        return;
-      }
+  // Handle single file upload for a specific slot in variant
+  const handleVariantSlotFileChange = async (slotIndex: number, file: File) => {
+    if (!file) return;
 
-      if (remainingSlots <= 0) {
-        toast.error(`Maximum ${maxImages} images allowed per variant`);
-        return;
-      }
+    const isValidType = file.type.startsWith("image/");
+    const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB
 
-      setIsUploading(true);
+    if (!isValidType) {
+      toast.error(`${file.name} is not a valid image file`);
+      return;
+    }
+    if (!isValidSize) {
+      toast.error(`${file.name} is too large. Maximum size is 10MB`);
+      return;
+    }
 
-      try {
-        // Validate files
-        const validFiles = acceptedFiles
-          .slice(0, remainingSlots)
-          .filter((file) => {
-            const isValidType = file.type.startsWith("image/");
-            const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB
-
-            if (!isValidType) {
-              toast.error(`${file.name} is not a valid image file`);
-              return false;
-            }
-            if (!isValidSize) {
-              toast.error(`${file.name} is too large. Maximum size is 10MB`);
-              return false;
-            }
-            return true;
-          });
-
-        if (validFiles.length === 0) {
-          setIsUploading(false);
-          return;
-        }
-
-        const newImages: ImageData[] = [];
-
-        // If we're in edit mode and have a REAL variant ID (not UUID), upload directly to server
-        // Check if variant.id exists and is not a temporary UUID (UUIDs are 36 characters with hyphens)
-        const isRealVariantId =
-          variant.id &&
-          typeof variant.id === "string" &&
-          !variant.id.includes("-") &&
-          variant.id.length > 10;
-        if (isEditMode && isRealVariantId) {
-          for (let i = 0; i < validFiles.length; i++) {
-            const file = validFiles[i];
-            // Only set as primary if there are NO existing images AND it's the first file
-            const isPrimary = currentImages.length === 0 && i === 0;
-            const order = currentImages.length + i; // Append to end
-
-            console.log(`📸 Uploading image ${i + 1}/${validFiles.length}:`, {
-              fileName: file.name,
-              isPrimary,
-              existingImagesCount: currentImages.length,
-              targetOrder: order,
-              variantId: variant.id,
-            });
-
-            try {
-              const response = await products.uploadVariantImage(
-                variant.id!,
-                file,
-                isPrimary
-              );
-
-              console.log(`📸 Upload response for ${file.name}:`, {
-                success: response.data.success,
-                uploadedImage: response.data.data?.image,
-                sentIsPrimary: isPrimary,
-                receivedIsPrimary: response.data.data?.image?.isPrimary,
-              });
-
-              if (response.data.success) {
-                const uploadedImage = response.data.data?.image;
-                if (uploadedImage) {
-                  // FIXED: Don't override with frontend isPrimary, trust backend response
-                  newImages.push({
-                    url: uploadedImage.url,
-                    id: uploadedImage.id,
-                    isPrimary: uploadedImage.isPrimary, // Use only server response
-                    order: uploadedImage.order || order,
-                    isNew: false,
-                  });
-                }
-              }
-            } catch (error) {
-              console.error(`Failed to upload ${file.name}:`, error);
-              toast.error(`Failed to upload ${file.name}`);
-            }
-          }
-        } else {
-          // Create mode or new variant in edit mode - store files locally
-          const mode = isEditMode ? "new variant in edit mode" : "create mode";
-          console.log(
-            `📸 Storing images locally (${mode}) for variant ${index} (ID: ${variant.id})`
-          );
-
-          validFiles.forEach((file, i) => {
-            const tempId = `temp-${Date.now()}-${index}-${i}-${Math.random()}`;
-            const isPrimary = currentImages.length === 0 && i === 0;
-            const order = currentImages.length + i; // Append to end
-            const blobUrl = URL.createObjectURL(file);
-
-            newImages.push({
-              url: blobUrl,
-              file,
-              tempId,
-              isPrimary,
-              order,
-              isNew: true,
-            });
-          });
-        }
-
-        // Update images array and fix ordering
-        const allImages = [...currentImages, ...newImages];
-
-        // Ensure proper order and primary image logic
-        const orderedImages = allImages.map((img, i) => ({
-          ...img,
-          order: i,
-          isPrimary:
-            img.isPrimary || (i === 0 && allImages.length === newImages.length), // First image is primary if this is the first upload
-        }));
-
-        // Ensure only one primary image
-        let hasPrimary = false;
-        const finalImages = orderedImages.map((img) => {
-          if (img.isPrimary && !hasPrimary) {
-            hasPrimary = true;
-            return { ...img, isPrimary: true };
-          } else {
-            return { ...img, isPrimary: false };
-          }
-        });
-
-        // If no primary image was found, set the first one as primary
-        if (!hasPrimary && finalImages.length > 0) {
-          finalImages[0].isPrimary = true;
-        }
-
-        console.log(`📸 Updated images for variant ${index}:`, {
-          totalImages: finalImages.length,
-          newImagesCount: newImages.length,
-          images: finalImages.map((img) => ({
-            url: img.url,
-            isPrimary: img.isPrimary,
-            order: img.order,
-            isNew: img.isNew,
-            id: img.id || img.tempId,
-          })),
-        });
-
-        onImagesChange(index, finalImages);
-
-        if (isEditMode && !isRealVariantId) {
-          toast.success(
-            `${newImages.length} image(s) added. Images will be uploaded when you save the product.`
-          );
-        } else {
-          toast.success(`${newImages.length} image(s) uploaded successfully`);
-        }
-      } catch (error) {
-        console.error("Error uploading images:", error);
-        toast.error("Failed to upload images");
-      } finally {
-        setIsUploading(false);
-      }
-    },
-    [
-      variant,
-      index,
-      onImagesChange,
-      isEditMode,
-      currentImages.length,
-      remainingSlots,
-    ]
-  );
-
-  const { getRootProps, getInputProps, isDragActive, isDragReject } =
-    useDropzone({
-      onDrop,
-      accept: {
-        "image/jpeg": [],
-        "image/png": [],
-        "image/webp": [],
-        "image/gif": [],
-      },
-      maxSize: 10 * 1024 * 1024, // 10MB
-      multiple: true,
-      disabled: remainingSlots <= 0,
-      onDropRejected: (rejectedFiles) => {
-        rejectedFiles.forEach((file) => {
-          const errors = file.errors.map((e) => e.message).join(", ");
-          toast.error(`${file.file.name}: ${errors}`);
-        });
-      },
-    });
-
-  // Handle primary image setting
-  const handleSetPrimary = async (imageIndex: number) => {
-    const imageToSetPrimary = currentImages[imageIndex];
-
-    if (!imageToSetPrimary) return;
-
+    setIsUploading(true);
     try {
-      // Check if it's a real variant (not a temporary UUID) and existing image with ID
       const isRealVariantId =
         variant.id &&
         typeof variant.id === "string" &&
-        variant.id.length >= 30 && // Real UUIDs are longer
-        !variant.id.startsWith("new-") &&
-        !variant.id.startsWith("temp-") &&
-        !variant.id.startsWith("field");
+        !variant.id.includes("-") &&
+        variant.id.length > 10;
 
-      // If it's an existing image with ID and real variant, update on server
-      if (imageToSetPrimary.id && isEditMode && isRealVariantId) {
-        const response = await products.setVariantImageAsPrimary(
-          imageToSetPrimary.id
+      const isPrimary = slotIndex === 0 || variantSlots.every((s) => s === null);
+
+      if (isEditMode && isRealVariantId) {
+        const response = await products.uploadVariantImage(
+          variant.id!,
+          file,
+          isPrimary
         );
 
         if (response.data.success) {
-          // Update local state with proper ordering
-          const selectedImage = currentImages[imageIndex];
+          const uploadedImage = response.data.data?.image;
+          if (uploadedImage) {
+            const newImg: ImageData = {
+              url: uploadedImage.url,
+              id: uploadedImage.id,
+              isPrimary: uploadedImage.isPrimary,
+              order: uploadedImage.order || slotIndex,
+              isNew: false,
+            };
+            const updatedSlots = [...variantSlots];
+            updatedSlots[slotIndex] = newImg;
 
-          // Move the selected image to the front and update orders
-          const updatedImages = [
-            selectedImage,
-            ...currentImages.filter((_, i) => i !== imageIndex),
-          ];
-
-          // Update isPrimary flags and order values
-          const reorderedImages = updatedImages.map((img, i) => ({
-            ...img,
-            isPrimary: i === 0, // Only first image is primary
-            order: i, // Sequential ordering 0, 1, 2, 3...
-          }));
-
-          onImagesChange(index, reorderedImages);
-          toast.success("Primary image updated successfully");
-
-          console.log(`✅ Primary image set for variant ${variant.sku}:`, {
-            newPrimaryId: selectedImage.id,
-            newOrder: reorderedImages.map((img) => ({
-              id: img.id,
-              order: img.order,
-              isPrimary: img.isPrimary,
-            })),
-          });
-        } else {
-          toast.error("Failed to set primary image");
+            const activeImages = updatedSlots.filter((img): img is ImageData => img !== null);
+            onImagesChange(index, activeImages);
+            toast.success("Image uploaded successfully");
+          }
         }
       } else {
-        // Local update for new images - same logic as server update
-        const selectedImage = currentImages[imageIndex];
+        const tempId = `temp-${Date.now()}-${index}-${slotIndex}-${Math.random()}`;
+        const blobUrl = URL.createObjectURL(file);
+        const newImg: ImageData = {
+          url: blobUrl,
+          file,
+          tempId,
+          isPrimary,
+          order: slotIndex,
+          isNew: true,
+        };
 
-        // Move the selected image to the front and update orders
-        const updatedImages = [
-          selectedImage,
-          ...currentImages.filter((_, i) => i !== imageIndex),
-        ];
+        const updatedSlots = [...variantSlots];
+        updatedSlots[slotIndex] = newImg;
 
-        // Update isPrimary flags and order values
-        const reorderedImages = updatedImages.map((img, i) => ({
-          ...img,
-          isPrimary: i === 0, // Only first image is primary
-          order: i, // Sequential ordering 0, 1, 2, 3...
-        }));
+        const activeImages = updatedSlots.filter((img): img is ImageData => img !== null);
+        activeImages.forEach((img, idx) => {
+          img.isPrimary = idx === 0;
+          img.order = idx;
+        });
 
-        onImagesChange(index, reorderedImages);
-        toast.success("Primary image set");
-
-        console.log(
-          `✅ Primary image set locally for variant ${variant.sku}:`,
-          {
-            newPrimaryTempId: selectedImage.tempId || selectedImage.id,
-            newOrder: reorderedImages.map((img) => ({
-              id: img.id || img.tempId,
-              order: img.order,
-              isPrimary: img.isPrimary,
-            })),
-          }
-        );
+        onImagesChange(index, activeImages);
+        toast.success("Image added");
       }
     } catch (error) {
-      console.error("Error setting primary image:", error);
-      toast.error("Failed to set primary image");
+      console.error("Failed to upload variant image:", error);
+      toast.error("Failed to upload image");
+    } finally {
+      setIsUploading(false);
     }
   };
 
-  // Handle image removal
-  const handleRemoveImage = async (imageIndex: number) => {
-    const imageToRemove = currentImages[imageIndex];
-
+  // Remove variant image from slot and pack remaining left
+  const removeVariantImageAt = async (slotIndex: number) => {
+    const imageToRemove = variantSlots[slotIndex];
     if (!imageToRemove) return;
 
-    // Prevent removing the only image
-    if (currentImages.length === 1) {
+    const activeCount = variantSlots.filter((s) => s !== null).length;
+    if (activeCount === 1) {
       toast.error(
         "Cannot remove the only image. Variants must have at least one image."
       );
@@ -631,193 +423,119 @@ export default function VariantCard({
     }
 
     try {
-      // Check if it's a real variant (not a temporary UUID)
       const isRealVariantId =
         variant.id &&
         typeof variant.id === "string" &&
-        variant.id.length >= 30 && // Real UUIDs are longer
+        variant.id.length >= 30 &&
         !variant.id.startsWith("new-") &&
         !variant.id.startsWith("temp-") &&
         !variant.id.startsWith("field");
 
-      // If it's an existing image with ID and real variant, delete from server immediately
       if (imageToRemove.id && isEditMode && isRealVariantId) {
+        setIsUploading(true);
         const response = await products.deleteVariantImage(imageToRemove.id);
+        setIsUploading(false);
 
         if (response.data.success) {
-          // Remove from local state
-          const updatedImages = currentImages.filter(
-            (_, i) => i !== imageIndex
-          );
+          const updatedSlots = [...variantSlots];
+          updatedSlots[slotIndex] = null;
 
-          // Reorder remaining images
-          const reorderedImages = updatedImages.map((img, i) => ({
+          const filtered = updatedSlots.filter((s): s is ImageData => s !== null);
+          const reordered = filtered.map((img, i) => ({
             ...img,
             order: i,
+            isPrimary: i === 0,
           }));
 
-          // If we removed the primary image, set the first remaining as primary
-          if (imageToRemove.isPrimary && reorderedImages.length > 0) {
-            reorderedImages[0].isPrimary = true;
-
-            // Update primary on server if there's an ID
-            if (reorderedImages[0].id) {
-              try {
-                await products.setVariantImageAsPrimary(reorderedImages[0].id);
-              } catch (error) {
-                console.error("Error setting new primary image:", error);
-              }
+          if (imageToRemove.isPrimary && reordered.length > 0 && reordered[0].id) {
+            try {
+              await products.setVariantImageAsPrimary(reordered[0].id);
+            } catch (err) {
+              console.error("Error setting primary variant image:", err);
             }
           }
 
-          onImagesChange(index, reorderedImages);
+          onImagesChange(index, reordered);
           toast.success("Image deleted successfully");
         } else {
           toast.error("Failed to delete image");
         }
       } else {
-        // For local images (new ones) or when we want to defer deletion until save
-        // Clean up blob URL if it's a local file
         if (imageToRemove.url && imageToRemove.url.startsWith("blob:")) {
           URL.revokeObjectURL(imageToRemove.url);
         }
 
-        // Track removal of database images for batch processing during update
         if (imageToRemove.id && !imageToRemove.isNew) {
-          // Get current removedImageIds array or initialize empty
           const currentRemovedIds = variant.removedImageIds || [];
           const updatedRemovedIds = [...currentRemovedIds, imageToRemove.id];
-
-          // Update variant data with removedImageIds
           onUpdate(index, "removedImageIds", updatedRemovedIds);
-          console.log(
-            `📝 Marked image ${imageToRemove.id} for removal on next save`
-          );
         }
 
-        const updatedImages = currentImages.filter((_, i) => i !== imageIndex);
+        const updatedSlots = [...variantSlots];
+        updatedSlots[slotIndex] = null;
 
-        // Reorder remaining images
-        const reorderedImages = updatedImages.map((img, i) => ({
+        const filtered = updatedSlots.filter((s): s is ImageData => s !== null);
+        const reordered = filtered.map((img, i) => ({
           ...img,
           order: i,
+          isPrimary: i === 0,
         }));
 
-        // If we removed the primary image, set the first remaining as primary
-        if (imageToRemove.isPrimary && reorderedImages.length > 0) {
-          reorderedImages[0].isPrimary = true;
-        }
-
-        onImagesChange(index, reorderedImages);
-
-        if (imageToRemove.id && !imageToRemove.isNew) {
-          toast.success(
-            "Image marked for removal. Will be deleted when you save the product."
-          );
-        } else {
-          toast.success("Image removed");
-        }
+        onImagesChange(index, reordered);
+        toast.success("Image removed");
       }
     } catch (error) {
-      console.error("Error removing image:", error);
+      console.error("Error removing variant image:", error);
       toast.error("Failed to remove image");
+      setIsUploading(false);
     }
   };
 
-  // Handle drag and drop for reordering images
-  const handleDragStart = (e: React.DragEvent, imageIndex: number) => {
-    setDraggedImageIndex(imageIndex);
-    e.dataTransfer.effectAllowed = "move";
-  };
+  // Move variant image left/right to reorder
+  const moveVariantImage = async (slotIndex: number, direction: "left" | "right") => {
+    const targetIndex = direction === "left" ? slotIndex - 1 : slotIndex + 1;
+    if (targetIndex < 0 || targetIndex >= 5) return;
+    if (!variantSlots[slotIndex] || !variantSlots[targetIndex]) return;
 
-  const handleDragOver = (e: React.DragEvent, imageIndex: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    setDragOverIndex(imageIndex);
-  };
+    const updatedSlots = [...variantSlots];
+    const temp = updatedSlots[slotIndex];
+    updatedSlots[slotIndex] = updatedSlots[targetIndex];
+    updatedSlots[targetIndex] = temp;
 
-  const handleDragLeave = () => {
-    setDragOverIndex(null);
-  };
-
-  const handleDrop = async (e: React.DragEvent, dropIndex: number) => {
-    e.preventDefault();
-    setDragOverIndex(null);
-
-    if (draggedImageIndex === null || draggedImageIndex === dropIndex) {
-      setDraggedImageIndex(null);
-      return;
-    }
-
-    const newImages = [...currentImages];
-    const draggedImage = newImages[draggedImageIndex];
-
-    // Remove the dragged image
-    newImages.splice(draggedImageIndex, 1);
-
-    // Insert at new position
-    newImages.splice(dropIndex, 0, draggedImage);
-
-    // Update order values
-    const reorderedImages = newImages.map((img, i) => ({
+    const activeImages = updatedSlots.filter((img): img is ImageData => img !== null);
+    const reordered = activeImages.map((img, idx) => ({
       ...img,
-      order: i,
+      order: idx,
+      isPrimary: idx === 0,
     }));
 
-    // Handle primary image logic
-    if (dropIndex === 0) {
-      // If we dropped an image at position 0, make it primary
-      reorderedImages[0].isPrimary = true;
-      reorderedImages.forEach((img, i) => {
-        if (i !== 0) img.isPrimary = false;
-      });
-    } else if (draggedImage.isPrimary && dropIndex !== 0) {
-      // If primary image was moved away from position 0, make the image at position 0 primary
-      reorderedImages[0].isPrimary = true;
-      reorderedImages.forEach((img, i) => {
-        if (i !== 0) img.isPrimary = false;
-      });
-    }
+    onImagesChange(index, reordered);
 
-    onImagesChange(index, reorderedImages);
-    setDraggedImageIndex(null);
-
-    // If it's a real variant, update the server
     const isRealVariantId =
       variant.id &&
       typeof variant.id === "string" &&
-      variant.id.length >= 30 && // Real UUIDs are longer
+      variant.id.length >= 30 &&
       !variant.id.startsWith("new-") &&
       !variant.id.startsWith("temp-") &&
       !variant.id.startsWith("field");
 
     if (isEditMode && isRealVariantId) {
       try {
-        const imageOrders = reorderedImages
-          .filter((img) => img.id) // Only include images with IDs (existing images)
+        const imageOrders = reordered
+          .filter((img) => img.id)
           .map((img, i) => ({
             imageId: img.id!,
             order: i,
           }));
 
         if (imageOrders.length > 0) {
-          const response = await products.reorderVariantImages(
-            variant.id!,
-            imageOrders
-          );
-          console.log(`✅ Reorder response:`, response.data);
-          toast.success("Images reordered successfully");
-        } else {
-          console.log(`⚠️ No images with IDs to reorder`);
+          await products.reorderVariantImages(variant.id!, imageOrders);
+          toast.success("Images reordered");
         }
       } catch (error) {
-        console.error("Error reordering images:", error);
-        toast.error("Failed to reorder images");
+        console.error("Error reordering variant images:", error);
       }
     } else {
-      console.log(
-        `📝 Local reorder only (variant ID: ${variant.id}, isEditMode: ${isEditMode})`
-      );
       toast.success("Images reordered");
     }
   };
@@ -1297,162 +1015,114 @@ export default function VariantCard({
               </div>
             )}
 
-            {/* Upload Area */}
-            {remainingSlots > 0 && (
-              <div
-                {...getRootProps()}
-                className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${isDragActive
-                  ? isDragReject
-                    ? "border-red-400 bg-red-500/10"
-                    : "border-blue-400 bg-blue-500/10"
-                  : "border-[var(--border-color)] hover:border-[var(--accent)]/50 hover:bg-[var(--bg-secondary)]"
-                  } ${isUploading ? "opacity-50 pointer-events-none" : ""} ${remainingSlots <= 0 ? "opacity-50 pointer-events-none" : ""}`}
-              >
-                <input {...getInputProps()} />
-                <div className="flex flex-col items-center space-y-2">
-                  <div className="flex items-center justify-center w-12 h-12 rounded-full bg-[var(--bg-secondary)]">
-                    {isUploading ? (
-                      <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <Plus className="h-6 w-6 text-gray-400" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-[var(--text-primary)]">
-                      {isUploading
-                        ? "Uploading..."
-                        : isDragActive
-                          ? isDragReject
-                            ? "Some files are not supported"
-                            : "Drop images here"
-                          : "Add variant images"}
-                    </p>
-                    <p className="text-xs text-[var(--text-secondary)] mt-1">
-                      JPG, PNG, WebP, GIF (max 10MB each) • {remainingSlots}{" "}
-                      slots remaining
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Images Grid */}
-            {hasImages && (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
-                {currentImages.map((image, imageIndex) => (
-                  <div
-                    key={
-                      image.id || image.tempId || `img-${index}-${imageIndex}`
-                    }
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, imageIndex)}
-                    onDragOver={(e) => handleDragOver(e, imageIndex)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, imageIndex)}
-                    className={`relative rounded-lg overflow-hidden border-2 transition-all cursor-move ${image.isPrimary
-                      ? "border-green-500 ring-2 ring-green-200 shadow-lg"
-                      : "border-[var(--border-color)]"
-                      } ${draggedImageIndex === imageIndex
-                        ? "opacity-50 scale-95"
-                        : ""
-                      } ${dragOverIndex === imageIndex &&
-                        draggedImageIndex !== imageIndex
-                        ? "border-blue-400 bg-blue-50"
-                        : ""
+            {/* 5 Sequential Boxes */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+              {variantSlots.map((preview, i) => {
+                const isSlotPrimary = i === 0;
+                if (preview) {
+                  return (
+                    <div
+                      key={preview.id || preview.tempId || `variant-slot-${i}`}
+                      className={`relative group rounded-lg overflow-hidden border-2 transition-all aspect-square bg-[var(--bg-card)] ${
+                        preview.isPrimary
+                          ? "border-green-500 ring-2 ring-green-200 shadow-md"
+                          : "border-[var(--border-color)]"
                       }`}
-                  >
-                    {/* Image Container */}
-                    <div className="aspect-square bg-[var(--bg-secondary)] flex items-center justify-center">
-                      {image.url ? (
-                        <img
-                          src={image.url}
-                          alt={`Variant image ${imageIndex + 1}`}
-                          className="h-full w-full object-cover"
-                          onError={(e) => {
-                            console.error(
-                              `❌ Failed to load image: ${image.url}`
-                            );
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = "none";
-                            const parent = target.parentElement;
-                            if (parent) {
-                              parent.innerHTML = `
-                                <div class="flex flex-col items-center justify-center h-full text-[var(--text-secondary)] p-4">
-                                  <svg class="h-8 w-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                                  </svg>
-                                  <span class="text-xs text-center">Failed to load</span>
-                                </div>
-                              `;
-                            }
-                          }}
-                        />
-                      ) : (
-                        <div className="flex flex-col items-center justify-center h-full text-[var(--text-secondary)] p-4">
-                          <ImageIcon className="h-8 w-8 mb-2" />
-                          <span className="text-xs text-center">No image</span>
-                        </div>
-                      )}
-                    </div>
+                    >
+                      {/* Image */}
+                      <img
+                        src={preview.url}
+                        alt={`Slot ${i + 1}`}
+                        className="h-full w-full object-cover"
+                      />
 
-                    {/* Badges */}
-                    <div className="absolute top-2 left-2 flex gap-1">
-                      {image.isPrimary && (
-                        <div className="bg-primary text-primary-foreground text-xs px-2 py-1 rounded-full font-medium">
-                          PRIMARY
-                        </div>
-                      )}
-                      {image.isNew && (
-                        <div className="bg-blue-500 text-white text-xs px-2 py-1 rounded-full font-medium">
-                          NEW
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Action Buttons - Below Image */}
-                    <div className="absolute bottom-0 left-0 right-0 bg-[var(--bg-card)]/90 backdrop-blur-sm p-2">
-                      <div className="flex justify-center space-x-2">
-                        {!image.isPrimary && (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => handleSetPrimary(imageIndex)}
-                            className="h-7 text-xs"
-                            title="Set as primary"
-                          >
-                            <Star className="h-3 w-3 mr-1" />
-                            Primary
-                          </Button>
+                      {/* Top Overlay Badges */}
+                      <div className="absolute top-2 left-2 flex gap-1">
+                        {preview.isPrimary && (
+                          <span className="bg-green-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold">
+                            PRIMARY
+                          </span>
                         )}
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleRemoveImage(imageIndex)}
-                          className="h-7 text-xs"
-                          title="Remove image"
-                        >
-                          <X className="h-3 w-3 mr-1" />
-                          Remove
-                        </Button>
+                        {preview.isNew && (
+                          <span className="bg-blue-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold">
+                            NEW
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Delete Button (Top Right) */}
+                      <button
+                        type="button"
+                        onClick={() => removeVariantImageAt(i)}
+                        className="absolute top-2 right-2 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors shadow-sm"
+                        title="Remove image"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+
+                      {/* Order Controls Overlay (Bottom) */}
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-1.5 flex items-center justify-between text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-[10px] font-medium ml-1">Slot {i + 1}</span>
+                        <div className="flex gap-1">
+                          {i > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => moveVariantImage(i, "left")}
+                              className="p-1 bg-white/20 hover:bg-white/40 rounded transition-colors"
+                              title="Move Left"
+                            >
+                              <ChevronLeft className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          {i < 4 && variantSlots[i + 1] !== null && (
+                            <button
+                              type="button"
+                              onClick={() => moveVariantImage(i, "right")}
+                              className="p-1 bg-white/20 hover:bg-white/40 rounded transition-colors"
+                              title="Move Right"
+                            >
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* No Images State */}
-            {!hasImages && (
-              <div className="text-center py-6 text-[var(--text-secondary)] border border-[var(--border-color)] rounded-lg bg-[var(--bg-secondary)]">
-                <ImageIcon className="h-12 w-12 mx-auto mb-3 text-[var(--text-secondary)]" />
-                <p className="font-medium text-[var(--text-primary)]">No images uploaded yet</p>
-                <p className="text-sm mt-1 text-[var(--text-secondary)]">
-                  Upload images using the area above
-                </p>
-              </div>
-            )}
+                  );
+                } else {
+                  return (
+                    <label
+                      key={`empty-variant-slot-${i}`}
+                      className="relative flex flex-col items-center justify-center border-2 border-dashed border-[var(--border-color)] hover:border-primary/50 hover:bg-[var(--bg-secondary)] rounded-lg cursor-pointer transition-all aspect-square bg-[var(--bg-card)] text-center p-2 group"
+                    >
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleVariantSlotFileChange(i, e.target.files[0]);
+                          }
+                          e.target.value = "";
+                        }}
+                        className="hidden"
+                      />
+                      <div className="flex flex-col items-center space-y-1 text-[var(--text-secondary)] group-hover:text-primary transition-colors">
+                        {isUploading ? (
+                          <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Plus className="h-5 w-5" />
+                        )}
+                        <span className="text-[10px] font-semibold">Image {i + 1}</span>
+                        {isSlotPrimary && (
+                          <span className="text-[8px] text-green-500 font-bold bg-green-50 px-1 rounded">
+                            (Primary)
+                          </span>
+                        )}
+                      </div>
+                    </label>
+                  );
+                }
+              })}
+            </div>
           </div>
         </div>
       )}
