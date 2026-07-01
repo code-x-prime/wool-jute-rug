@@ -17,6 +17,8 @@ import {
   setVariantImageAsPrimary,
   reorderVariantImages,
   bulkVariantOperations,
+  uploadVariantVideo,
+  deleteVariantVideo,
 } from "../controllers/admin.product.controller.js";
 import {
   verifyAdminJWT,
@@ -159,6 +161,22 @@ router.patch(
   verifyAdminJWT,
   hasPermission("products", "update"),
   reorderVariantImages
+);
+
+// Variant video routes
+router.post(
+  "/variants/:variantId/video",
+  verifyAdminJWT,
+  hasPermission("products", "update"),
+  uploadFiles.single("video"),
+  uploadVariantVideo
+);
+
+router.delete(
+  "/variants/:variantId/video",
+  verifyAdminJWT,
+  hasPermission("products", "update"),
+  deleteVariantVideo
 );
 
 export default router;

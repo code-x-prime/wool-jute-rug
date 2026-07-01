@@ -317,6 +317,18 @@ export const products = {
   deleteVariantImage: (imageId: string) => {
     return api.delete(`/api/admin/variants/images/${imageId}`);
   },
+  uploadVariantVideo: (variantId: string, videoFile: File) => {
+    const formData = new FormData();
+    formData.append("video", videoFile);
+    return api.post(`/api/admin/variants/${variantId}/video`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  },
+  deleteVariantVideo: (variantId: string) => {
+    return api.delete(`/api/admin/variants/${variantId}/video`);
+  },
   setVariantImageAsPrimary: (imageId: string) => {
     return api.patch(`/api/admin/variants/images/${imageId}/set-primary`);
   },

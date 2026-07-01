@@ -16,6 +16,7 @@ import {
   Layers,
   ChevronLeft,
   ChevronRight,
+  Video,
 } from "lucide-react";
 import { toast } from "sonner";
 import { products, moq, pricingSlabs } from "@/api/adminService";
@@ -60,6 +61,9 @@ interface VariantData {
   shippingHeight?: number;
   shippingWeight?: number;
   pricingSlabs?: PricingSlabData[];
+  videoUrl?: string | null;
+  videoFile?: File | null;
+  videoRemoved?: boolean;
 }
 
 interface PricingSlabData {
@@ -318,6 +322,88 @@ export default function VariantCard({
     };
     onImagesChange(index, [...currentImages, newImage]);
     toast.success("Image added from attribute value. Upload your own to replace.");
+  };
+
+  // Handle variant video upload
+  const handleVariantVideoChange = async (file: File) => {
+    if (!file) return;
+
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    const allowedTypes = ["video/mp4", "video/webm"];
+    if (file.size > maxSize) {
+      toast.error("Video must be 10MB or less");
+      return;
+    }
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Only MP4 and WebM videos are supported");
+      return;
+    }
+
+    const isRealVariantId =
+      variant.id &&
+      typeof variant.id === "string" &&
+      !variant.id.includes("-") &&
+      variant.id.length > 10;
+
+    if (isEditMode && isRealVariantId) {
+      setIsUploading(true);
+      try {
+        const response = await products.uploadVariantVideo(variant.id!, file);
+        if (response.data.success) {
+          onUpdate(index, "videoUrl", response.data.data.videoUrl);
+          onUpdate(index, "videoFile", null);
+          onUpdate(index, "videoRemoved", false);
+          toast.success("Variant video uploaded successfully");
+        }
+      } catch (err: any) {
+        console.error("Error uploading variant video:", err);
+        toast.error(err.response?.data?.message || "Failed to upload variant video");
+      } finally {
+        setIsUploading(false);
+      }
+    } else {
+      // Local preview mode
+      onUpdate(index, "videoFile", file);
+      onUpdate(index, "videoUrl", URL.createObjectURL(file));
+      onUpdate(index, "videoRemoved", false);
+      toast.success("Video added to variant locally");
+    }
+  };
+
+  // Remove variant video
+  const removeVariantVideo = async () => {
+    const isRealVariantId =
+      variant.id &&
+      typeof variant.id === "string" &&
+      !variant.id.includes("-") &&
+      variant.id.length > 10;
+
+    if (variant.videoFile && variant.videoUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(variant.videoUrl);
+    }
+
+    if (isEditMode && isRealVariantId) {
+      setIsUploading(true);
+      try {
+        const response = await products.deleteVariantVideo(variant.id!);
+        if (response.data.success) {
+          onUpdate(index, "videoUrl", null);
+          onUpdate(index, "videoFile", null);
+          onUpdate(index, "videoRemoved", true);
+          toast.success("Variant video deleted successfully");
+        }
+      } catch (err: any) {
+        console.error("Error deleting variant video:", err);
+        toast.error(err.response?.data?.message || "Failed to delete variant video");
+      } finally {
+        setIsUploading(false);
+      }
+    } else {
+      onUpdate(index, "videoUrl", null);
+      onUpdate(index, "videoFile", null);
+      onUpdate(index, "videoRemoved", true);
+      toast.success("Video removed from variant");
+    }
   };
 
   // Handle single file upload for a specific slot in variant
@@ -1009,8 +1095,8 @@ export default function VariantCard({
               </div>
             )}
 
-            {/* 5 Sequential Boxes */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            {/* 6 Sequential Boxes (5 images + 1 video) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
               {variantSlots.map((preview, i) => {
                 const isSlotPrimary = i === 0;
                 if (preview) {
@@ -1115,6 +1201,62 @@ export default function VariantCard({
                   );
                 }
               })}
+
+              {/* 6th Slot - Video (Optional) */}
+              {variant.videoUrl ? (
+                <div
+                  className="relative group rounded-lg overflow-hidden border-2 border-[var(--border-color)] transition-all aspect-square bg-[var(--bg-card)]"
+                >
+                  {/* Video Player */}
+                  <video
+                    src={variant.videoUrl}
+                    className="h-full w-full object-cover"
+                    controls
+                  />
+
+                  {/* Delete Button (Top Right) */}
+                  <button
+                    type="button"
+                    onClick={removeVariantVideo}
+                    className="absolute top-2 right-2 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors shadow-sm z-10"
+                    title="Remove video"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+
+                  {/* Overlay Label */}
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-1.5 flex items-center justify-between text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-[10px] font-medium ml-1">Variant Video</span>
+                  </div>
+                </div>
+              ) : (
+                <label
+                  className="relative flex flex-col items-center justify-center border-2 border-dashed border-[var(--border-color)] hover:border-primary/50 hover:bg-[var(--bg-secondary)] rounded-lg cursor-pointer transition-all aspect-square bg-[var(--bg-card)] text-center p-2 group"
+                >
+                  <input
+                    type="file"
+                    accept="video/mp4,video/webm"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        handleVariantVideoChange(e.target.files[0]);
+                      }
+                      e.target.value = "";
+                    }}
+                    className="hidden"
+                  />
+                  <div className="flex flex-col items-center space-y-1 text-[var(--text-secondary)] group-hover:text-primary transition-colors">
+                    {isUploading ? (
+                      <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Video className="h-5 w-5" />
+                    )}
+                    <span className="text-[10px] font-semibold">Add Video</span>
+                    <span className="text-[8px] text-[var(--text-secondary)]">
+                      MP4/WebM • Max 10MB
+                    </span>
+                  </div>
+                </label>
+              )}
             </div>
           </div>
         </div>

@@ -119,6 +119,7 @@ export const getProductsByType = asyncHandler(async (req, res, next) => {
               url: getFileUrl(image.url),
             }))
           : [],
+        videoUrl: variant.videoUrl ? getFileUrl(variant.videoUrl) : null,
       })),
     };
   });
@@ -261,6 +262,7 @@ export const getProducts = asyncHandler(async (req, res, next) => {
               url: getFileUrl(image.url),
             }))
           : [],
+        videoUrl: variant.videoUrl ? getFileUrl(variant.videoUrl) : null,
       })),
     };
   });
@@ -362,6 +364,7 @@ export const getProductById = asyncHandler(async (req, res, next) => {
             url: getFileUrl(image.url),
           }))
           : [],
+        videoUrl: variant.videoUrl ? getFileUrl(variant.videoUrl) : null,
       };
     }),
     // Include SEO fields
@@ -1086,6 +1089,7 @@ export const createProduct = asyncHandler(async (req, res, next) => {
               url: getFileUrl(image.url),
             }))
             : [],
+          videoUrl: variant.videoUrl ? getFileUrl(variant.videoUrl) : null,
         })),
         // Include message when variants couldn't be deleted due to orders
         _message:
@@ -2506,6 +2510,7 @@ export const updateProduct = asyncHandler(async (req, res, next) => {
               url: getFileUrl(img.url),
             }))
             : [],
+          videoUrl: variant.videoUrl ? getFileUrl(variant.videoUrl) : null,
         })
       ),
       // Include message when variants couldn't be deleted due to orders
@@ -4438,5 +4443,83 @@ export const setVariantImageAsPrimary = asyncHandler(async (req, res, next) => {
       500,
       `Failed to set variant image as primary: ${error.message}`
     );
+  }
+});
+
+// Upload variant video
+export const uploadVariantVideo = asyncHandler(async (req, res, next) => {
+  const { variantId } = req.params;
+
+  const variant = await prisma.productVariant.findUnique({
+    where: { id: variantId },
+  });
+
+  if (!variant) {
+    throw new ApiError(404, "Product variant not found");
+  }
+
+  if (!req.file) {
+    throw new ApiError(400, "Video file is required");
+  }
+
+  try {
+    // Delete old video if exists
+    if (variant.videoUrl) {
+      await deleteFromS3(variant.videoUrl);
+    }
+
+    const videoUrl = await uploadVideo(req.file);
+
+    const updatedVariant = await prisma.productVariant.update({
+      where: { id: variantId },
+      data: { videoUrl },
+      include: {
+        images: { orderBy: { order: "asc" } },
+      },
+    });
+
+    res.status(200).json(
+      new ApiResponsive(
+        200,
+        {
+          videoUrl: getFileUrl(updatedVariant.videoUrl),
+        },
+        "Variant video uploaded successfully"
+      )
+    );
+  } catch (error) {
+    console.error("❌ Error uploading variant video:", error);
+    throw new ApiError(500, error.message || "Failed to upload variant video");
+  }
+});
+
+// Delete variant video
+export const deleteVariantVideo = asyncHandler(async (req, res, next) => {
+  const { variantId } = req.params;
+
+  const variant = await prisma.productVariant.findUnique({
+    where: { id: variantId },
+  });
+
+  if (!variant) {
+    throw new ApiError(404, "Product variant not found");
+  }
+
+  try {
+    if (variant.videoUrl) {
+      await deleteFromS3(variant.videoUrl);
+    }
+
+    await prisma.productVariant.update({
+      where: { id: variantId },
+      data: { videoUrl: null },
+    });
+
+    res.status(200).json(
+      new ApiResponsive(200, {}, "Variant video deleted successfully")
+    );
+  } catch (error) {
+    console.error("❌ Error deleting variant video:", error);
+    throw new ApiError(500, error.message || "Failed to delete variant video");
   }
 });

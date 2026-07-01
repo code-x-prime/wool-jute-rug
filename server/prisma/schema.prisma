@@ -383,6 +383,7 @@ model ProductVariant {
   attributes      VariantAttributeValue[]
   product         Product                 @relation(fields: [productId], references: [id], onDelete: Cascade)
   images          ProductVariantImage[]
+  videoUrl        String?                 // Optional variant video (max 10MB)
   cartItems       CartItem[]
   orderItems      OrderItem[]
   moqSettings     MOQSetting[]

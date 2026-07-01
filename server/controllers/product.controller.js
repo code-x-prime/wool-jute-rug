@@ -437,6 +437,7 @@ export const getProductBySlug = asyncHandler(async (req, res) => {
       ...image,
       url: getFileUrl(image.url),
     })),
+    videoUrl: product.videoUrl ? getFileUrl(product.videoUrl) : null,
     // Format variants with proper image URLs and attributes
     reviews: product.reviews.map((review) => ({
       ...review,
@@ -532,6 +533,7 @@ export const getProductBySlug = asyncHandler(async (req, res) => {
               url: getFileUrl(image.url),
             }))
             : [],
+          videoUrl: variant.videoUrl ? getFileUrl(variant.videoUrl) : null,
           stock: variant.quantity, // Use quantity as stock
           moq: effectiveMOQ,
           moqSource,

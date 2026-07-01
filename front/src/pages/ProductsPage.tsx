@@ -38,7 +38,6 @@ import {
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useDropzone } from "react-dropzone";
 import { Badge } from "@/components/ui/badge";
 import { v4 as uuidv4 } from "uuid";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -466,10 +465,16 @@ export function ProductForm({
     toast.success(`Image added to Slot ${slotIndex + 1}`);
   };
 
-  // Video dropzone (optional, max 10MB)
-  const onVideoDrop = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length === 0) return;
-    const file = acceptedFiles[0];
+  const removeVideo = useCallback(() => {
+    if (videoFile && videoPreviewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(videoPreviewUrl);
+    }
+    setVideoFile(null);
+    setVideoPreviewUrl(null);
+    setVideoRemoved(true);
+  }, [videoFile, videoPreviewUrl]);
+
+  const handleVideoFileChange = (file: File) => {
     const maxSize = 10 * 1024 * 1024; // 10MB
     const allowedTypes = ["video/mp4", "video/webm"];
     if (file.size > maxSize) {
@@ -482,31 +487,9 @@ export function ProductForm({
     }
     setVideoFile(file);
     setVideoPreviewUrl(URL.createObjectURL(file));
-    setVideoRemoved(false); // User added new video, don't remove on server
-    toast.success("Video added");
-  }, []);
-
-  const { getRootProps: getVideoRootProps, getInputProps: getVideoInputProps, isDragActive: isVideoDragActive } = useDropzone({
-    onDrop: onVideoDrop,
-    accept: { "video/mp4": [], "video/webm": [] },
-    maxSize: 10 * 1024 * 1024,
-    maxFiles: 1,
-    onDropRejected: (rejected) => {
-      rejected.forEach((r) => {
-        const msg = r.errors.map((e) => e.message).join(", ");
-        toast.error(`${r.file.name}: ${msg}`);
-      });
-    },
-  });
-
-  const removeVideo = useCallback(() => {
-    if (videoFile && videoPreviewUrl?.startsWith("blob:")) {
-      URL.revokeObjectURL(videoPreviewUrl);
-    }
-    setVideoFile(null);
-    setVideoPreviewUrl(null);
-    setVideoRemoved(true);
-  }, [videoFile, videoPreviewUrl]);
+    setVideoRemoved(false);
+    toast.success("Video added successfully");
+  };
 
   // Remove image from specific slot and shift remaining left
   const removeImageAt = async (index: number) => {
@@ -1128,6 +1111,7 @@ export function ProductForm({
                           order: img.order,
                         }))
                       : [],
+                    videoUrl: variant.videoUrl || null,
                   })
                 );
 
@@ -1705,6 +1689,21 @@ export function ProductForm({
 
                   uploadPromises.push(uploadPromise);
                 }
+              }
+
+              // Upload variant video file if present
+              if (localVariant.videoFile) {
+                console.log(`📹 Uploading video for variant ${serverVariant.id}`);
+                const videoPromise = products
+                  .uploadVariantVideo(serverVariant.id, localVariant.videoFile)
+                  .then(() => {
+                    console.log(`📹 Uploaded video for variant ${serverVariant.id}`);
+                  })
+                  .catch((error) => {
+                    console.error(`❌ Failed to upload video for variant ${serverVariant.id}:`, error);
+                    throw error;
+                  });
+                uploadPromises.push(videoPromise);
               }
             }
           }
@@ -2571,17 +2570,17 @@ export function ProductForm({
             </div>
           </Card>
 
-          {/* Product Images - 5 sequential boxes - Only show when variants are NOT enabled */}
+          {/* Product Images & Video - 6 sequential boxes (5 images + 1 video) - Only show when variants are NOT enabled */}
           {!hasVariants && (
             <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
               <h2 className="text-xl font-semibold border-b pb-2">
-                Product Images
+                Product Images & Video
               </h2>
               <p className="text-xs text-[var(--text-secondary)]">
-                Provide up to 5 images. The first box represents the primary image, and subsequent boxes represent secondary images in order.
+                Provide up to 5 images (the first slot represents the primary image) and 1 optional video.
               </p>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
                 {imagePreviews.map((preview, i) => {
                   const isSlotPrimary = i === 0;
                   if (preview) {
@@ -2678,54 +2677,61 @@ export function ProductForm({
                     );
                   }
                 })}
+
+                {/* 6th Slot - Video (Optional) */}
+                {videoPreviewUrl ? (
+                  <div
+                    className="relative group rounded-lg overflow-hidden border-2 border-[var(--border-color)] transition-all aspect-square bg-[var(--bg-card)]"
+                  >
+                    {/* Video Player */}
+                    <video
+                      src={videoPreviewUrl}
+                      className="h-full w-full object-cover"
+                      controls
+                    />
+
+                    {/* Delete Button (Top Right) */}
+                    <button
+                      type="button"
+                      onClick={removeVideo}
+                      className="absolute top-2 right-2 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors shadow-sm z-10"
+                      title="Remove video"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+
+                    {/* Overlay Label */}
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-1.5 flex items-center justify-between text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="text-[10px] font-medium ml-1">Product Video</span>
+                    </div>
+                  </div>
+                ) : (
+                  <label
+                    className="relative flex flex-col items-center justify-center border-2 border-dashed border-[var(--border-color)] hover:border-primary/50 hover:bg-[var(--bg-secondary)] rounded-lg cursor-pointer transition-all aspect-square bg-[var(--bg-card)] text-center p-4 group"
+                  >
+                    <input
+                      type="file"
+                      accept="video/mp4,video/webm"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          handleVideoFileChange(e.target.files[0]);
+                        }
+                        e.target.value = "";
+                      }}
+                      className="hidden"
+                    />
+                    <div className="flex flex-col items-center space-y-1 text-[var(--text-secondary)] group-hover:text-primary transition-colors">
+                      <Video className="h-6 w-6" />
+                      <span className="text-xs font-semibold">Add Video</span>
+                      <span className="text-[9px] text-[var(--text-secondary)]">
+                        MP4/WebM • Max 10MB
+                      </span>
+                    </div>
+                  </label>
+                )}
               </div>
             </div>
           )}
-
-          {/* Product Video - Optional (max 10MB) */}
-          <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
-            <h2 className="text-xl font-semibold border-b pb-2">
-              Product Video (Optional)
-            </h2>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Add a product video (MP4 or WebM, max 10MB). Same storage as product images.
-            </p>
-            {videoPreviewUrl ? (
-              <div className="relative inline-block">
-                <video
-                  src={videoPreviewUrl}
-                  controls
-                  className="max-h-48 rounded-lg border"
-                />
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="icon"
-                  className="absolute top-2 right-2 h-8 w-8"
-                  onClick={removeVideo}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ) : (
-              <div
-                {...getVideoRootProps()}
-                className={`border-2 border-dashed rounded-md p-6 cursor-pointer transition-colors text-center bg-[var(--bg-card)] ${isVideoDragActive
-                  ? "border-blue-400 bg-blue-50"
-                  : "border-[var(--border-color)] hover:border-[var(--border-color)] hover:bg-[var(--bg-secondary)]"
-                  }`}
-              >
-                <input {...getVideoInputProps()} />
-                <Video className="h-10 w-10 mx-auto mb-2 text-[var(--text-secondary)]" />
-                <p className="text-sm text-[var(--text-secondary)]">
-                  {isVideoDragActive ? "Drop video here..." : "Drop video or click to upload"}
-                </p>
-                <p className="text-xs text-[var(--text-secondary)] mt-1">
-                  MP4 or WebM, max 10MB
-                </p>
-              </div>
-            )}
-          </div>
 
           {/* SEO Section */}
           <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">

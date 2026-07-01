@@ -392,12 +392,29 @@ export default function ProductContent({ slug }) {
     }
   };
 
-  // Collect images to show based on variant priority
-  const getImagesToShow = useCallback(() => {
-    if (selectedVariant?.images?.length > 0) return selectedVariant.images;
-    if (product?.images?.length > 0) return product.images;
-    const v = product?.variants?.find((vv) => vv.images?.length > 0);
-    return v ? v.images : [];
+  // Collect images and video to show based on variant priority
+  const getMediaToShow = useCallback(() => {
+    const images = selectedVariant?.images?.length > 0
+      ? selectedVariant.images
+      : product?.images?.length > 0
+        ? product.images
+        : [];
+    
+    // Format images to have isVideo: false
+    const media = images.map(img => ({ ...img, isVideo: false }));
+
+    // Get video
+    const videoUrl = selectedVariant?.videoUrl || product?.videoUrl;
+    if (videoUrl) {
+      media.push({
+        url: videoUrl,
+        isVideo: true,
+        isPrimary: false,
+        id: "product-video-item"
+      });
+    }
+
+    return media;
   }, [selectedVariant, product]);
 
   const openLightbox = useCallback((index) => {
@@ -411,25 +428,25 @@ export default function ProductContent({ slug }) {
     setZoomLevel(1);
   }, []);
 
-  // Keyboard navigation for lightbox — defined after getImagesToShow
+  // Keyboard navigation for lightbox — defined after getMediaToShow
   useEffect(() => {
     if (!lightboxOpen) return;
     const handler = (e) => {
-      const images = getImagesToShow();
+      const media = getMediaToShow();
       if (e.key === "Escape") { setLightboxOpen(false); setZoomLevel(1); }
-      if (e.key === "ArrowRight") { setLightboxIndex((i) => (i + 1) % images.length); setZoomLevel(1); }
-      if (e.key === "ArrowLeft") { setLightboxIndex((i) => (i - 1 + images.length) % images.length); setZoomLevel(1); }
+      if (e.key === "ArrowRight") { setLightboxIndex((i) => (i + 1) % media.length); setZoomLevel(1); }
+      if (e.key === "ArrowLeft") { setLightboxIndex((i) => (i - 1 + media.length) % media.length); setZoomLevel(1); }
       if (e.key === "+" || e.key === "=") setZoomLevel((z) => Math.min(4, z + 0.5));
       if (e.key === "-") setZoomLevel((z) => Math.max(1, z - 0.5));
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [lightboxOpen, getImagesToShow]);
+  }, [lightboxOpen, getMediaToShow]);
 
   const renderImages = () => {
-    const imagesToShow = getImagesToShow();
+    const mediaToShow = getMediaToShow();
 
-    if (imagesToShow.length === 0) {
+    if (mediaToShow.length === 0) {
       return (
         <div className="relative aspect-square w-full bg-gray-100 overflow-hidden">
           <Image src="/images/product-placeholder.png" alt={product?.name || "Product"} fill className="object-contain" priority />
@@ -437,33 +454,43 @@ export default function ProductContent({ slug }) {
       );
     }
 
-    const primaryImage = imagesToShow.find((img) => img.isPrimary) || imagesToShow[0];
-    const currentMainImage = mainImage && imagesToShow.some((img) => img.url === mainImage.url) ? mainImage : primaryImage;
-    const currentIndex = imagesToShow.findIndex((img) => img.url === currentMainImage?.url);
+    const primaryImage = mediaToShow.find((img) => img.isPrimary && !img.isVideo) || mediaToShow[0];
+    const currentMainImage = mainImage && mediaToShow.some((img) => img.url === mainImage.url) ? mainImage : primaryImage;
+    const currentIndex = mediaToShow.findIndex((img) => img.url === currentMainImage?.url);
 
     return (
       <>
         <div className="flex flex-col-reverse lg:flex-row gap-4 h-full">
           {/* Thumbnails */}
-          {imagesToShow.length > 1 && (
+          {mediaToShow.length > 1 && (
             <div className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto no-scrollbar lg:w-[72px] shrink-0 lg:max-h-[700px] pb-2 lg:pb-0">
-              {imagesToShow.map((image, index) => (
+              {mediaToShow.map((media, index) => (
                 <div
                   key={index}
-                  className={`relative aspect-[3/4] w-16 lg:w-full shrink-0 bg-gray-50 cursor-pointer transition-all ${currentMainImage?.url === image.url ? "ring-1 ring-black opacity-100" : "opacity-40 hover:opacity-100"}`}
-                  onClick={() => setMainImage(image)}
+                  className={`relative aspect-[3/4] w-16 lg:w-full shrink-0 bg-gray-50 cursor-pointer transition-all ${currentMainImage?.url === media.url ? "ring-1 ring-black opacity-100" : "opacity-40 hover:opacity-100"}`}
+                  onClick={() => setMainImage(media)}
                 >
-                  <Image src={getImageUrl(image.url)} alt={`${product.name} - ${index + 1}`} fill className="object-cover" />
+                  {media.isVideo ? (
+                    <div className="w-full h-full flex flex-col items-center justify-center bg-black/10 relative">
+                      <video src={media.url} className="w-full h-full object-cover opacity-60" muted />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                        <Play className="h-4 w-4 text-white drop-shadow" />
+                      </div>
+                    </div>
+                  ) : (
+                    <Image src={getImageUrl(media.url)} alt={`${product.name} - ${index + 1}`} fill className="object-cover" />
+                  )}
                 </div>
               ))}
             </div>
           )}
 
-          {/* Main Image — touch/swipe + click to open lightbox */}
+          {/* Main Media — touch/swipe + click to open lightbox */}
           <div
             className="relative aspect-[4/5] lg:h-[700px] w-full bg-[#f6f5f3] flex-1 group overflow-hidden cursor-zoom-in"
             style={{ touchAction: "pan-y" }}
             onClick={(e) => {
+              if (currentMainImage?.isVideo) return; // Don't trigger lightbox for videos
               if (e.currentTarget.__swiped) {
                 e.currentTarget.__swiped = false;
                 return;
@@ -471,7 +498,6 @@ export default function ProductContent({ slug }) {
               openLightbox(currentIndex >= 0 ? currentIndex : 0);
             }}
             onTouchStart={(e) => {
-              // Record touch start X
               if (e.touches && e.touches[0]) {
                 e.currentTarget.__touchStartX = e.touches[0].clientX;
               }
@@ -482,45 +508,54 @@ export default function ProductContent({ slug }) {
               const endX = e.changedTouches?.[0]?.clientX ?? startX;
               const delta = startX - endX;
               if (Math.abs(delta) > 50) {
-                // Swipe detected — prevent click/lightbox
                 e.currentTarget.__swiped = true;
                 e.stopPropagation();
                 if (delta > 0) {
-                  // Swipe left → next image
-                  const next = (currentIndex + 1) % imagesToShow.length;
-                  setMainImage(imagesToShow[next]);
+                  const next = (currentIndex + 1) % mediaToShow.length;
+                  setMainImage(mediaToShow[next]);
                 } else {
-                  // Swipe right → previous image
-                  const prev = (currentIndex - 1 + imagesToShow.length) % imagesToShow.length;
-                  setMainImage(imagesToShow[prev]);
+                  const prev = (currentIndex - 1 + mediaToShow.length) % mediaToShow.length;
+                  setMainImage(mediaToShow[prev]);
                 }
               }
               e.currentTarget.__touchStartX = null;
             }}
           >
-            <Image
-              src={getImageUrl(currentMainImage?.url)}
-              alt={product?.name || "Product"}
-              fill
-              className="object-cover transition-transform duration-500 group-hover:scale-105"
-              priority
-            />
+            {currentMainImage?.isVideo ? (
+              <video
+                src={currentMainImage.url}
+                controls
+                className="w-full h-full object-contain"
+                autoPlay
+                muted
+              />
+            ) : (
+              <Image
+                src={getImageUrl(currentMainImage?.url)}
+                alt={product?.name || "Product"}
+                fill
+                className="object-cover transition-transform duration-500 group-hover:scale-105"
+                priority
+              />
+            )}
             {/* Zoom hint */}
-            <div className="absolute bottom-3 right-3 bg-white/80 backdrop-blur-sm rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity shadow">
-              <ZoomIn className="h-4 w-4 text-gray-700" />
-            </div>
+            {!currentMainImage?.isVideo && (
+              <div className="absolute bottom-3 right-3 bg-white/80 backdrop-blur-sm rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity shadow">
+                <ZoomIn className="h-4 w-4 text-gray-700" />
+              </div>
+            )}
             {/* Arrow navigation on main image */}
-            {imagesToShow.length > 1 && (
+            {mediaToShow.length > 1 && (
               <>
                 <button
-                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 backdrop-blur-sm rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity shadow"
-                  onClick={(e) => { e.stopPropagation(); const prev = (currentIndex - 1 + imagesToShow.length) % imagesToShow.length; setMainImage(imagesToShow[prev]); }}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 backdrop-blur-sm rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity shadow z-10"
+                  onClick={(e) => { e.stopPropagation(); const prev = (currentIndex - 1 + mediaToShow.length) % mediaToShow.length; setMainImage(mediaToShow[prev]); }}
                 >
                   <ChevronLeft className="h-4 w-4 text-gray-700" />
                 </button>
                 <button
-                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 backdrop-blur-sm rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity shadow"
-                  onClick={(e) => { e.stopPropagation(); const next = (currentIndex + 1) % imagesToShow.length; setMainImage(imagesToShow[next]); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 backdrop-blur-sm rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity shadow z-10"
+                  onClick={(e) => { e.stopPropagation(); const next = (currentIndex + 1) % mediaToShow.length; setMainImage(mediaToShow[next]); }}
                 >
                   <ChevronRight className="h-4 w-4 text-gray-700" />
                 </button>
@@ -542,72 +577,90 @@ export default function ProductContent({ slug }) {
 
             {/* Counter */}
             <div className="absolute top-5 left-1/2 -translate-x-1/2 text-white/60 text-sm font-medium">
-              {lightboxIndex + 1} / {imagesToShow.length}
+              {lightboxIndex + 1} / {mediaToShow.length}
             </div>
 
             {/* Zoom controls */}
-            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-white/10 backdrop-blur-sm rounded-full px-4 py-2">
-              <button onClick={(e) => { e.stopPropagation(); setZoomLevel((z) => Math.max(1, z - 0.5)); }} className="text-white/80 hover:text-white">
-                <ZoomOut className="h-5 w-5" />
-              </button>
-              <span className="text-white/60 text-xs w-10 text-center">{Math.round(zoomLevel * 100)}%</span>
-              <button onClick={(e) => { e.stopPropagation(); setZoomLevel((z) => Math.min(4, z + 0.5)); }} className="text-white/80 hover:text-white">
-                <ZoomIn className="h-5 w-5" />
-              </button>
-            </div>
+            {!mediaToShow[lightboxIndex]?.isVideo && (
+              <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-white/10 backdrop-blur-sm rounded-full px-4 py-2">
+                <button onClick={(e) => { e.stopPropagation(); setZoomLevel((z) => Math.max(1, z - 0.5)); }} className="text-white/80 hover:text-white">
+                  <ZoomOut className="h-5 w-5" />
+                </button>
+                <span className="text-white/60 text-xs w-10 text-center">{Math.round(zoomLevel * 100)}%</span>
+                <button onClick={(e) => { e.stopPropagation(); setZoomLevel((z) => Math.min(4, z + 0.5)); }} className="text-white/80 hover:text-white">
+                  <ZoomIn className="h-5 w-5" />
+                </button>
+              </div>
+            )}
 
             {/* Prev arrow */}
-            {imagesToShow.length > 1 && (
+            {mediaToShow.length > 1 && (
               <button
                 className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all z-10"
-                onClick={(e) => { e.stopPropagation(); setLightboxIndex((i) => (i - 1 + imagesToShow.length) % imagesToShow.length); setZoomLevel(1); }}
+                onClick={(e) => { e.stopPropagation(); setLightboxIndex((i) => (i - 1 + mediaToShow.length) % mediaToShow.length); setZoomLevel(1); }}
               >
                 <ChevronLeft className="h-7 w-7" />
               </button>
             )}
 
             {/* Next arrow */}
-            {imagesToShow.length > 1 && (
+            {mediaToShow.length > 1 && (
               <button
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all z-10"
-                onClick={(e) => { e.stopPropagation(); setLightboxIndex((i) => (i + 1) % imagesToShow.length); setZoomLevel(1); }}
+                onClick={(e) => { e.stopPropagation(); setLightboxIndex((i) => (i + 1) % mediaToShow.length); setZoomLevel(1); }}
               >
                 <ChevronRight className="h-7 w-7" />
               </button>
             )}
 
-            {/* Main lightbox image */}
+            {/* Main lightbox content */}
             <div
               className="relative overflow-auto flex items-center justify-center"
               style={{ width: "min(90vw, 900px)", height: "min(90vh, 900px)" }}
               onClick={(e) => e.stopPropagation()}
             >
-              <img
-                src={getImageUrl(imagesToShow[lightboxIndex]?.url)}
-                alt={`${product?.name} - ${lightboxIndex + 1}`}
-                style={{
-                  transform: `scale(${zoomLevel})`,
-                  transformOrigin: "center center",
-                  transition: "transform 0.2s ease",
-                  maxWidth: "100%",
-                  maxHeight: "100%",
-                  objectFit: "contain",
-                  cursor: zoomLevel > 1 ? "move" : "zoom-in",
-                }}
-                onClick={() => setZoomLevel((z) => z >= 3 ? 1 : z + 0.5)}
-              />
+              {mediaToShow[lightboxIndex]?.isVideo ? (
+                <video
+                  src={mediaToShow[lightboxIndex].url}
+                  controls
+                  className="max-w-full max-h-[80vh] object-contain z-20"
+                  autoPlay
+                />
+              ) : (
+                <img
+                  src={getImageUrl(mediaToShow[lightboxIndex]?.url)}
+                  alt={`${product?.name} - ${lightboxIndex + 1}`}
+                  style={{
+                    transform: `scale(${zoomLevel})`,
+                    transformOrigin: "center center",
+                    transition: "transform 0.2s ease",
+                    maxWidth: "100%",
+                    maxHeight: "100%",
+                    objectFit: "contain",
+                    cursor: zoomLevel > 1 ? "move" : "zoom-in",
+                  }}
+                  onClick={() => setZoomLevel((z) => z >= 3 ? 1 : z + 0.5)}
+                />
+              )}
             </div>
 
             {/* Thumbnail strip */}
-            {imagesToShow.length > 1 && (
+            {mediaToShow.length > 1 && (
               <div className="absolute bottom-16 left-1/2 -translate-x-1/2 flex gap-2 overflow-x-auto max-w-[80vw] pb-1">
-                {imagesToShow.map((img, i) => (
+                {mediaToShow.map((media, i) => (
                   <button
                     key={i}
                     onClick={(e) => { e.stopPropagation(); setLightboxIndex(i); setZoomLevel(1); }}
                     className={`relative w-12 h-12 shrink-0 overflow-hidden transition-all ${i === lightboxIndex ? "ring-2 ring-white opacity-100" : "opacity-40 hover:opacity-80"}`}
                   >
-                    <img src={getImageUrl(img.url)} alt="" className="w-full h-full object-cover" />
+                    {media.isVideo ? (
+                      <div className="w-full h-full bg-black/40 flex items-center justify-center relative">
+                        <video src={media.url} className="w-full h-full object-cover opacity-60" muted />
+                        <Play className="absolute h-4 w-4 text-white" />
+                      </div>
+                    ) : (
+                      <img src={getImageUrl(media.url)} alt="" className="w-full h-full object-cover" />
+                    )}
                   </button>
                 ))}
               </div>
