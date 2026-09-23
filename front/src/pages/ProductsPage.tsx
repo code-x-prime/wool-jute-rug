@@ -1779,7 +1779,8 @@ export function ProductForm({
         if (savedProductId) {
           try {
             await addonServicesApi.setProductAddons(savedProductId, selectedAddonIds);
-          } catch {
+          } catch (error: any) {
+            console.error("Error saving addon services:", error?.response?.data || error);
             toast.error("Product saved but addon services failed to update");
           }
         }
