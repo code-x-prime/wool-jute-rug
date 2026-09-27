@@ -90,6 +90,13 @@ export default function ProductContent({ slug }) {
   const hasOptions = !!product?.attributeOptions?.length;
   const processingMinDays = selectedVariant?.processingMinDays ?? product?.processingMinDays;
   const processingMaxDays = selectedVariant?.processingMaxDays ?? product?.processingMaxDays;
+  const shippingAndReturnsHtml = product?.shippingAndReturns?.trim() || "";
+  const hasShippingAndReturns = Boolean(
+    shippingAndReturnsHtml
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;|&#160;/gi, " ")
+      .trim()
+  );
 
   // Returns the variant to purchase, or null after flagging the first unselected option.
   const requireVariant = () => {
@@ -1251,7 +1258,7 @@ export default function ProductContent({ slug }) {
           )}
 
           {/* Highlights (real listing data) */}
-          {(product.deliveryProfile || product.returnPolicy || product.processingMinDays != null || product.materials?.length > 0) && (
+          {(product.deliveryProfile || product.returnPolicy || processingMinDays != null || processingMaxDays != null || product.materials?.length > 0 || product.whoMade || product.whatIsIt || product.whenMade) && (
             <ul className="mb-6 space-y-1.5 text-sm text-gray-800">
               {product.deliveryProfile && (
                 <li className="flex items-center gap-2">
@@ -1692,8 +1699,8 @@ export default function ProductContent({ slug }) {
                 <AccordionTrigger className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-900 py-6">Shipping & Returns</AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-4 pb-6 pt-2 text-sm leading-relaxed text-gray-600">
-                    {product.shippingAndReturns && (
-                      <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: stripInlineStyles(product.shippingAndReturns) }} />
+                    {hasShippingAndReturns && (
+                      <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: stripInlineStyles(shippingAndReturnsHtml) }} />
                     )}
 
                     {product.deliveryProfile && (
@@ -1737,7 +1744,7 @@ export default function ProductContent({ slug }) {
                       </div>
                     )}
 
-                    {!product.shippingAndReturns && !product.deliveryProfile && !product.returnPolicy && (
+                    {!hasShippingAndReturns && !product.deliveryProfile && !product.returnPolicy && (
                       <p>3–5 business days (standard shipping)<br />30 days return window from the date of delivery.</p>
                     )}
                   </div>

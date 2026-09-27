@@ -209,19 +209,26 @@ export const getProductsByCategory = asyncHandler(async (req, res) => {
         ...image,
         url: getFileUrl(image.url),
       })),
+      variants: product.variants.map((variant) => ({
+        ...variant,
+        images: variant.images?.map((image) => ({
+          ...image,
+          url: getFileUrl(image.url),
+        })) || [],
+      })),
       // Add fallback image
       image: imageUrl ? getFileUrl(imageUrl) : null,
       basePrice:
         product.variants.length > 0
           ? Math.min(
-              ...product.variants.map((v) => parseFloat(v.salePrice || v.price))
-            )
+            ...product.variants.map((v) => parseFloat(v.salePrice || v.price))
+          )
           : null,
       regularPrice:
         product.variants.length > 0
           ? Math.min(
-              ...product.variants.map((v) => parseFloat(v.price))
-            )
+            ...product.variants.map((v) => parseFloat(v.price))
+          )
           : null,
       hasSale:
         product.variants.length > 0 &&

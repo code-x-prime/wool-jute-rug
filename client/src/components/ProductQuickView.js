@@ -29,6 +29,14 @@ const getImageUrl = (image) => {
   return `https://desirediv-storage.blr1.digitaloceanspaces.com/${image}`;
 };
 
+const handleImageError = (event) => {
+  const image = event.currentTarget;
+  if (!image.src.endsWith("/placeholder.png")) {
+    image.src = "/placeholder.png";
+    image.srcset = "";
+  }
+};
+
 export default function ProductQuickView({ product, open, onOpenChange }) {
   const [selectedAttributes, setSelectedAttributes] = useState({});
   const [selectedVariant, setSelectedVariant] = useState(null);
@@ -164,7 +172,9 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
 
             // Auto-select first available variant + build default selectedAttributes
             if (combinations.length > 0) {
-              const first = combinations[0];
+              const first = combinations.find(
+                (combo) => combo.variant.id === product.variantId
+              ) || combinations[0];
               setSelectedAttributes(first.attributeMap);
               setSelectedVariant(first.variant);
               const moq = first.variant.moq || 1;
@@ -571,6 +581,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                         src={img}
                         alt={`${displayProduct.name} - Image ${idx + 1}`}
                         fill
+                        onError={handleImageError}
                         className="object-cover"
                         sizes="64px"
                       />
@@ -586,6 +597,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                     src={allImages[currentImageIndex] || "/placeholder.png"}
                     alt={displayProduct.name}
                     fill
+                    onError={handleImageError}
                     className="object-contain p-4"
                     sizes="(max-width: 1024px) 100vw, 50vw"
                     priority
@@ -698,7 +710,22 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                         return sel ? <span className="ml-2 font-normal text-gray-700 normal-case tracking-normal">{sel.value}</span> : null;
                       })()}
                     </label>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="relative mb-2">
+                      <select
+                        value={selectedAttributes[attribute.id] || ""}
+                        onChange={(event) => handleAttributeSelect(attribute.id, event.target.value)}
+                        className="h-11 w-full appearance-none rounded-md border border-gray-300 bg-white px-3 pr-9 text-sm text-gray-900 focus:border-[#3D1C02] focus:outline-none focus:ring-2 focus:ring-[#3D1C02]/20"
+                      >
+                        <option value="" disabled>Select {attribute.name}</option>
+                        {attribute.values.map((value) => (
+                          <option key={value.id} value={value.id} disabled={!isAttrValueAvailable(attribute.id, value.id)}>
+                            {value.value}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-gray-500" />
+                    </div>
+                    <div className="hidden">
                       {attribute.values.map((val) => {
                         const isSelected = selectedAttributes[attribute.id] === val.id;
                         const isAvailable = isAttrValueAvailable(attribute.id, val.id);
@@ -711,7 +738,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                               className={`relative flex flex-col items-center gap-1 transition-all ${!isAvailable ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
                             >
                               <div className={`w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${isSelected ? "border-[#3D1C02] ring-2 ring-[#3D1C02] ring-offset-1" : "border-gray-200 hover:border-[#3D1C02]"}`}>
-                                <Image src={val.image} alt={val.value} width={56} height={56} className="w-full h-full object-cover" />
+                                <Image src={val.image} alt={val.value} width={56} height={56} onError={handleImageError} className="w-full h-full object-cover" />
                               </div>
                               <span className={`text-[10px] font-medium leading-none max-w-[56px] truncate text-center ${isSelected ? "text-[#3D1C02]" : "text-gray-500"}`}>{val.value}</span>
                               {isSelected && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-[#3D1C02] rounded-full flex items-center justify-center"><svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg></span>}

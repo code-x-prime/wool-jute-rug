@@ -12,10 +12,10 @@ import { toast } from "sonner";
 import ProductQuickView from "./ProductQuickView";
 
 // Helper function to format image URLs correctly
-const getImageUrl = (image) => {
+const getImageUrl = (image, imageBase) => {
   if (!image) return "/placeholder.png";
   if (image.startsWith("http")) return image;
-  return `https://desirediv-storage.blr1.digitaloceanspaces.com/${image}`;
+  return `${imageBase || "https://desirediv-storage.blr1.digitaloceanspaces.com"}/${image}`;
 };
 
 // Helper function to calculate discount percentage
@@ -30,6 +30,7 @@ const ProductCard = ({ product }) => {
   const [wishlistItems, setWishlistItems] = useState({});
   const [isAddingToWishlist, setIsAddingToWishlist] = useState({});
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [failedImages, setFailedImages] = useState({});
   const [isHovered, setIsHovered] = useState(false);
   const [priceVisibilitySettings, setPriceVisibilitySettings] = useState(null);
   const { isAuthenticated } = useAuth();
@@ -89,7 +90,7 @@ const ProductCard = ({ product }) => {
     if (navigator.share) {
       try {
         await navigator.share({ title: product.name, url });
-      } catch (_) {}
+      } catch (_) { }
     } else {
       await navigator.clipboard.writeText(url);
       toast.success("Link copied!");
@@ -149,6 +150,16 @@ const ProductCard = ({ product }) => {
   const getAllProductImages = useMemo(() => {
     const images = [];
     const imageUrls = new Set();
+    const imageBase = product.image?.match(/^(https?:\/\/[^/]+)/)?.[1];
+
+    // The category API's product image is already normalized to the public storage host.
+    if (product.image) {
+      const imageUrl = getImageUrl(product.image, imageBase);
+      if (imageUrl && !imageUrls.has(imageUrl)) {
+        imageUrls.add(imageUrl);
+        images.push(imageUrl);
+      }
+    }
 
     // If this is a specific variant card, prioritize that variant's images first
     if (product.variantId && product.variants) {
@@ -157,7 +168,7 @@ const ProductCard = ({ product }) => {
         currentVariant.images.forEach((img) => {
           const url = img?.url || img;
           if (url) {
-            const imageUrl = getImageUrl(url);
+            const imageUrl = getImageUrl(url, imageBase);
             if (imageUrl && !imageUrls.has(imageUrl)) {
               imageUrls.add(imageUrl);
               images.push(imageUrl);
@@ -183,7 +194,7 @@ const ProductCard = ({ product }) => {
             variant.images.forEach((img) => {
               const url = img?.url || img;
               if (url) {
-                const imageUrl = getImageUrl(url);
+                const imageUrl = getImageUrl(url, imageBase);
                 if (imageUrl && !imageUrls.has(imageUrl)) {
                   imageUrls.add(imageUrl);
                   images.push(imageUrl);
@@ -204,7 +215,7 @@ const ProductCard = ({ product }) => {
       product.images.forEach((img) => {
         const url = img?.url || img;
         if (url) {
-          const imageUrl = getImageUrl(url);
+          const imageUrl = getImageUrl(url, imageBase);
           if (imageUrl && !imageUrls.has(imageUrl)) {
             imageUrls.add(imageUrl);
             images.push(imageUrl);
@@ -215,7 +226,7 @@ const ProductCard = ({ product }) => {
 
     // Priority 3: Fallback to product.image (string)
     if (images.length === 0 && product.image) {
-      const imageUrl = getImageUrl(product.image);
+      const imageUrl = getImageUrl(product.image, imageBase);
       if (imageUrl && !imageUrls.has(imageUrl)) {
         imageUrls.add(imageUrl);
         images.push(imageUrl);
@@ -428,9 +439,14 @@ const ProductCard = ({ product }) => {
             {getAllProductImages.map((img, idx) => (
               <Image
                 key={idx}
-                src={img}
+                src={failedImages[img] ? "/placeholder.png" : img}
                 alt={`${product.name} - Image ${idx + 1}`}
                 fill
+                onError={() => {
+                  if (img !== "/placeholder.png") {
+                    setFailedImages((prev) => ({ ...prev, [img]: true }));
+                  }
+                }}
                 className={`object-cover transition-all duration-500 ${idx === currentImageIndex
                   ? "opacity-100 scale-100 group-hover:scale-105"
                   : "opacity-0 scale-95 absolute"
