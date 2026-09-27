@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import IntlShippingSettings, { ShiprocketWebhookSettings } from "@/components/IntlShippingSettings";
 import {
   Dialog,
   DialogContent,
@@ -87,7 +88,6 @@ export default function SiteSettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isTestingRazorpay, setIsTestingRazorpay] = useState(false);
   const [isTestingPayPal, setIsTestingPayPal] = useState(false);
-  const [isTestingEasyship, setIsTestingEasyship] = useState(false);
   const [isConnectingShiprocket, setIsConnectingShiprocket] = useState(false);
   const [showRazorpaySecret, setShowRazorpaySecret] = useState(false);
   const [showShiprocketPassword, setShowShiprocketPassword] = useState(false);
@@ -142,6 +142,7 @@ export default function SiteSettingsPage() {
     razorpayKeyId: "",
     razorpayKeySecret: "",
     razorpayEnabled: false,
+    razorpayWebhookSecret: "",
     shiprocketEmail: "",
     shiprocketPassword: "",
     shiprocketEnabled: false,
@@ -161,16 +162,12 @@ export default function SiteSettingsPage() {
     payoneerApiKey: "",
     payoneerProgramId: "",
     payoneerEnabled: false,
+    payoneerMode: "sandbox" as "sandbox" | "live",
   });
   const [showPayoneerKey, setShowPayoneerKey] = useState(false);
+  const [gatewayBusy, setGatewayBusy] = useState<string | null>(null);
+  const [isTestingPayoneer, setIsTestingPayoneer] = useState(false);
 
-  // Easyship state
-  const [easyshipForm, setEasyshipForm] = useState({
-    easyshipApiKey: "",
-    easyshipEnabled: false,
-    easyshipAccountId: "",
-  });
-  const [showEasyshipKey, setShowEasyshipKey] = useState(false);
   const [usdExchangeRate, setUsdExchangeRate] = useState(83.0);
 
   const [_storageConfig, setStorageConfig] = useState<{
@@ -369,8 +366,9 @@ export default function SiteSettingsPage() {
           orderPrefix: s.orderPrefix || "ORD",
           orderEmailFooter: s.orderEmailFooter || "",
           razorpayKeyId: s.razorpayKeyId || "",
-          razorpayKeySecret: s.razorpayKeySecret || "••••••••",
+          razorpayKeySecret: s.razorpayKeySecret ? "••••••••" : "",
           razorpayEnabled: s.razorpayEnabled || false,
+          razorpayWebhookSecret: s.razorpayWebhookSecret ? "••••••••" : "",
           shiprocketEmail: s.shiprocketEmail || "",
           shiprocketPassword: s.shiprocketPassword || "••••••••",
           shiprocketEnabled: s.shiprocketEnabled || false,
@@ -385,11 +383,7 @@ export default function SiteSettingsPage() {
           payoneerApiKey: s.payoneerApiKey ? "••••••••" : "",
           payoneerProgramId: s.payoneerProgramId || "",
           payoneerEnabled: s.payoneerEnabled || false,
-        });
-        setEasyshipForm({
-          easyshipApiKey: s.easyshipApiKey ? "••••••••" : "",
-          easyshipEnabled: s.easyshipEnabled || false,
-          easyshipAccountId: s.easyshipAccountId || "",
+          payoneerMode: (s.payoneerMode as "sandbox" | "live") || "sandbox",
         });
         setUsdExchangeRate(s.usdExchangeRate ?? 83.0);
       }
@@ -434,8 +428,7 @@ export default function SiteSettingsPage() {
       setIsSaving(true);
       await api.put("/api/admin/site-settings", {
         paypalClientId: paypalForm.paypalClientId || null,
-        paypalClientSecret: paypalForm.paypalClientSecret !== "••••••••" ? paypalForm.paypalClientSecret : undefined,
-        paypalEnabled: paypalForm.paypalEnabled,
+        paypalClientSecret: paypalForm.paypalClientSecret && paypalForm.paypalClientSecret !== "••••••••" ? paypalForm.paypalClientSecret : undefined,
         paypalMode: paypalForm.paypalMode,
       });
       toast.success("PayPal settings saved");
@@ -452,9 +445,9 @@ export default function SiteSettingsPage() {
     try {
       setIsSaving(true);
       await api.put("/api/admin/site-settings", {
-        payoneerApiKey: payoneerForm.payoneerApiKey !== "••••••••" ? payoneerForm.payoneerApiKey : undefined,
+        payoneerApiKey: payoneerForm.payoneerApiKey && payoneerForm.payoneerApiKey !== "••••••••" ? payoneerForm.payoneerApiKey : undefined,
         payoneerProgramId: payoneerForm.payoneerProgramId || null,
-        payoneerEnabled: payoneerForm.payoneerEnabled,
+        payoneerMode: payoneerForm.payoneerMode,
       });
       toast.success("Payoneer settings saved");
       fetchSettings();
@@ -482,33 +475,15 @@ export default function SiteSettingsPage() {
     }
   };
 
-  const handleSaveEasyship = async () => {
-    try {
-      setIsSaving(true);
-      await api.put("/api/admin/site-settings", {
-        easyshipApiKey: easyshipForm.easyshipApiKey !== "••••••••" ? easyshipForm.easyshipApiKey : undefined,
-        easyshipEnabled: easyshipForm.easyshipEnabled,
-        easyshipAccountId: easyshipForm.easyshipAccountId || null,
-      });
-      toast.success("Easyship settings saved");
-      fetchSettings();
-    } catch (err: unknown) {
-      const msg = err && typeof err === "object" && "response" in err ? (err as { response?: { data?: { message?: string } } }).response?.data?.message : undefined;
-      toast.error(msg || "Failed to save Easyship settings");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleSaveRazorpay = async () => {
     try {
       setIsSaving(true);
       await api.put("/api/admin/site-settings", {
         razorpayKeyId: form.razorpayKeyId || null,
-        razorpayKeySecret: form.razorpayKeySecret !== "••••••••" ? form.razorpayKeySecret : undefined,
-        razorpayEnabled: form.razorpayEnabled,
+        razorpayKeySecret: form.razorpayKeySecret && form.razorpayKeySecret !== "••••••••" ? form.razorpayKeySecret : undefined,
+        razorpayWebhookSecret: form.razorpayWebhookSecret !== "••••••••" ? form.razorpayWebhookSecret : undefined,
       });
-      toast.success("Razorpay settings saved");
+      toast.success("Razorpay keys saved");
       fetchSettings();
     } catch (err: unknown) {
       const msg = err && typeof err === "object" && "response" in err ? (err as { response?: { data?: { message?: string } } }).response?.data?.message : undefined;
@@ -531,38 +506,84 @@ export default function SiteSettingsPage() {
     }
   };
 
+  const apiError = (err: unknown, fallback: string) =>
+    (err && typeof err === "object" && "response" in err
+      ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+      : undefined) || fallback;
+
+  // Enable/disable saves immediately; the server refuses to enable a gateway without saved credentials.
+  const toggleGateway = async (gateway: "razorpay" | "paypal" | "payoneer", enabled: boolean) => {
+    const others =
+      (cashEnabled ? 1 : 0) +
+      (gateway !== "razorpay" && razorpayEnabled ? 1 : 0) +
+      (gateway !== "paypal" && paypalForm.paypalEnabled ? 1 : 0) +
+      (gateway !== "payoneer" && payoneerForm.payoneerEnabled ? 1 : 0);
+    if (!enabled && others === 0) {
+      toast.error("At least one payment method must stay enabled");
+      return;
+    }
+    setGatewayBusy(gateway);
+    try {
+      if (gateway === "razorpay") {
+        await api.put("/api/admin/site-settings", { razorpayEnabled: enabled });
+        await api.patch("/api/admin/payment-settings", { cashEnabled, razorpayEnabled: enabled, codCharge: parseFloat(String(codCharge)) || 0 });
+        setRazorpayEnabled(enabled);
+        setForm((f) => ({ ...f, razorpayEnabled: enabled }));
+      } else if (gateway === "paypal") {
+        await api.put("/api/admin/site-settings", { paypalEnabled: enabled });
+        setPaypalForm((f) => ({ ...f, paypalEnabled: enabled }));
+      } else {
+        await api.put("/api/admin/site-settings", { payoneerEnabled: enabled });
+        setPayoneerForm((f) => ({ ...f, payoneerEnabled: enabled }));
+      }
+      toast.success(`${gateway === "razorpay" ? "Razorpay" : gateway === "paypal" ? "PayPal" : "Payoneer"} ${enabled ? "enabled" : "disabled"} at checkout`);
+    } catch (err) {
+      toast.error(apiError(err, "Could not update the gateway"));
+    } finally {
+      setGatewayBusy(null);
+    }
+  };
+
+  const removeGateway = async (gateway: "razorpay" | "paypal" | "payoneer") => {
+    const label = gateway === "razorpay" ? "Razorpay" : gateway === "paypal" ? "PayPal" : "Payoneer";
+    if (!window.confirm(`Remove the saved ${label} credentials? ${label} will be disabled at checkout. Existing orders are not affected.`)) return;
+    setGatewayBusy(gateway);
+    try {
+      await api.put("/api/admin/site-settings", { clearGateway: gateway });
+      toast.success(`${label} credentials removed`);
+      fetchSettings();
+      fetchPaymentSettings();
+    } catch (err) {
+      toast.error(apiError(err, "Could not remove credentials"));
+    } finally {
+      setGatewayBusy(null);
+    }
+  };
+
+  // Tests the credentials saved on the server (save first, then test)
   const handleTestPayPal = async () => {
-    if (!paypalForm.paypalClientId) { toast.error("Enter PayPal Client ID first"); return; }
     setIsTestingPayPal(true);
     try {
-      const res = await api.get("/api/payment/paypal/client-id");
-      if (res.data?.data?.clientId) {
-        toast.success(`PayPal connected (${paypalForm.paypalMode} mode)`);
-      } else {
-        toast.error("PayPal not accessible — check keys and enable toggle");
-      }
-    } catch {
-      toast.error("PayPal test failed — save keys first, then test");
+      const res = await api.post("/api/admin/site-settings/test-paypal");
+      toast.success(res.data?.message || "PayPal credentials are valid");
+    } catch (err: unknown) {
+      const msg = err && typeof err === "object" && "response" in err ? (err as { response?: { data?: { message?: string } } }).response?.data?.message : undefined;
+      toast.error(msg || "PayPal test failed — save your keys first, then test");
     } finally {
       setIsTestingPayPal(false);
     }
   };
 
-  const handleTestEasyship = async () => {
-    setIsTestingEasyship(true);
+  const handleTestPayoneer = async () => {
+    setIsTestingPayoneer(true);
     try {
-      const res = await api.get("/api/admin/easyship/status");
-      if (res.data?.data?.enabled && res.data?.data?.hasApiKey) {
-        toast.success("Easyship configured and enabled");
-      } else if (res.data?.data?.hasApiKey) {
-        toast.info("Easyship API key saved but not enabled — toggle Enable");
-      } else {
-        toast.error("Easyship not configured — add API key first");
-      }
-    } catch {
-      toast.error("Easyship test failed");
+      const res = await api.post("/api/admin/site-settings/test-payoneer");
+      toast.success(res.data?.message || "Payoneer credentials accepted");
+    } catch (err: unknown) {
+      const msg = err && typeof err === "object" && "response" in err ? (err as { response?: { data?: { message?: string } } }).response?.data?.message : undefined;
+      toast.error(msg || "Payoneer test failed — save your credentials first, then test");
     } finally {
-      setIsTestingEasyship(false);
+      setIsTestingPayoneer(false);
     }
   };
 
@@ -641,8 +662,8 @@ export default function SiteSettingsPage() {
   };
 
   const handleSavePaymentMethods = async () => {
-    if (!cashEnabled && !razorpayEnabled) {
-      toast.error("At least one payment method must be enabled (COD or Razorpay)");
+    if (!cashEnabled && !razorpayEnabled && !paypalForm.paypalEnabled && !payoneerForm.payoneerEnabled) {
+      toast.error("At least one payment method must be enabled");
       return;
     }
     try {
@@ -978,7 +999,8 @@ export default function SiteSettingsPage() {
                 </div>
                 <Switch
                   checked={razorpayEnabled}
-                  onCheckedChange={setRazorpayEnabled}
+                  disabled={gatewayBusy === "razorpay"}
+                  onCheckedChange={(v) => toggleGateway("razorpay", v)}
                 />
               </div>
             </CardContent>
@@ -993,7 +1015,7 @@ export default function SiteSettingsPage() {
                 </Badge>
               </CardTitle>
               <p className="text-xs text-[var(--text-secondary)] mt-1">
-                Razorpay keys from Site Settings. Toggle above &quot;Save Payment Methods&quot; to show/hide at checkout.
+                Get keys from Razorpay Dashboard → Account &amp; Settings → API Keys. rzp_test_ keys = test mode, rzp_live_ keys = real payments. Save, then Test Connection, then switch Razorpay on above.
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1020,19 +1042,36 @@ export default function SiteSettingsPage() {
                   </Button>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div>
+                <Label className="text-[var(--text-primary)]">Webhook secret (recommended)</Label>
+                <Input
+                  type="password"
+                  value={form.razorpayWebhookSecret}
+                  onChange={(e) => setForm({ ...form, razorpayWebhookSecret: e.target.value })}
+                  className="mt-1"
+                  placeholder="Set the same secret in Razorpay → Webhooks"
+                />
+                <p className="text-xs text-[var(--text-secondary)] mt-1">
+                  Webhook URL: <span className="font-mono select-all">{`${(import.meta.env.VITE_API_URL as string || "").replace(/\/+$/, "")}/api/payment/razorpay/webhook`}</span> — events: payment.captured, payment.authorized. Creates the order even if the customer closes the browser right after paying.
+                </p>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <Button onClick={handleSaveRazorpay} disabled={isSaving}>
+                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Save Razorpay Keys
+                </Button>
                 <Button variant="outline" onClick={handleTestRazorpay} disabled={isTestingRazorpay}>
                   {isTestingRazorpay ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   Test Connection
                 </Button>
-                <Button onClick={handleSaveRazorpay} disabled={isSaving}>
-                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  Save Razorpay
+                <Button onClick={handleSavePaymentMethods} disabled={isSaving} variant="outline">
+                  Save COD Settings
                 </Button>
-                <Button onClick={handleSavePaymentMethods} disabled={isSaving}>
-                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  Save Payment Methods
-                </Button>
+                {form.razorpayKeyId && (
+                  <Button variant="ghost" className="text-red-600 hover:text-red-700" onClick={() => removeGateway("razorpay")} disabled={gatewayBusy === "razorpay"}>
+                    <Trash2 className="h-4 w-4 mr-1" /> Remove keys
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -1151,6 +1190,7 @@ export default function SiteSettingsPage() {
         </TabsContent>
 
         <TabsContent value="shipping" className="space-y-6">
+          <ShiprocketWebhookSettings />
           <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
             <CardHeader>
               <CardTitle className="text-[var(--text-primary)] flex items-center gap-2">
@@ -1530,13 +1570,13 @@ export default function SiteSettingsPage() {
                 </Badge>
               </CardTitle>
               <p className="text-xs text-[var(--text-secondary)]">
-                PayPal JS SDK. Get credentials at developer.paypal.com. Use Sandbox for testing, Live for production.
+                Create a REST app at developer.paypal.com → Apps &amp; Credentials. Sandbox keys only work in Sandbox mode, Live keys only in Live mode. Save, then press Test Connection.
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between p-3 border border-[var(--border-color)] rounded-lg">
                 <Label className="text-[var(--text-primary)]">Enable PayPal at Checkout</Label>
-                <Switch checked={paypalForm.paypalEnabled} onCheckedChange={(v) => setPaypalForm({ ...paypalForm, paypalEnabled: v })} />
+                <Switch checked={paypalForm.paypalEnabled} disabled={gatewayBusy === "paypal"} onCheckedChange={(v) => toggleGateway("paypal", v)} />
               </div>
               <div className="flex items-center gap-4">
                 <Label className="text-[var(--text-primary)] w-24 shrink-0">Mode</Label>
@@ -1583,6 +1623,11 @@ export default function SiteSettingsPage() {
                   {isTestingPayPal && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Test Connection
                 </Button>
+                {paypalForm.paypalClientId && (
+                  <Button variant="ghost" className="text-red-600 hover:text-red-700" onClick={() => removeGateway("paypal")} disabled={gatewayBusy === "paypal"}>
+                    <Trash2 className="h-4 w-4 mr-1" /> Remove credentials
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -1598,26 +1643,38 @@ export default function SiteSettingsPage() {
                 </Badge>
               </CardTitle>
               <p className="text-xs text-[var(--text-secondary)]">
-                Payoneer Mass Payments / Checkout API. Get API credentials from your Payoneer partner dashboard.
+                Payoneer Checkout (hosted payment page). Use the merchant code and payment API token from your Payoneer Checkout merchant portal. Sandbox and Live use different tokens.
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between p-3 border border-[var(--border-color)] rounded-lg">
                 <Label className="text-[var(--text-primary)]">Enable Payoneer at Checkout</Label>
-                <Switch checked={payoneerForm.payoneerEnabled} onCheckedChange={(v) => setPayoneerForm({ ...payoneerForm, payoneerEnabled: v })} />
+                <Switch checked={payoneerForm.payoneerEnabled} disabled={gatewayBusy === "payoneer"} onCheckedChange={(v) => toggleGateway("payoneer", v)} />
+              </div>
+              <div className="flex items-center gap-4">
+                <Label className="text-[var(--text-primary)] w-24 shrink-0">Mode</Label>
+                <div className="flex gap-3">
+                  {(["sandbox", "live"] as const).map((m) => (
+                    <button key={m} type="button"
+                      onClick={() => setPayoneerForm({ ...payoneerForm, payoneerMode: m })}
+                      className={`px-4 py-1.5 rounded-md text-sm font-medium border transition-colors ${payoneerForm.payoneerMode === m ? "bg-[var(--accent)] text-white border-[var(--accent)]" : "border-[var(--border-color)] text-[var(--text-primary)]"}`}>
+                      {m.charAt(0).toUpperCase() + m.slice(1)}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div>
-                <Label className="text-[var(--text-primary)]">Program ID</Label>
+                <Label className="text-[var(--text-primary)]">Merchant code</Label>
                 <Input
                   value={payoneerForm.payoneerProgramId}
                   onChange={(e) => setPayoneerForm({ ...payoneerForm, payoneerProgramId: e.target.value })}
                   className="mt-1"
-                  placeholder="100012345"
+                  placeholder="MYSTORE"
                 />
-                <p className="text-xs text-[var(--text-secondary)] mt-1">Your Payoneer Program/Partner ID</p>
+                <p className="text-xs text-[var(--text-secondary)] mt-1">Shown in the Payoneer Checkout portal under your account / API credentials</p>
               </div>
               <div>
-                <Label className="text-[var(--text-primary)]">API Key / Partner Username</Label>
+                <Label className="text-[var(--text-primary)]">Payment API token</Label>
                 <div className="relative mt-1">
                   <Input
                     type={showPayoneerKey ? "text" : "password"}
@@ -1631,94 +1688,33 @@ export default function SiteSettingsPage() {
                   </Button>
                 </div>
               </div>
-              <Button onClick={handleSavePayoneer} disabled={isSaving}>
-                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Save Payoneer Settings
-              </Button>
+              <div>
+                <Label className="text-[var(--text-primary)]">Notification (webhook) URL</Label>
+                <Input readOnly value={`${(import.meta.env.VITE_API_URL as string || "").replace(/\/+$/, "")}/api/payment/payoneer/webhook`} className="mt-1 font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
+                <p className="text-xs text-[var(--text-secondary)] mt-1">Sent automatically with every payment. Must be reachable from the internet (not localhost) for delayed payments to be confirmed.</p>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <Button onClick={handleSavePayoneer} disabled={isSaving}>
+                  {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Payoneer Settings
+                </Button>
+                <Button variant="outline" onClick={handleTestPayoneer} disabled={isTestingPayoneer || isSaving}>
+                  {isTestingPayoneer && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Test Connection
+                </Button>
+                {payoneerForm.payoneerProgramId && (
+                  <Button variant="ghost" className="text-red-600 hover:text-red-700" onClick={() => removeGateway("payoneer")} disabled={gatewayBusy === "payoneer"}>
+                    <Trash2 className="h-4 w-4 mr-1" /> Remove credentials
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* ── International Shipping (Easyship) ──────────────── */}
+        {/* ── International Shipping (FedEx / DHL / Easyship) ── */}
         <TabsContent value="intl-shipping" className="space-y-6">
-          <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
-            <CardHeader>
-              <CardTitle className="text-[var(--text-primary)]">Easyship — International Shipping</CardTitle>
-              <p className="text-sm text-[var(--text-secondary)]">
-                Easyship connects you to 250+ courier services worldwide. Used for international orders.
-                Indian orders continue to use Shiprocket. Get API key at app.easyship.com → Settings → API.
-              </p>
-            </CardHeader>
-          </Card>
-
-          <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
-            <CardHeader>
-              <CardTitle className="text-[var(--text-primary)] flex items-center gap-2">
-                <Truck className="h-5 w-5 text-[var(--accent)]" />
-                Easyship API
-                <Badge variant={easyshipForm.easyshipEnabled ? "default" : "secondary"}>
-                  {easyshipForm.easyshipEnabled ? "Enabled" : "Disabled"}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-3 border border-[var(--border-color)] rounded-lg">
-                <div>
-                  <Label className="text-[var(--text-primary)]">Enable Easyship</Label>
-                  <p className="text-xs text-[var(--text-secondary)]">Show Easyship courier options for international orders in admin</p>
-                </div>
-                <Switch checked={easyshipForm.easyshipEnabled} onCheckedChange={(v) => setEasyshipForm({ ...easyshipForm, easyshipEnabled: v })} />
-              </div>
-              <div>
-                <Label className="text-[var(--text-primary)]">Easyship Account ID</Label>
-                <Input
-                  value={easyshipForm.easyshipAccountId}
-                  onChange={(e) => setEasyshipForm({ ...easyshipForm, easyshipAccountId: e.target.value })}
-                  className="mt-1"
-                  placeholder="EXXXXXXXXX"
-                />
-                <p className="text-xs text-[var(--text-secondary)] mt-1">Found in Easyship dashboard → Settings → Account</p>
-              </div>
-              <div>
-                <Label className="text-[var(--text-primary)]">API Key</Label>
-                <div className="relative mt-1">
-                  <Input
-                    type={showEasyshipKey ? "text" : "password"}
-                    value={easyshipForm.easyshipApiKey}
-                    onChange={(e) => setEasyshipForm({ ...easyshipForm, easyshipApiKey: e.target.value })}
-                    placeholder="••••••••"
-                  />
-                  <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full"
-                    onClick={() => setShowEasyshipKey(!showEasyshipKey)}>
-                    {showEasyshipKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-                <p className="text-xs text-[var(--text-secondary)] mt-1">Production API key from Easyship</p>
-              </div>
-
-              <div className="p-4 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)] space-y-2">
-                <p className="text-sm font-medium text-[var(--text-primary)]">How it works</p>
-                <ul className="text-xs text-[var(--text-secondary)] space-y-1 list-disc list-inside">
-                  <li>Admin opens an international order detail page</li>
-                  <li>Click &quot;Get Easyship Rates&quot; → fetches 250+ courier options with pricing</li>
-                  <li>Select courier → click &quot;Book Shipment&quot;</li>
-                  <li>AWB + tracking number auto-saved to order</li>
-                  <li>Customer can track via the tracking URL</li>
-                </ul>
-              </div>
-
-              <div className="flex gap-2 flex-wrap">
-                <Button onClick={handleSaveEasyship} disabled={isSaving}>
-                  {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Save Easyship Settings
-                </Button>
-                <Button variant="outline" onClick={handleTestEasyship} disabled={isTestingEasyship || isSaving}>
-                  {isTestingEasyship && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Test Connection
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <IntlShippingSettings />
         </TabsContent>
       </Tabs>
     </div>

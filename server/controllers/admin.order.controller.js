@@ -2,8 +2,13 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponsive } from "../utils/ApiResponsive.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { prisma } from "../config/db.js";
-import { razorpay } from "../app.js";
 import { cancelShiprocketOrder, getShiprocketSettings } from "../utils/shiprocket.js";
+import { cancelActiveShipments } from "../utils/carriers/index.js";
+
+// Money was actually received online for this order (so cancelling it means a refund is owed)
+export const wasPaidOnline = (order) =>
+  order.paymentMethod !== "CASH" &&
+  (order.razorpayPayment?.status === "CAPTURED" || !!order.paypalCaptureId || (order.paymentGateway === "PAYONEER" && order.paidAmount != null));
 
 // Get all orders with pagination, filtering, and sorting
 export const getOrders = asyncHandler(async (req, res, next) => {
@@ -365,14 +370,62 @@ export const updateOrderStatus = asyncHandler(async (req, res, next) => {
     );
   }
 
+  // Refunds are sent to the buyer before the order is marked REFUNDED — if the gateway refuses, nothing changes.
+  let paypalRefundNote = null;
+  let razorpayRefund = null;
+  if (status === "REFUNDED" && order.razorpayPayment?.razorpayPaymentId && order.razorpayPayment.status !== "REFUNDED") {
+    const { getPaymentGatewayConfig } = await import("./payment.controller.js");
+    const config = await getPaymentGatewayConfig(null, "RAZORPAY");
+    const amountPaise = Math.round(parseFloat(order.razorpayPayment.amount) * 100);
+    try {
+      razorpayRefund = await config.razorpayInstance.payments.refund(order.razorpayPayment.razorpayPaymentId, {
+        amount: amountPaise,
+        notes: { reason: (notes || "Admin initiated refund").slice(0, 200), orderNumber: order.orderNumber },
+      });
+    } catch (err) {
+      throw new ApiError(502, `Razorpay refund failed: ${err?.error?.description || err?.message || "unknown error"}`);
+    }
+    paypalRefundNote = `Razorpay refund ${razorpayRefund.id} (${razorpayRefund.status})`;
+  }
+  if (status === "REFUNDED" && order.paymentGateway === "PAYONEER") {
+    paypalRefundNote = "Payoneer: refund must be sent from the Payoneer dashboard (no refund API)";
+  }
+  if (status === "REFUNDED" && order.paymentGateway === "PAYPAL" && order.paypalCaptureId) {
+    const { getPayPalConfig, getPayPalAccessToken } = await import("./paypal.controller.js");
+    const config = await getPayPalConfig({ requireEnabled: false });
+    const token = await getPayPalAccessToken(config);
+    const refundRes = await fetch(`${config.baseUrl}/v2/payments/captures/${encodeURIComponent(order.paypalCaptureId)}/refund`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "PayPal-Request-Id": `refund-${order.id}` },
+      body: JSON.stringify({ note_to_payer: (notes || "Refund for your order").slice(0, 255) }),
+    });
+    const refund = await refundRes.json().catch(() => ({}));
+    const alreadyRefunded = refund?.details?.[0]?.issue === "CAPTURE_FULLY_REFUNDED";
+    if (!refundRes.ok && !alreadyRefunded) {
+      throw new ApiError(502, `PayPal refund failed: ${refund?.details?.[0]?.description || refund?.message || refundRes.status}`);
+    }
+    paypalRefundNote = alreadyRefunded
+      ? "PayPal: capture was already fully refunded"
+      : `PayPal refund ${refund.id} (${refund.status})`;
+  }
+
+  // Cancel any booked shipments with the carrier first (network calls stay outside the DB transaction)
+  let shipmentProblems = [];
+  if (status === "CANCELLED") {
+    const creating = await prisma.shipment.findFirst({ where: { orderId, status: "CREATING" } });
+    if (creating) throw new ApiError(409, "A shipment is being created right now — wait a moment and try again");
+    shipmentProblems = await cancelActiveShipments(orderId, notes || "Order cancelled by admin");
+  }
+
   // Start a transaction for status-specific actions
   const updatedOrder = await prisma.$transaction(async (tx) => {
+    const addedNote = [notes, paypalRefundNote, ...shipmentProblems.map((p) => `Shipment cancel failed — ${p}`)].filter(Boolean).join("\n");
     let orderData = {
       status,
-      notes: notes
+      notes: addedNote
         ? order.notes
-          ? `${order.notes}\n${notes}`
-          : notes
+          ? `${order.notes}\n${addedNote}`
+          : addedNote
         : order.notes,
     };
 
@@ -382,11 +435,13 @@ export const updateOrderStatus = asyncHandler(async (req, res, next) => {
       orderData.cancelledAt = new Date();
       orderData.cancelledBy = req.admin.id;
 
+      orderData.refundPending = wasPaidOnline(order);
+
       // Return items to inventory
       await handleInventoryReturn(tx, orderId, req.admin.id);
 
-      // Cancel Shiprocket order if it exists
-      if (order.shiprocketOrderId) {
+      // Legacy orders shipped before the Shipment table existed
+      if (order.shiprocketOrderId && !(await tx.shipment.findFirst({ where: { orderId } }))) {
         try {
           const settings = await getShiprocketSettings();
           if (settings.isEnabled) {
@@ -480,37 +535,21 @@ export const updateOrderStatus = asyncHandler(async (req, res, next) => {
       });
     }
 
-    // If refunding, initiate Razorpay refund
-    if (
-      status === "REFUNDED" &&
-      order.razorpayPayment &&
-      order.razorpayPayment.razorpayPaymentId
-    ) {
-      const refundData = await initiateRefund(
-        order.razorpayPayment.razorpayPaymentId,
-        order.total,
-        notes
-      );
+    if (status === "REFUNDED") orderData.refundPending = false;
 
-      if (refundData) {
-        await tx.razorpayRefund.create({
-          data: {
-            razorpayPaymentId: order.razorpayPayment.razorpayPaymentId,
-            amount: order.total,
-            razorpayRefundId: refundData.id,
-            status: "PROCESSED",
-            reason: notes || "Admin initiated refund",
-            notes: JSON.stringify(refundData.notes || {}),
-          },
-        });
-
-        await tx.razorpayPayment.update({
-          where: { orderId },
-          data: {
-            status: "REFUNDED",
-          },
-        });
-      }
+    // Record the Razorpay refund that was issued above
+    if (razorpayRefund) {
+      await tx.razorpayRefund.create({
+        data: {
+          razorpayPaymentId: order.razorpayPayment.razorpayPaymentId,
+          amount: parseFloat(order.razorpayPayment.amount),
+          razorpayRefundId: razorpayRefund.id,
+          status: "PROCESSED",
+          reason: notes || "Admin initiated refund",
+          notes: JSON.stringify(razorpayRefund.notes || {}),
+        },
+      });
+      await tx.razorpayPayment.update({ where: { orderId }, data: { status: "REFUNDED" } });
     }
 
     // Update the order
@@ -1363,26 +1402,6 @@ async function handleInventoryReturn(tx, orderId, adminId) {
   }
 }
 
-// Helper function to initiate Razorpay refund
-async function initiateRefund(paymentId, amount, notes) {
-  try {
-    // Check if Razorpay is initialized
-    if (!razorpay) {
-      console.error("Razorpay not initialized");
-      return null;
-    }
-
-    const refund = await razorpay.payments.refund(paymentId, {
-      amount: amount * 100, // Convert to paisa
-      notes: { reason: notes || "Admin initiated refund" },
-    });
-
-    return refund;
-  } catch (error) {
-    console.error("Razorpay refund error:", error);
-    return null;
-  }
-}
 
 // Helper function to get default tracking description based on status
 function getDefaultTrackingDescription(status) {
@@ -1474,4 +1493,76 @@ export const cleanupInvalidPartnerEarnings = asyncHandler(async (req, res) => {
     console.error("Error during cleanup:", error);
     res.status(500).json(new ApiResponsive(500, null, "Error during cleanup"));
   }
+});
+
+// Re-open a cancelled order (e.g. customer changed their mind). Stock is taken again;
+// no new payment is created — an online payment that was never refunded keeps the order PAID.
+export const reopenOrder = asyncHandler(async (req, res) => {
+  const { orderId } = req.params;
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { razorpayPayment: true, items: { include: { product: { select: { name: true } } } } },
+  });
+  if (!order) throw new ApiError(404, "Order not found");
+  if (order.status !== "CANCELLED") {
+    throw new ApiError(400, order.status === "REFUNDED"
+      ? "This order was refunded — the customer must place a new order"
+      : `Only cancelled orders can be re-opened (this one is ${order.status})`);
+  }
+  if (order.razorpayPayment?.status === "REFUNDED") {
+    throw new ApiError(400, "The payment for this order was already refunded — it cannot be re-opened");
+  }
+
+  const nextStatus = wasPaidOnline(order) ? "PAID" : "PENDING";
+  const reopened = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"reopen:" + orderId}))`;
+    const fresh = await tx.order.findUnique({ where: { id: orderId }, select: { status: true } });
+    if (fresh.status !== "CANCELLED") throw new ApiError(409, "Order was already re-opened");
+
+    for (const item of order.items) {
+      const v = await tx.productVariant.findUnique({ where: { id: item.variantId }, select: { quantity: true } });
+      if (!v || v.quantity < item.quantity) {
+        throw new ApiError(409, `Not enough stock to re-open: ${item.product?.name || "item"} has ${v?.quantity ?? 0} left, order needs ${item.quantity}`);
+      }
+      await tx.productVariant.update({ where: { id: item.variantId }, data: { quantity: { decrement: item.quantity } } });
+      await tx.inventoryLog.create({
+        data: {
+          variantId: item.variantId,
+          quantityChange: -item.quantity,
+          reason: "order_reopened",
+          referenceId: orderId,
+          previousQuantity: v.quantity,
+          newQuantity: v.quantity - item.quantity,
+          createdBy: req.admin.id,
+        },
+      });
+    }
+
+    const note = `Re-opened by admin on ${new Date().toISOString().slice(0, 10)} (was cancelled: ${order.cancelReason || "no reason"})`;
+    return tx.order.update({
+      where: { id: orderId },
+      data: {
+        status: nextStatus,
+        cancelReason: null,
+        cancelledAt: null,
+        cancelledBy: null,
+        refundPending: false,
+        reopenedAt: new Date(),
+        notes: order.notes ? `${order.notes}\n${note}` : note,
+      },
+    });
+  });
+
+  await prisma.activityLog.create({
+    data: {
+      entityType: "order",
+      entityId: orderId,
+      action: "update",
+      description: `Order re-opened (CANCELLED → ${nextStatus})`,
+      performedBy: req.admin.id,
+      performedByRole: "admin",
+    },
+  }).catch(() => { });
+
+  res.status(200).json(new ApiResponsive(200, { order: reopened }, `Order re-opened as ${nextStatus}`));
 });

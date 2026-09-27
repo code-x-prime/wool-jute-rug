@@ -35,6 +35,7 @@ export async function getActiveFlashSalesForProducts() {
       productToFlashSale.set(fp.productId, {
         discountPercentage: sale.discountPercentage,
         flashSaleId: sale.id,
+        endsAt: sale.endTime,
       });
     }
   }
@@ -65,6 +66,7 @@ export async function applyFlashSalePrice(basePrice, productId) {
     originalPrice: Math.round(orig),
     hasFlashSale: true,
     discountPercentage: fs.discountPercentage,
+    endsAt: fs.endsAt,
   };
 }
 

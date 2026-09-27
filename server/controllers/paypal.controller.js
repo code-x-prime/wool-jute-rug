@@ -1,360 +1,262 @@
-// PayPal Controller v2 — redirect flow (approveLink support)
+// PayPal Orders v2 — redirect (hosted approval) flow.
+// 1. create-order: server prices the cart, stores an IntlPaymentSession, creates a PayPal order for that exact USD amount.
+// 2. Buyer approves on PayPal and is sent back to /checkout/paypal-success?token=<paypalOrderId>.
+// 3. capture: server re-checks stock, captures, verifies amount/currency/custom_id, then creates the order once.
 import { prisma } from "../config/db.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponsive } from "../utils/ApiResponsive.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { decrypt } from "../utils/encryption.js";
-import sendEmail from "../utils/sendEmail.js";
-import { getOrderConfirmationTemplate } from "../email/temp/EmailTemplate.js";
-import { applyFlashSalePrice } from "../utils/flashSaleHelpers.js";
-import { processOrderForShipping } from "../utils/shiprocket.js";
+import { buildIntlQuote, assertStock, createOrderFromSession, findDuplicateOrder, DuplicatePaymentError } from "../utils/intlCheckout.js";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-async function getPayPalConfig() {
+export async function getPayPalConfig({ requireEnabled = true } = {}) {
   const settings = await prisma.siteSettings.findFirst();
-  if (!settings?.paypalEnabled || !settings?.paypalClientId || !settings?.paypalClientSecret) {
+  if ((requireEnabled && !settings?.paypalEnabled) || !settings?.paypalClientId || !settings?.paypalClientSecret) {
     throw new ApiError(400, "PayPal is not configured or not enabled");
   }
   const clientSecret = settings.paypalClientSecret.startsWith("enc:")
-    ? decrypt(settings.paypalClientSecret.replace("enc:", ""))
+    ? decrypt(settings.paypalClientSecret.slice(4))
     : settings.paypalClientSecret;
-
-  const mode = settings.paypalMode || "sandbox";
+  const mode = settings.paypalMode === "live" ? "live" : "sandbox";
   return {
-    clientId: settings.paypalClientId,
+    clientId: settings.paypalClientId.trim(),
     clientSecret,
     mode,
-    baseUrl: mode === "live"
-      ? "https://api-m.paypal.com"
-      : "https://api-m.sandbox.paypal.com",
+    siteName: settings.siteName || "Store",
+    baseUrl: mode === "live" ? "https://api-m.paypal.com" : "https://api-m.sandbox.paypal.com",
   };
 }
 
-async function getPayPalAccessToken(config) {
+export async function getPayPalAccessToken(config) {
   const credentials = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64");
   const res = await fetch(`${config.baseUrl}/v1/oauth2/token`, {
     method: "POST",
-    headers: {
-      Authorization: `Basic ${credentials}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
+    headers: { Authorization: `Basic ${credentials}`, "Content-Type": "application/x-www-form-urlencoded" },
     body: "grant_type=client_credentials",
   });
-  const data = await res.json();
-  if (!res.ok) throw new ApiError(502, `PayPal auth failed: ${data.error_description || "Unknown"}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.access_token) {
+    throw new ApiError(502, `PayPal authentication failed (${config.mode}): ${data.error_description || data.error || res.status}`);
+  }
   return data.access_token;
 }
+
+async function paypalRequest(config, token, path, { method = "GET", body, requestId } = {}) {
+  const res = await fetch(`${config.baseUrl}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      ...(requestId && { "PayPal-Request-Id": requestId }),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+const frontendUrl = () => (process.env.FRONTEND_URL || "").replace(/\/+$/, "");
 
 // ─── GET /payment/paypal/client-id (public) ───────────────────────────────────
 export const getPayPalClientId = asyncHandler(async (req, res) => {
   const settings = await prisma.siteSettings.findFirst({
-    select: { paypalClientId: true, paypalEnabled: true, paypalMode: true },
+    select: { paypalClientId: true, paypalEnabled: true, paypalMode: true, paypalClientSecret: true },
   });
-  if (!settings?.paypalEnabled || !settings?.paypalClientId) {
+  if (!settings?.paypalEnabled || !settings?.paypalClientId || !settings?.paypalClientSecret) {
     return res.status(404).json(new ApiResponsive(404, null, "PayPal not enabled"));
   }
-  res.status(200).json(new ApiResponsive(200, {
-    clientId: settings.paypalClientId,
-    mode: settings.paypalMode || "sandbox",
-  }, "OK"));
+  res.status(200).json(new ApiResponsive(200, { clientId: settings.paypalClientId, mode: settings.paypalMode || "sandbox" }, "OK"));
 });
 
-// ─── GET /payment/paypal/settings (public) ────────────────────────────────────
-export const getPayPalSettings = asyncHandler(async (req, res) => {
-  const settings = await prisma.siteSettings.findFirst({
-    select: { paypalEnabled: true, payoneerEnabled: true },
-  });
+// ─── POST /payment/intl/quote — show the exact USD amount before redirecting ──
+export const getIntlQuote = asyncHandler(async (req, res) => {
+  const { shippingAddressId, couponCode } = req.body;
+  if (!shippingAddressId) throw new ApiError(400, "Shipping address required");
+  const { quote } = await buildIntlQuote(req.user.id, shippingAddressId, couponCode);
   res.status(200).json(new ApiResponsive(200, {
-    paypalEnabled: settings?.paypalEnabled || false,
-    payoneerEnabled: settings?.payoneerEnabled || false,
-  }, "OK"));
+    subTotal: quote.subTotal,
+    discount: quote.discount,
+    shippingCost: quote.shippingCost,
+    total: quote.total,
+    amountUsd: quote.amountUsd,
+    exchangeRate: quote.exchangeRate,
+    currency: quote.currency,
+  }, "Quote"));
 });
 
 // ─── POST /payment/paypal/create-order ────────────────────────────────────────
 export const createPayPalOrder = asyncHandler(async (req, res) => {
-  const { amount, currency = "USD", shippingAddressId } = req.body;
-  const userId = req.user?.id;
-
-  if (!userId) throw new ApiError(401, "Authentication required");
-  if (!amount || parseFloat(amount) <= 0) throw new ApiError(400, "Invalid amount");
+  const { shippingAddressId, couponCode } = req.body;
+  const userId = req.user.id;
   if (!shippingAddressId) throw new ApiError(400, "Shipping address required");
 
-  // Validate address belongs to user
-  const addr = await prisma.address.findFirst({ where: { id: shippingAddressId, userId } });
-  if (!addr) throw new ApiError(400, "Shipping address not found");
-
   const config = await getPayPalConfig();
-  const accessToken = await getPayPalAccessToken(config);
+  if (!frontendUrl()) throw new ApiError(500, "FRONTEND_URL is not configured on the server");
+  const { quote } = await buildIntlQuote(userId, shippingAddressId, couponCode);
 
-  const siteSettings = await prisma.siteSettings.findFirst({ select: { siteName: true } });
-
-  const payload = {
-    intent: "CAPTURE",
-    purchase_units: [{
-      amount: { currency_code: currency, value: parseFloat(amount).toFixed(2) },
-      description: `Order from ${siteSettings?.siteName || "Store"}`,
-      custom_id: `${userId}:${shippingAddressId}`, // used in capture to verify
-    }],
-    application_context: {
-      brand_name: siteSettings?.siteName || "Store",
-      landing_page: "NO_PREFERENCE",
-      user_action: "PAY_NOW",
-      return_url: `${process.env.FRONTEND_URL}/checkout/paypal-success`,
-      cancel_url: `${process.env.FRONTEND_URL}/checkout`,
+  const session = await prisma.intlPaymentSession.create({
+    data: {
+      provider: "PAYPAL",
+      mode: config.mode,
+      userId,
+      shippingAddressId,
+      quote,
+      amountInr: quote.total,
+      amountUsd: quote.amountUsd,
+      currency: quote.currency,
     },
-  };
-
-  const response = await fetch(`${config.baseUrl}/v2/checkout/orders`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
   });
 
-  const order = await response.json();
-  if (!response.ok) {
-    throw new ApiError(502, `PayPal order creation failed: ${order.message || JSON.stringify(order.details || order)}`);
+  const token = await getPayPalAccessToken(config);
+  const { ok, data } = await paypalRequest(config, token, "/v2/checkout/orders", {
+    method: "POST",
+    requestId: `create-${session.id}`,
+    body: {
+      intent: "CAPTURE",
+      purchase_units: [{
+        reference_id: session.id,
+        custom_id: session.id,
+        invoice_id: session.id,
+        description: `Order from ${config.siteName}`.slice(0, 127),
+        amount: { currency_code: quote.currency, value: quote.amountUsd.toFixed(2) },
+      }],
+      payment_source: {
+        paypal: {
+          experience_context: {
+            brand_name: config.siteName.slice(0, 127),
+            user_action: "PAY_NOW",
+            shipping_preference: "NO_SHIPPING",
+            return_url: `${frontendUrl()}/checkout/paypal-success`,
+            cancel_url: `${frontendUrl()}/checkout?payment=cancelled`,
+          },
+        },
+      },
+    },
+  });
+
+  if (!ok) {
+    await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { status: "FAILED", providerStatus: data?.name || "CREATE_FAILED" } });
+    const detail = data?.details?.[0]?.description || data?.message || "Unknown error";
+    throw new ApiError(502, `PayPal order creation failed: ${detail}`);
   }
 
-  // Extract the approval URL for redirect flow (more reliable than JS SDK for live mode)
-  const approveLink = order.links?.find((l) => l.rel === "approve")?.href || null;
+  const approveLink = data.links?.find((l) => l.rel === "payer-action" || l.rel === "approve")?.href;
+  if (!approveLink) throw new ApiError(502, "PayPal did not return an approval link");
+
+  await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { providerRef: data.id, providerStatus: data.status } });
 
   res.status(200).json(new ApiResponsive(200, {
-    paypalOrderId: order.id,
-    status: order.status,
-    approveLink, // URL to redirect user to PayPal hosted checkout
+    paypalOrderId: data.id,
+    approveLink,
+    amountUsd: quote.amountUsd,
+    total: quote.total,
   }, "PayPal order created"));
 });
 
 // ─── POST /payment/paypal/capture ─────────────────────────────────────────────
 export const capturePayPalPayment = asyncHandler(async (req, res) => {
-  const { paypalOrderId, shippingAddressId, couponCode, notes = "" } = req.body;
-  const userId = req.user?.id;
-
+  const { paypalOrderId } = req.body;
+  const userId = req.user.id;
   if (!paypalOrderId) throw new ApiError(400, "PayPal order ID required");
-  if (!userId) throw new ApiError(401, "Authentication required");
-  if (!shippingAddressId) throw new ApiError(400, "Shipping address required");
 
-  // ── Idempotency: check if already captured ────────────────────────────────
-  const existing = await prisma.order.findFirst({
-    where: { userId, paypalCaptureId: { not: null }, notes: { contains: paypalOrderId } },
-  });
-  if (existing) {
-    return res.status(200).json(new ApiResponsive(200, {
-      orderId: existing.id,
-      orderNumber: existing.orderNumber,
-      alreadyCaptured: true,
-    }, "Already captured"));
+  const session = await prisma.intlPaymentSession.findUnique({ where: { providerRef: paypalOrderId } });
+  if (!session || session.userId !== userId || session.provider !== "PAYPAL") {
+    throw new ApiError(404, "Payment not found");
+  }
+  if (session.orderId) {
+    const order = await prisma.order.findUnique({ where: { id: session.orderId } });
+    return res.status(200).json(new ApiResponsive(200, { orderId: order.id, orderNumber: order.orderNumber, alreadyCaptured: true }, "Already captured"));
   }
 
   const config = await getPayPalConfig();
-  const accessToken = await getPayPalAccessToken(config);
+  const token = await getPayPalAccessToken(config);
 
-  // ── Capture at PayPal ──────────────────────────────────────────────────────
-  const captureRes = await fetch(`${config.baseUrl}/v2/checkout/orders/${paypalOrderId}/capture`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-  });
-  const captureData = await captureRes.json();
+  // Is it already captured (e.g. a retried request)? Otherwise check stock before taking money.
+  const current = await paypalRequest(config, token, `/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}`);
+  if (!current.ok) throw new ApiError(502, "Could not read the PayPal order");
+  let orderData = current.data;
 
-  if (!captureRes.ok || captureData.status !== "COMPLETED") {
-    throw new ApiError(402, `PayPal capture failed: ${captureData.message || captureData.status || JSON.stringify(captureData)}`);
-  }
-
-  const captureUnit = captureData.purchase_units?.[0]?.payments?.captures?.[0];
-  const paidAmount = parseFloat(captureUnit?.amount?.value || "0");
-  const currency = captureUnit?.amount?.currency_code || "USD";
-  const paypalCaptureId = captureUnit?.id;
-
-  if (!paypalCaptureId) throw new ApiError(502, "PayPal did not return capture ID");
-
-  // ── Validate address ───────────────────────────────────────────────────────
-  const shippingAddr = await prisma.address.findFirst({ where: { id: shippingAddressId, userId } });
-  if (!shippingAddr) throw new ApiError(400, "Shipping address not found");
-
-  // ── Load cart items (CartItem model, not Cart) ─────────────────────────────
-  const cartItems = await prisma.cartItem.findMany({
-    where: { userId },
-    include: {
-      addons: { include: { addonService: true } },
-      productVariant: {
-        include: {
-          product: {
-            include: {
-              flashSales: { include: { flashSale: true } },
-            },
-          },
-          pricingSlabs: true,
-        },
-      },
-    },
-  });
-  if (!cartItems?.length) throw new ApiError(400, "Cart is empty");
-
-  // ── Coupon ─────────────────────────────────────────────────────────────────
-  let couponRecord = null;
-  if (couponCode) {
-    couponRecord = await prisma.coupon.findFirst({
-      where: { code: couponCode, isActive: true },
+  if (orderData.status !== "COMPLETED") {
+    if (orderData.status !== "APPROVED") {
+      throw new ApiError(402, `PayPal payment is not approved yet (status: ${orderData.status})`);
+    }
+    // Never take money twice for the same items (e.g. the customer already paid in another tab)
+    const duplicate = await findDuplicateOrder(session);
+    if (duplicate) {
+      await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { status: "FAILED", providerStatus: "DUPLICATE_NOT_CAPTURED" } });
+      throw new ApiError(409, `You already placed order #${duplicate.orderNumber} for these items, so this PayPal payment was not taken.`);
+    }
+    await assertStock(session.quote);
+    const capture = await paypalRequest(config, token, `/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}/capture`, {
+      method: "POST",
+      requestId: `capture-${session.id}`,
     });
-  }
-
-  // ── Build order items + calculate totals ───────────────────────────────────
-  const orderItems = [];
-  let subtotal = 0;
-
-  for (const cartItem of cartItems) {
-    const variant = cartItem.productVariant;
-    if (!variant || !variant.isActive) continue;
-
-    const flashSaleDiscount = variant.product?.flashSales?.[0]?.flashSale?.discountPercentage ?? null;
-    const priceInfo = applyFlashSalePrice(variant, cartItem.quantity, flashSaleDiscount);
-    const lineTotal = priceInfo.price * cartItem.quantity;
-
-    // Add addon prices to line total
-    const addonsTotal = (cartItem.addons || []).reduce((sum, a) => {
-      return sum + parseFloat(a.addonService?.price || a.price || 0);
-    }, 0);
-
-    subtotal += lineTotal + addonsTotal;
-
-    orderItems.push({
-      variantId: variant.id,
-      productId: variant.productId,
-      quantity: cartItem.quantity,
-      price: priceInfo.price,
-      subtotal: lineTotal + addonsTotal,
-      addons: (cartItem.addons || []).map((a) => ({
-        addonServiceId: a.addonServiceId,
-        name: a.addonService?.name || "",
-        price: parseFloat(a.addonService?.price || a.price || 0),
-      })),
-    });
-  }
-
-  if (!orderItems.length) throw new ApiError(400, "No active items in cart");
-
-  let discount = 0;
-  if (couponRecord) {
-    discount = couponRecord.discountType === "PERCENTAGE"
-      ? Math.min((subtotal * couponRecord.discountValue) / 100, subtotal * 0.9)
-      : Math.min(couponRecord.discountValue, subtotal * 0.9);
-    discount = Math.round(discount * 100) / 100;
-  }
-
-  const shippingCost = 0; // International — flat handled at checkout
-  const tax = 0;
-  const total = Math.max(Math.round((subtotal - discount + shippingCost + tax) * 100) / 100, 0);
-
-  const settings = await prisma.siteSettings.findFirst({ select: { usdExchangeRate: true } });
-  const exchangeRate = settings?.usdExchangeRate || 83.0;
-
-  // Sanity check: paidAmount should be >= total (allow small FX rounding difference)
-  let checkTotal = total;
-  if (currency === "USD") {
-    checkTotal = Math.max(parseFloat((total / exchangeRate).toFixed(2)), 0.01);
-  }
-  if (paidAmount > 0 && Math.abs(paidAmount - checkTotal) > 5) {
-    throw new ApiError(400, `Amount mismatch: paid ${paidAmount} but order total ${checkTotal} USD (${total} INR)`);
-  }
-
-  // ── Create DB order in transaction ─────────────────────────────────────────
-  const dbOrder = await prisma.$transaction(async (tx) => {
-    // Double-capture guard inside transaction
-    const alreadyDone = await tx.order.findFirst({
-      where: { paypalCaptureId },
-    });
-    if (alreadyDone) return alreadyDone;
-
-    const settings = await tx.siteSettings.findFirst({ select: { orderPrefix: true } });
-    const orderCount = await tx.order.count();
-    const orderNumber = `${settings?.orderPrefix || "ORD"}${String(orderCount + 1).padStart(6, "0")}`;
-
-    const order = await tx.order.create({
-      data: {
-        orderNumber,
-        userId,
-        status: "PAID",
-        paymentMethod: "PAYPAL",
-        paymentGateway: "PAYPAL",
-        paymentMode: config.mode === "live" ? "LIVE" : "TEST",
-        subTotal: subtotal,
-        shippingCost,
-        discount,
-        tax,
-        total,
-        shippingProvider: "EASYSHIP",
-        shippingAddressId: shippingAddr.id,
-        couponId: couponRecord?.id || null,
-        couponCode: couponRecord?.code || null,
-        paypalCaptureId,
-        notes: `${notes} [paypal:${paypalOrderId}]`.trim(),
-        items: {
-          create: orderItems.map((item) => ({
-            variantId: item.variantId,
-            productId: item.productId,
-            quantity: item.quantity,
-            price: item.price,
-            subtotal: item.subtotal,
-          })),
-        },
-      },
-      include: { items: true, shippingAddress: true, user: true },
-    });
-
-    // Save OrderItemAddon records for each order item
-    for (let i = 0; i < order.items.length; i++) {
-      const orderItem = order.items[i];
-      const sourceItem = orderItems[i];
-      if (sourceItem?.addons?.length) {
-        await tx.orderItemAddon.createMany({
-          data: sourceItem.addons.map((a) => ({
-            orderItemId: orderItem.id,
-            addonServiceId: a.addonServiceId,
-            name: a.name,
-            price: a.price,
-          })),
-        });
+    if (!capture.ok) {
+      const issue = capture.data?.details?.[0]?.issue;
+      await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { providerStatus: issue || "CAPTURE_FAILED" } });
+      if (issue === "INSTRUMENT_DECLINED") {
+        throw new ApiError(402, "Your payment method was declined by PayPal. Please try again with another card or account.");
       }
+      throw new ApiError(402, `PayPal capture failed: ${capture.data?.details?.[0]?.description || capture.data?.message || issue || "Unknown error"}`);
     }
+    orderData = capture.data;
+  }
 
-    // Deduct inventory
-    for (const item of orderItems) {
-      await tx.productVariant.update({
-        where: { id: item.variantId },
-        data: { quantity: { decrement: item.quantity } },
-      });
-    }
+  const unit = orderData.purchase_units?.[0];
+  const cap = unit?.payments?.captures?.[0];
+  if (!cap || cap.status !== "COMPLETED") {
+    // PENDING captures (eCheck, review) are not money received yet
+    await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { providerStatus: cap?.status || orderData.status } });
+    throw new ApiError(402, `PayPal payment is ${cap?.status || orderData.status}. We will confirm your order once PayPal releases it.`);
+  }
+  const paid = parseFloat(cap.amount?.value || "0");
+  const expected = parseFloat(session.amountUsd);
+  const customId = unit.custom_id || cap.custom_id;
+  if (cap.amount?.currency_code !== session.currency || Math.abs(paid - expected) > 0.009 || (customId && customId !== session.id)) {
+    await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { status: "FAILED", providerStatus: "AMOUNT_MISMATCH" } });
+    console.error(`PayPal mismatch for session ${session.id}: paid ${paid} ${cap.amount?.currency_code}, expected ${expected} ${session.currency}, capture ${cap.id}`);
+    throw new ApiError(400, "Payment amount did not match your order. Please contact support with your PayPal receipt.");
+  }
 
-    // Clear cart items for this user
-    await tx.cartItem.deleteMany({ where: { userId } });
-
-    // Apply coupon usage
-    if (couponRecord) {
-      await tx.coupon.update({
-        where: { id: couponRecord.id },
-        data: { usageCount: { increment: 1 } },
-      }).catch(() => {});
-    }
-
-    return order;
-  });
-
-  // ── Send confirmation email (non-blocking) ─────────────────────────────────
-  prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true } })
-    .then((u) => {
-      if (u?.email) {
-        const html = getOrderConfirmationTemplate({ ...dbOrder, user: u });
-        sendEmail({ to: u.email, subject: `Order Confirmed #${dbOrder.orderNumber}`, html }).catch(() => {});
-      }
-    })
-    .catch(() => {});
+  await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { providerStatus: "COMPLETED" } });
+  let order;
+  try {
+    ({ order } = await createOrderFromSession(session.id, {
+      status: "PAID",
+      paymentMethod: "PAYPAL",
+      reference: paypalOrderId,
+      captureId: cap.id,
+      paidAmount: paid,
+    }));
+  } catch (err) {
+    if (!(err instanceof DuplicatePaymentError)) throw err;
+    // Money was already taken for items that were ordered elsewhere — give it straight back.
+    const refund = await paypalRequest(config, token, `/v2/payments/captures/${encodeURIComponent(cap.id)}/refund`, {
+      method: "POST",
+      requestId: `dup-refund-${session.id}`,
+      body: { note_to_payer: "Duplicate payment refunded automatically" },
+    });
+    await prisma.intlPaymentSession.update({
+      where: { id: session.id },
+      data: { status: "FAILED", providerStatus: refund.ok ? `DUPLICATE_REFUNDED:${refund.data.id}` : "DUPLICATE_REFUND_FAILED" },
+    });
+    if (!refund.ok) console.error(`MANUAL REFUND NEEDED: PayPal capture ${cap.id} (session ${session.id}) duplicates order ${err.duplicateOf.orderNumber}`);
+    throw new ApiError(409, refund.ok
+      ? `You already placed order #${err.duplicateOf.orderNumber} for these items. This duplicate PayPal payment has been refunded.`
+      : `You already placed order #${err.duplicateOf.orderNumber} for these items. Please contact support to refund this duplicate payment (PayPal capture ${cap.id}).`);
+  }
 
   res.status(200).json(new ApiResponsive(200, {
-    orderId: dbOrder.id,
-    orderNumber: dbOrder.orderNumber,
-    paypalCaptureId,
-    total,
-    currency,
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    paypalCaptureId: cap.id,
+    amountUsd: paid,
   }, "Payment captured and order created"));
+});
+
+// ─── POST /admin/site-settings/test-paypal ────────────────────────────────────
+export const testPayPalConnection = asyncHandler(async (req, res) => {
+  const config = await getPayPalConfig({ requireEnabled: false });
+  await getPayPalAccessToken(config);
+  res.status(200).json(new ApiResponsive(200, { connected: true, mode: config.mode }, `PayPal credentials are valid (${config.mode})`));
 });

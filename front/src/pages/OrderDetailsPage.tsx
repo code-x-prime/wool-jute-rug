@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { orders } from "@/api/adminService";
-import api from "@/api/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -16,23 +15,14 @@ import {
   User,
   Truck,
   CheckCircle,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency, cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/context/LanguageContext";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-
-// Interface declared outside component to prevent unstable re-renders
-interface ShiprocketCourier {
-  courier_company_id: number;
-  courier_name: string;
-  etd: string;
-  rate: number;
-  cod: number;
-}
+import ShipmentPanel from "@/components/ShipmentPanel";
 
 export default function OrderDetailsPage() {
   const { id } = useParams<{ id: string }>();
@@ -112,37 +102,17 @@ export default function OrderDetailsPage() {
     easyshipTrackingNumber?: string;
     easyshipLabelUrl?: string;
     paypalCaptureId?: string;
+    refundPending?: boolean;
+    reopenedAt?: string | null;
+    paymentCurrency?: string;
+    paidAmount?: string | number | null;
+    exchangeRate?: number | null;
+    paymentReference?: string;
   }
 
   const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Shiprocket Courier Assignment state
-  const [isShiprocketEnabled, setIsShiprocketEnabled] = useState<boolean>(false);
-  const [couriers, setCouriers] = useState<ShiprocketCourier[]>([]);
-  const [selectedCourierId, setSelectedCourierId] = useState<string>("");
-  const [isFetchingCouriers, setIsFetchingCouriers] = useState(false);
-  const [courierError, setCourierError] = useState<string | null>(null);
-  const [isBooking, setIsBooking] = useState(false);
-  const [bookingResult, setBookingResult] = useState<{ awb: string; trackingUrl?: string } | null>(null);
-  // Ref to prevent re-fetching couriers when other state changes
-  const hasFetchedCouriers = useRef(false);
-  const orderDetailsRef = useRef<OrderDetails | null>(null);
-
-  // Easyship Courier Assignment state
-  const [easyshipRates, setEasyshipRates] = useState<Array<{
-    courierId: string; courierName: string; serviceType: string;
-    totalCharge: number; currency: string; minDeliveryDays: number; maxDeliveryDays: number;
-    isTracked: boolean; courierLogo?: string;
-  }>>([]);
-  const [selectedEasyshipCourierId, setSelectedEasyshipCourierId] = useState<string>("");
-  const [isFetchingEasyshipRates, setIsFetchingEasyshipRates] = useState(false);
-  const [easyshipRateError, setEasyshipRateError] = useState<string | null>(null);
-  const [isBookingEasyship, setIsBookingEasyship] = useState(false);
-  const [easyshipBookingResult, setEasyshipBookingResult] = useState<{
-    easyshipShipmentId: string; awbNumber: string; trackingUrl: string; labelUrl?: string; courierName: string;
-  } | null>(null);
 
   interface OrderItem {
     id: string;
@@ -233,62 +203,7 @@ export default function OrderDetailsPage() {
   useEffect(() => {
     fetchOrderDetails();
 
-    const fetchShiprocketSettings = async () => {
-      try {
-        const response = await api.get("/api/admin/shiprocket/settings");
-        if (response.data?.success) {
-          setIsShiprocketEnabled(response.data.data?.settings?.isEnabled || false);
-        }
-      } catch (error) {
-        console.error("Error fetching Shiprocket settings:", error);
-        setIsShiprocketEnabled(false);
-      }
-    };
-    fetchShiprocketSettings();
   }, [id, fetchOrderDetails]);
-
-  // Fetch courier serviceability — stable callback that reads orderDetails via ref
-  // Using ref instead of putting orderDetails in deps prevents infinite re-render
-  const fetchCouriers = useCallback(async () => {
-    if (!isShiprocketEnabled) return;
-    if (!id) return;
-    const od = orderDetailsRef.current;
-    if (!od) return;
-    if (od.shiprocket?.awbCode) return; // already shipped
-    if (od.status === "CANCELLED" || od.status === "DELIVERED") return;
-    if (hasFetchedCouriers.current) return; // already fetched
-
-    try {
-      hasFetchedCouriers.current = true;
-      setIsFetchingCouriers(true);
-      setCourierError(null);
-      const res = await orders.getCourierServiceability(id);
-      const data = res?.data?.data;
-      const courierList =
-        data?.available_courier_companies ??
-        data?.couriers ??
-        data?.courier_companies ??
-        [];
-      setCouriers(Array.isArray(courierList) ? courierList : []);
-    } catch (err: unknown) {
-      hasFetchedCouriers.current = false; // allow retry
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setCourierError(msg || "Failed to fetch courier options");
-    } finally {
-      setIsFetchingCouriers(false);
-    }
-  }, [id, isShiprocketEnabled]); // stable — does NOT depend on orderDetails state
-
-  useEffect(() => {
-    if (orderDetails) {
-      // Keep ref in sync
-      orderDetailsRef.current = orderDetails;
-      // Only fetch couriers once when order first loads and Shiprocket is enabled
-      if (isShiprocketEnabled && !hasFetchedCouriers.current && !orderDetails.shiprocket?.awbCode) {
-        fetchCouriers();
-      }
-    }
-  }, [orderDetails, fetchCouriers, isShiprocketEnabled]);
 
   // Format date
   const formatDate = (dateString: string) => {
@@ -442,28 +357,59 @@ export default function OrderDetailsPage() {
   };
 
   // Handle order status update
-  const handleStatusUpdate = async (newStatus: string) => {
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const apiError = (error: unknown, fallback: string) =>
+    (error as { response?: { data?: { message?: string } } })?.response?.data?.message || fallback;
+
+  const handleStatusUpdate = async (newStatus: string, notes?: string) => {
     if (!id) return;
-
+    setActionBusy(newStatus);
     try {
-      const response = await orders.updateOrderStatus(id, {
-        status: newStatus,
-      });
-
-      if (response && response.data && response.data.success) {
+      const response = await orders.updateOrderStatus(id, { status: newStatus, ...(notes && { notes }) });
+      if (response?.data?.success) {
         toast.success(t('orders.actions.status_update_success', { status: newStatus }));
-
-        // Update the order status in the UI
-        setOrderDetails((prev: OrderDetails | null) => ({
-          ...prev!,
-          status: newStatus,
-        }));
+        await fetchOrderDetails();
       } else {
         toast.error(response.data?.message || t('orders.actions.status_update_error'));
       }
     } catch (error: unknown) {
-      console.error("Error updating order status:", error);
-      toast.error(t('orders.actions.status_update_error'));
+      toast.error(apiError(error, t('orders.actions.status_update_error')));
+    } finally {
+      setActionBusy(null);
+    }
+  };
+
+  const paidOnline = (o: OrderDetails) =>
+    o.paymentMethod !== "CASH" && (!!o.paypalCaptureId || o.razorpayPayment?.status === "CAPTURED" || (o.paymentGateway === "PAYONEER" && o.paidAmount != null));
+
+  const handleCancel = (o: OrderDetails) => {
+    const reason = window.prompt(
+      `Cancel order #${o.orderNumber}?\n\nAny booked shipment will be cancelled with the courier and stock is returned.${paidOnline(o) ? "\nThe payment is NOT refunded automatically — use “Refund payment” afterwards if needed." : ""}\n\nReason:`
+    );
+    if (reason === null) return;
+    handleStatusUpdate("CANCELLED", reason.trim() || "Cancelled by admin");
+  };
+
+  const handleRefund = (o: OrderDetails) => {
+    const gateway = o.paymentGateway === "PAYPAL" ? "PayPal" : o.paymentGateway === "PAYONEER" ? "Payoneer" : "Razorpay";
+    const auto = o.paymentGateway !== "PAYONEER";
+    if (!window.confirm(auto
+      ? `Refund ${formatCurrency(Number(o.total))} to the customer via ${gateway}? This sends the money back and cannot be undone.`
+      : `Mark as refunded? Payoneer has no refund API — send the refund from your Payoneer dashboard.`)) return;
+    handleStatusUpdate("REFUNDED", "Refunded by admin");
+  };
+
+  const handleReopen = async () => {
+    if (!id || !window.confirm("Re-open this cancelled order? Stock will be reserved again. No new payment is taken.")) return;
+    setActionBusy("REOPEN");
+    try {
+      const res = await orders.reopenOrder(id);
+      toast.success(res.data?.message || "Order re-opened");
+      await fetchOrderDetails();
+    } catch (error) {
+      toast.error(apiError(error, "Could not re-open the order"));
+    } finally {
+      setActionBusy(null);
     }
   };
 
@@ -716,7 +662,8 @@ export default function OrderDetailsPage() {
                   )}
 
                   {(orderDetails.status === "PENDING" ||
-                    orderDetails.status === "PROCESSING") && (
+                    orderDetails.status === "PROCESSING") &&
+                    (orderDetails.paymentMethod === "CASH" || orderDetails.paymentGateway === "PAYONEER") && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -731,12 +678,27 @@ export default function OrderDetailsPage() {
                     size="sm"
                     variant="outline"
                     className="border-[var(--destructive)] text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
-                    onClick={() => handleStatusUpdate("CANCELLED")}
+                    disabled={actionBusy === "CANCELLED"}
+                    onClick={() => handleCancel(orderDetails)}
                   >
+                    {actionBusy === "CANCELLED" && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
                     {t('orders.actions.cancel')}
                   </Button>
                 </div>
               )}
+
+            {orderDetails.status === "CANCELLED" && (
+              <Button size="sm" variant="outline" disabled={actionBusy === "REOPEN"} onClick={handleReopen}>
+                {actionBusy === "REOPEN" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-1 h-4 w-4" />}
+                Re-open order
+              </Button>
+            )}
+            {["CANCELLED", "DELIVERED", "PAID"].includes(orderDetails.status) && paidOnline(orderDetails) && orderDetails.razorpayPayment?.status !== "REFUNDED" && (
+              <Button size="sm" variant="outline" className="border-purple-500/50 text-purple-700" disabled={actionBusy === "REFUNDED"} onClick={() => handleRefund(orderDetails)}>
+                {actionBusy === "REFUNDED" && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+                Refund payment
+              </Button>
+            )}
           </div>
         </div>
         <div className="h-px bg-[var(--border-color)]" />
@@ -921,6 +883,11 @@ export default function OrderDetailsPage() {
                       {orderDetails.cancelReason || t('orders.details.no_reason')}
                     </p>
                   </div>
+                  {orderDetails.refundPending && (
+                    <div className="rounded-md border border-purple-500/30 bg-purple-500/10 p-2 text-xs text-purple-800">
+                      Refund pending — the customer paid online. Use “Refund payment” to return the money, or “Re-open order” to ship it after all.
+                    </div>
+                  )}
                   <div>
                     <p className="text-xs text-[var(--text-secondary)] mb-1">{t('orders.details.cancelled_by')}</p>
                     <p className="font-medium text-[var(--text-primary)]">
@@ -934,94 +901,13 @@ export default function OrderDetailsPage() {
             </Card>
           )}
 
-          {/* Shiprocket Shipping */}
-          {(isShiprocketEnabled || orderDetails.shiprocket) && (
-            <Card className="bg-[var(--bg-card)] border-[var(--border-color)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] rounded-xl">
-              <CardHeader className="px-6 pt-6 pb-4">
-                <CardTitle className="text-lg font-semibold text-[var(--text-primary)] flex items-center">
-                  <Truck className="mr-2 h-5 w-5 text-[var(--accent)]" />
-                  Shipping (Shiprocket)
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-6 pb-6">
-                {orderDetails.shiprocket?.orderId || orderDetails.shiprocket?.awbCode ? (
-                  <div className="space-y-3">
-                    {orderDetails.shiprocket.orderId && (
-                      <div>
-                        <p className="text-xs text-[var(--text-secondary)] mb-1">Shiprocket Order ID</p>
-                        <p className="font-mono text-sm text-[var(--text-primary)]">{orderDetails.shiprocket.orderId}</p>
-                      </div>
-                    )}
-                    {orderDetails.shiprocket.shipmentId && (
-                      <div>
-                        <p className="text-xs text-[var(--text-secondary)] mb-1">Shipment ID</p>
-                        <p className="font-mono text-sm text-[var(--text-primary)]">{orderDetails.shiprocket.shipmentId}</p>
-                      </div>
-                    )}
-                    {orderDetails.shiprocket.awbCode && (
-                      <div>
-                        <p className="text-xs text-[var(--text-secondary)] mb-1">AWB Number</p>
-                        <p className="font-mono text-sm text-[var(--text-primary)] bg-[var(--bg-secondary)] px-2 py-1 rounded border border-[var(--border-color)]">
-                          {orderDetails.shiprocket.awbCode}
-                        </p>
-                      </div>
-                    )}
-                    {orderDetails.shiprocket.courierName && (
-                      <div>
-                        <p className="text-xs text-[var(--text-secondary)] mb-1">Courier</p>
-                        <p className="font-medium text-[var(--text-primary)]">{orderDetails.shiprocket.courierName}</p>
-                      </div>
-                    )}
-                    {orderDetails.shiprocket.status && (
-                      <div>
-                        <p className="text-xs text-[var(--text-secondary)] mb-1">Status</p>
-                        <Badge className={cn("text-xs font-medium border", getStatusBadgeClass(orderDetails.shiprocket.status))}>
-                          {orderDetails.shiprocket.status}
-                        </Badge>
-                      </div>
-                    )}
-                    {orderDetails.shiprocket.trackingUrl && (
-                      <div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="mt-2"
-                          onClick={() => window.open(orderDetails.shiprocket!.trackingUrl!, "_blank")}
-                        >
-                          Open Tracking
-                        </Button>
-                      </div>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-2"
-                      onClick={async () => {
-                        try {
-                          const res = await orders.syncOrderToShiprocket(id!);
-                          if (res?.data?.success) {
-                            toast.success("Synced with Shiprocket");
-                            fetchOrderDetails();
-                          } else {
-                            toast.error(res?.data?.message || "Sync failed");
-                          }
-                        } catch (err: unknown) {
-                          toast.error((err as { response?: { data?: { message?: string } } })?.response?.data?.message || "Sync failed");
-                        }
-                      }}
-                    >
-                      Sync with Shiprocket
-                    </Button>
-                  </div>
-                ) : (
-                  <p className="text-sm text-[var(--text-secondary)]">
-                    Enable Shiprocket in Site Settings to auto-create shipments for new orders.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
+          {/* Shipping: Shiprocket / FedEx / DHL / Easyship / manual — all booked manually */}
+          <ShipmentPanel
+            orderId={orderDetails.id}
+            orderStatus={orderDetails.status}
+            paymentMethod={orderDetails.paymentMethod}
+            onChanged={fetchOrderDetails}
+          />
           {/* Payment Info */}
           <Card className="bg-[var(--bg-card)] border-[var(--border-color)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] rounded-xl">
             <CardHeader className="px-6 pt-6 pb-4">
@@ -1116,6 +1002,30 @@ export default function OrderDetailsPage() {
                     <p className="font-mono text-xs text-[var(--text-primary)] bg-[var(--bg-secondary)] px-2 py-1 rounded border border-[var(--border-color)]">
                       {orderDetails.razorpayPayment.razorpayOrderId}
                     </p>
+                  </div>
+                )}
+                {orderDetails.paidAmount != null && orderDetails.paymentCurrency && (
+                  <div>
+                    <p className="text-xs text-[var(--text-secondary)] mb-1">Amount received</p>
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">
+                      {orderDetails.paymentCurrency} {Number(orderDetails.paidAmount).toFixed(2)}
+                      {orderDetails.exchangeRate ? (
+                        <span className="ml-1 text-xs font-normal text-[var(--text-secondary)]">(1 USD = ₹{orderDetails.exchangeRate})</span>
+                      ) : null}
+                    </p>
+                  </div>
+                )}
+                {orderDetails.paymentReference && (orderDetails.paymentGateway === "PAYPAL" || orderDetails.paymentGateway === "PAYONEER") && (
+                  <div>
+                    <p className="text-xs text-[var(--text-secondary)] mb-1">{orderDetails.paymentGateway === "PAYPAL" ? "PayPal Order ID" : "Payoneer Payment ID"}</p>
+                    <p className="font-mono text-xs text-[var(--text-primary)] bg-[var(--bg-secondary)] px-2 py-1 rounded border border-[var(--border-color)] break-all">
+                      {orderDetails.paymentReference}
+                    </p>
+                  </div>
+                )}
+                {orderDetails.paymentGateway === "PAYONEER" && orderDetails.status === "PENDING" && (
+                  <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700">
+                    Payoneer has not confirmed this payment yet. Do not ship until the order turns PAID.
                   </div>
                 )}
                 {orderDetails.paypalCaptureId && (
@@ -1370,340 +1280,6 @@ export default function OrderDetailsPage() {
           ) : null}
 
 
-          {/* Easyship Courier Assignment — for international/PayPal orders */}
-          {(orderDetails.shippingProvider === "EASYSHIP" || orderDetails.paymentGateway === "PAYPAL" || orderDetails.paymentGateway === "PAYONEER") &&
-            orderDetails.status !== "CANCELLED" &&
-            orderDetails.status !== "DELIVERED" && (
-            <Card className="bg-[var(--bg-card)] border-purple-500/30 shadow-[0_1px_2px_rgba(0,0,0,0.04)] rounded-xl">
-              <CardHeader className="px-6 pt-6 pb-4">
-                <CardTitle className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
-                  <Truck className="h-5 w-5 text-purple-600" />
-                  Easyship — International Shipping
-                  <Badge className="bg-purple-500/10 text-purple-700 border-purple-400/30 text-xs">International</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-6 pb-6">
-                {/* Already booked */}
-                {(easyshipBookingResult || orderDetails.easyshipShipmentId) ? (
-                  <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-4 space-y-3">
-                    <div className="flex items-center gap-2 text-emerald-600 font-semibold">
-                      <CheckCircle className="h-5 w-5" />
-                      International Shipment Booked
-                    </div>
-                    <div className="text-sm space-y-2">
-                      <div>
-                        <span className="text-[var(--text-secondary)]">AWB: </span>
-                        <span className="font-mono font-semibold">
-                          {easyshipBookingResult?.awbNumber || orderDetails.easyshipTrackingNumber}
-                        </span>
-                      </div>
-                      {(easyshipBookingResult?.courierName) && (
-                        <div><span className="text-[var(--text-secondary)]">Courier: </span>{easyshipBookingResult.courierName}</div>
-                      )}
-                      {(easyshipBookingResult?.easyshipShipmentId || orderDetails.easyshipShipmentId) && (
-                        <div>
-                          <span className="text-[var(--text-secondary)]">Easyship ID: </span>
-                          <span className="font-mono text-xs">{easyshipBookingResult?.easyshipShipmentId || orderDetails.easyshipShipmentId}</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex gap-2 flex-wrap">
-                      {(easyshipBookingResult?.trackingUrl || orderDetails.trackingUrl) && (
-                        <Button size="sm" variant="outline" className="border-emerald-500/50 text-emerald-700 hover:bg-emerald-500/10"
-                          onClick={() => window.open(easyshipBookingResult?.trackingUrl || orderDetails.trackingUrl!, "_blank")}>
-                          Track Shipment
-                        </Button>
-                      )}
-                      {(easyshipBookingResult?.labelUrl || orderDetails.easyshipLabelUrl) && (
-                        <Button size="sm" variant="outline"
-                          onClick={() => window.open(easyshipBookingResult?.labelUrl || orderDetails.easyshipLabelUrl!, "_blank")}>
-                          Download Label
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ) : isFetchingEasyshipRates ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Fetching international courier rates…
-                    </div>
-                    {[0,1,2].map(i => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}
-                  </div>
-                ) : easyshipRateError ? (
-                  <div className="rounded-lg border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 p-4 space-y-3">
-                    <div className="flex items-center gap-2 text-[var(--destructive)] text-sm font-medium">
-                      <AlertTriangle className="h-4 w-4" />
-                      {easyshipRateError}
-                    </div>
-                    <Button size="sm" variant="outline" onClick={async () => {
-                      if (!id) return;
-                      setIsFetchingEasyshipRates(true); setEasyshipRateError(null);
-                      try {
-                        const res = await orders.getEasyshipRates(id, {
-                          destinationCountry: orderDetails.shippingAddress?.country?.slice(0,2).toUpperCase() || "US",
-                          destinationPostal: orderDetails.shippingAddress?.postalCode || "",
-                          destinationCity: orderDetails.shippingAddress?.city || "",
-                        });
-                        if (res?.data?.success) setEasyshipRates(res.data.data.rates || []);
-                        else setEasyshipRateError(res?.data?.message || "Failed to fetch rates");
-                      } catch (e: unknown) {
-                        setEasyshipRateError((e as { response?: { data?: { message?: string } } })?.response?.data?.message || "Failed to fetch rates");
-                      } finally { setIsFetchingEasyshipRates(false); }
-                    }}>Retry</Button>
-                  </div>
-                ) : easyshipRates.length === 0 ? (
-                  <div className="space-y-3">
-                    <p className="text-sm text-[var(--text-secondary)]">
-                      Get shipping rates from 250+ international couriers via Easyship. Requires Easyship API key in Settings.
-                    </p>
-                    <Button size="sm" onClick={async () => {
-                      if (!id) return;
-                      setIsFetchingEasyshipRates(true); setEasyshipRateError(null);
-                      try {
-                        const res = await orders.getEasyshipRates(id, {
-                          destinationCountry: orderDetails.shippingAddress?.country?.slice(0,2).toUpperCase() || "US",
-                          destinationPostal: orderDetails.shippingAddress?.postalCode || "",
-                          destinationCity: orderDetails.shippingAddress?.city || "",
-                        });
-                        if (res?.data?.success) setEasyshipRates(res.data.data.rates || []);
-                        else setEasyshipRateError(res?.data?.message || "Failed to fetch rates");
-                      } catch (e: unknown) {
-                        setEasyshipRateError((e as { response?: { data?: { message?: string } } })?.response?.data?.message || "Failed to fetch rates");
-                      } finally { setIsFetchingEasyshipRates(false); }
-                    }}>
-                      <Truck className="h-4 w-4 mr-2" />
-                      Get Easyship Rates
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <RadioGroup value={selectedEasyshipCourierId} onValueChange={setSelectedEasyshipCourierId} className="space-y-2">
-                      {easyshipRates.map((rate) => (
-                        <Label key={rate.courierId} htmlFor={`easy-${rate.courierId}`}
-                          className={cn("flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-[var(--bg-secondary)]",
-                            selectedEasyshipCourierId === rate.courierId ? "border-purple-500 bg-purple-500/5" : "border-[var(--border-color)]")}>
-                          <RadioGroupItem value={rate.courierId} id={`easy-${rate.courierId}`} />
-                          <div className="flex flex-1 items-center justify-between gap-2">
-                            <div>
-                              <p className="font-medium text-[var(--text-primary)] text-sm">{rate.courierName}</p>
-                              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                                {rate.serviceType} · {rate.minDeliveryDays}–{rate.maxDeliveryDays} days
-                                {rate.isTracked && <span className="ml-2 text-emerald-600">• Tracked</span>}
-                              </p>
-                            </div>
-                            <span className="font-semibold text-[var(--text-primary)] text-sm shrink-0">
-                              {rate.currency} {rate.totalCharge}
-                            </span>
-                          </div>
-                        </Label>
-                      ))}
-                    </RadioGroup>
-                    <Button className="w-full" disabled={!selectedEasyshipCourierId || isBookingEasyship}
-                      onClick={async () => {
-                        if (!selectedEasyshipCourierId || !id) return;
-                        setIsBookingEasyship(true);
-                        try {
-                          const res = await orders.bookEasyshipShipment(id, selectedEasyshipCourierId);
-                          if (res?.data?.success) {
-                            setEasyshipBookingResult(res.data.data);
-                            toast.success("International shipment booked!");
-                            fetchOrderDetails();
-                          } else {
-                            toast.error(res?.data?.message || "Booking failed");
-                          }
-                        } catch (e: unknown) {
-                          toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message || "Booking failed");
-                        } finally { setIsBookingEasyship(false); }
-                      }}>
-                      {isBookingEasyship ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Booking…</> : "Book International Shipment"}
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Shiprocket Courier Assignment — domestic orders only */}
-          {isShiprocketEnabled &&
-            orderDetails.shippingProvider !== "EASYSHIP" &&
-            orderDetails.paymentGateway !== "PAYPAL" &&
-            orderDetails.paymentGateway !== "PAYONEER" &&
-            orderDetails.status !== "CANCELLED" &&
-            orderDetails.status !== "DELIVERED" && (
-            <Card className="bg-[var(--bg-card)] border-[var(--border-color)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] rounded-xl">
-              <CardHeader className="px-6 pt-6 pb-4">
-                <CardTitle className="text-lg font-semibold text-[var(--text-primary)] flex items-center">
-                  <Truck className="mr-2 h-5 w-5 text-[var(--accent)]" />
-                  Shiprocket Courier Assignment
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-6 pb-6">
-                {orderDetails.shiprocket?.awbCode || bookingResult ? (
-                  /* Already booked — show AWB success box */
-                  <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-4 space-y-2">
-                    <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold">
-                      <CheckCircle className="h-5 w-5" />
-                      Shipment Booked Successfully
-                    </div>
-                    <div className="text-sm text-[var(--text-primary)]">
-                      <span className="text-[var(--text-secondary)]">AWB Number: </span>
-                      <span className="font-mono font-semibold">
-                        {bookingResult?.awb || orderDetails.shiprocket?.awbCode}
-                      </span>
-                    </div>
-                    {orderDetails.shiprocket?.courierName && (
-                      <div className="text-sm text-[var(--text-primary)]">
-                        <span className="text-[var(--text-secondary)]">Courier: </span>
-                        {orderDetails.shiprocket.courierName}
-                      </div>
-                    )}
-                    {(bookingResult?.trackingUrl || orderDetails.shiprocket?.trackingUrl) && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="mt-2 border-emerald-500/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
-                        onClick={() =>
-                          window.open(
-                            bookingResult?.trackingUrl || orderDetails.shiprocket!.trackingUrl!,
-                            "_blank"
-                          )
-                        }
-                      >
-                        Track Shipment
-                      </Button>
-                    )}
-                  </div>
-                ) : isFetchingCouriers ? (
-                  /* Loading couriers */
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Fetching available couriers…
-                    </div>
-                    {[0, 1, 2].map((i) => (
-                      <Skeleton key={i} className="h-14 w-full rounded-lg" />
-                    ))}
-                  </div>
-                ) : courierError ? (
-                  /* Error state */
-                  <div className="rounded-lg border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 p-4 space-y-3">
-                    <div className="flex items-center gap-2 text-[var(--destructive)] text-sm font-medium">
-                      <AlertTriangle className="h-4 w-4" />
-                      {courierError}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-[var(--border-color)]"
-                      onClick={fetchCouriers}
-                    >
-                      Retry
-                    </Button>
-                  </div>
-                ) : couriers.length === 0 ? (
-                  /* No couriers available */
-                  <p className="text-sm text-[var(--text-secondary)]">
-                    No courier options available for this order. Ensure Shiprocket is configured in Site Settings.
-                  </p>
-                ) : (
-                  /* Courier selection + booking */
-                  <div className="space-y-4">
-                    <RadioGroup
-                      value={selectedCourierId}
-                      onValueChange={(val) => {
-                        try {
-                          setSelectedCourierId(val ?? "");
-                        } catch {
-                          /* guard against unexpected errors */
-                        }
-                      }}
-                      className="space-y-2"
-                    >
-                      {couriers.map((courier) => {
-                        const cid = String(courier.courier_company_id ?? "");
-                        return (
-                          <Label
-                            key={cid}
-                            htmlFor={`courier-${cid}`}
-                            className={cn(
-                              "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors hover:bg-[var(--bg-secondary)]",
-                              selectedCourierId === cid
-                                ? "border-[var(--accent)] bg-[var(--accent)]/5"
-                                : "border-[var(--border-color)]"
-                            )}
-                          >
-                            <RadioGroupItem value={cid} id={`courier-${cid}`} />
-                            <div className="flex flex-1 items-center justify-between">
-                              <div>
-                                <p className="font-medium text-[var(--text-primary)] text-sm">
-                                  {courier.courier_name || "Unknown Courier"}
-                                </p>
-                                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                                  ETA: {courier.etd || "N/A"}
-                                  {courier.cod === 1 && (
-                                    <span className="ml-2 text-emerald-600 dark:text-emerald-400">
-                                      • COD
-                                    </span>
-                                  )}
-                                </p>
-                              </div>
-                              <span className="font-semibold text-[var(--text-primary)] text-sm">
-                                ₹{courier.rate ?? 0}
-                              </span>
-                            </div>
-                          </Label>
-                        );
-                      })}
-                    </RadioGroup>
-
-                    <Button
-                      className="w-full"
-                      disabled={!selectedCourierId || isBooking}
-                      onClick={async () => {
-                        if (!selectedCourierId || !id) return;
-                        try {
-                          setIsBooking(true);
-                          const res = await orders.bookShipment(id, Number(selectedCourierId));
-                          if (res?.data?.success) {
-                            const d = res.data.data;
-                            const awb =
-                              d?.awb_code ??
-                              d?.awbCode ??
-                              d?.awb ??
-                              "";
-                            const trackingUrl =
-                              d?.tracking_url ??
-                              d?.trackingUrl ??
-                              (awb ? `https://shiprocket.co/tracking/${awb}` : undefined);
-                            setBookingResult({ awb, trackingUrl });
-                            toast.success("Shipment booked successfully!");
-                            fetchOrderDetails();
-                          } else {
-                            toast.error(res?.data?.message || "Booking failed. Please try again.");
-                          }
-                        } catch (err: unknown) {
-                          const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-                          toast.error(msg || "Failed to book shipment");
-                        } finally {
-                          setIsBooking(false);
-                        }
-                      }}
-                    >
-                      {isBooking ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Booking…
-                        </>
-                      ) : (
-                        "Book Shipment"
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
     </div>

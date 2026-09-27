@@ -22,7 +22,9 @@ interface ProductQueryParams {
   search?: string;
   category?: string;
   sortBy?: string;
+  sort?: string;
   order?: "asc" | "desc";
+  isActive?: string;
 }
 
 interface ProductData {
@@ -533,9 +535,10 @@ export const orders = {
   getOrderById: (orderId: string) => {
     return api.get(`/api/admin/orders/${orderId}`);
   },
-  updateOrderStatus: (orderId: string, data: { status: string }) => {
+  updateOrderStatus: (orderId: string, data: { status: string; notes?: string }) => {
     return api.patch(`/api/admin/orders/${orderId}/status`, data);
   },
+  reopenOrder: (orderId: string) => api.post(`/api/admin/orders/${orderId}/reopen`),
   syncOrderToShiprocket: (orderId: string) => {
     return api.post(`/api/admin/shiprocket/orders/${orderId}/sync`);
   },
@@ -959,6 +962,46 @@ export const attributeValues = {
   deleteAttributeValue: (attributeValueId: string) => {
     return api.delete(`/api/admin/attribute-values/${attributeValueId}`);
   },
+};
+
+// Shipments (Shiprocket / FedEx / DHL / Easyship / manual) — booked manually from the order page
+export interface ParcelInput { weightKg?: number; lengthCm?: number; widthCm?: number; heightCm?: number }
+export const shipments = {
+  forOrder: (orderId: string) => api.get(`/api/admin/shipments/order/${orderId}`),
+  rates: (orderId: string, carrier: string, parcel: ParcelInput) =>
+    api.post(`/api/admin/shipments/order/${orderId}/rates`, { carrier, parcel }),
+  create: (orderId: string, data: Record<string, unknown>) => api.post(`/api/admin/shipments/order/${orderId}`, data),
+  cancel: (shipmentId: string, note?: string) => api.post(`/api/admin/shipments/${shipmentId}/cancel`, { note }),
+  track: (shipmentId: string) => api.post(`/api/admin/shipments/${shipmentId}/track`),
+  notify: (shipmentId: string) => api.post(`/api/admin/shipments/${shipmentId}/notify`),
+  document: (shipmentId: string, kind: "label" | "invoice") =>
+    api.get(`/api/admin/shipments/${shipmentId}/document/${kind}`, { responseType: "blob" }),
+  test: (carrier: string) => api.post(`/api/admin/shipments/test/${carrier}`),
+};
+
+// Etsy-style listing editor
+export const listings = {
+  get: (productId: string) => api.get(`/api/admin/products/${productId}/listing`),
+  saveMedia: (productId: string, data: FormData) =>
+    api.post(`/api/admin/products/${productId}/listing-media`, data, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+  saveExtras: (productId: string, data: Record<string, unknown>) =>
+    api.put(`/api/admin/products/${productId}/listing-extras`, data),
+};
+
+export const deliveryProfiles = {
+  list: () => api.get("/api/admin/delivery-profiles"),
+  create: (data: Record<string, unknown>) => api.post("/api/admin/delivery-profiles", data),
+  update: (id: string, data: Record<string, unknown>) => api.put(`/api/admin/delivery-profiles/${id}`, data),
+  remove: (id: string) => api.delete(`/api/admin/delivery-profiles/${id}`),
+};
+
+export const returnPolicies = {
+  list: () => api.get("/api/admin/return-policies"),
+  create: (data: Record<string, unknown>) => api.post("/api/admin/return-policies", data),
+  update: (id: string, data: Record<string, unknown>) => api.put(`/api/admin/return-policies/${id}`, data),
+  remove: (id: string) => api.delete(`/api/admin/return-policies/${id}`),
 };
 
 // Addon Services Management

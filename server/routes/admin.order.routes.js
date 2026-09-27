@@ -3,6 +3,7 @@ import {
   getOrders,
   getOrderById,
   updateOrderStatus,
+  reopenOrder,
   updateTracking,
   createOrder,
   processPayment,
@@ -36,6 +37,13 @@ router.patch(
   verifyAdminJWT,
   hasPermission("orders", "update"),
   updateOrderStatus
+);
+
+router.post(
+  "/orders/:orderId/reopen",
+  verifyAdminJWT,
+  hasPermission("orders", "update"),
+  reopenOrder
 );
 
 router.patch(

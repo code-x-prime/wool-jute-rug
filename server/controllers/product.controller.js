@@ -483,8 +483,11 @@ export const getProductBySlug = asyncHandler(async (req, res) => {
         },
       },
       brand: true,
+      deliveryProfile: true,
+      returnPolicy: true,
+      customFields: { orderBy: { order: "asc" } },
       images: {
-        orderBy: { isPrimary: "desc" },
+        orderBy: [{ order: "asc" }, { isPrimary: "desc" }],
       },
       variants: {
         where: { isActive: true },
@@ -567,6 +570,7 @@ export const getProductBySlug = asyncHandler(async (req, res) => {
       url: getFileUrl(image.url),
     })),
     videoUrl: product.videoUrl ? getFileUrl(product.videoUrl) : null,
+    videoUrl2: product.videoUrl2 ? getFileUrl(product.videoUrl2) : null,
     // Format variants with proper image URLs and attributes
     reviews: product.reviews.map((review) => ({
       ...review,
@@ -746,9 +750,24 @@ export const getProductBySlug = asyncHandler(async (req, res) => {
         ? parseFloat(product.variants[0].price || 0)
         : 0,
     flashSale: productFlashSale?.hasFlashSale
-      ? { discountPercentage: productFlashSale.discountPercentage }
+      ? { discountPercentage: productFlashSale.discountPercentage, endsAt: productFlashSale.endsAt }
       : null,
   };
+
+  // Price range for "Now ₹X+ was ₹Y+" — uses flash-sale prices when a sale is running
+  {
+    const cur = (v) => parseFloat(v.flashSalePrice ?? v.salePrice ?? v.price);
+    const orig = (v) => parseFloat(v.flashSaleOriginalPrice ?? v.price);
+    const vs = formattedProduct.variants.filter((v) => Number.isFinite(cur(v)) && cur(v) > 0);
+    formattedProduct.priceRange = vs.length
+      ? {
+        min: Math.min(...vs.map(cur)),
+        max: Math.max(...vs.map(cur)),
+        originalMin: Math.min(...vs.map(orig)),
+        originalMax: Math.max(...vs.map(orig)),
+      }
+      : null;
+  }
 
   // Add related products
   const relatedProducts = categoryId

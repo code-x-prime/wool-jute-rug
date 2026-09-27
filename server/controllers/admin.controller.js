@@ -1107,10 +1107,10 @@ export const updatePaymentSettings = asyncHandler(async (req, res) => {
 
   // Validate that at least one payment method is enabled
   if (cashEnabled === false && razorpayEnabled === false) {
-    throw new ApiError(
-      400,
-      "At least one payment method must be enabled (Cash or Razorpay)"
-    );
+    const intl = await prisma.siteSettings.findFirst({ select: { paypalEnabled: true, payoneerEnabled: true } });
+    if (!intl?.paypalEnabled && !intl?.payoneerEnabled) {
+      throw new ApiError(400, "At least one payment method must be enabled");
+    }
   }
 
   // Validate COD charge is non-negative

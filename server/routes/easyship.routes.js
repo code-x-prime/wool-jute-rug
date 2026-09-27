@@ -6,11 +6,12 @@ import {
   trackEasyshipShipment,
   getEasyshipStatus,
 } from "../controllers/easyship.controller.js";
-import { verifyJWTToken } from "../middlewares/auth.middleware.js";
+// Admin-only: these endpoints spend money on the store Easyship account
+import { verifyAdminJWT } from "../middlewares/admin.middleware.js";
 
 const router = express.Router();
 
-router.use(verifyJWTToken);
+router.use(verifyAdminJWT);
 
 router.get("/status", getEasyshipStatus);
 router.post("/rates", getEasyshipRates);

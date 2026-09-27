@@ -221,10 +221,54 @@ export const getProducts = asyncHandler(async (req, res, next) => {
     take: parseInt(limit),
   });
 
+  const productIds = products.map((p) => p.id);
+  const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const SOLD_STATUSES = ["PROCESSING", "PAID", "SHIPPED", "DELIVERED", "RETURN_APPROVED"];
+  const [views30, favs30, favsAll, sales] = productIds.length
+    ? await Promise.all([
+      prisma.productView.groupBy({
+        by: ["productId"],
+        where: { productId: { in: productIds }, timestamp: { gte: since30d } },
+        _count: { _all: true },
+      }),
+      prisma.wishlistItem.groupBy({
+        by: ["productId"],
+        where: { productId: { in: productIds }, createdAt: { gte: since30d } },
+        _count: { _all: true },
+      }),
+      prisma.wishlistItem.groupBy({
+        by: ["productId"],
+        where: { productId: { in: productIds } },
+        _count: { _all: true },
+      }),
+      prisma.orderItem.groupBy({
+        by: ["productId"],
+        where: { productId: { in: productIds }, order: { status: { in: SOLD_STATUSES } } },
+        _sum: { quantity: true, subtotal: true },
+        _count: { orderId: true },
+      }),
+    ])
+    : [[], [], [], []];
+  const toMap = (rows, pick) => new Map(rows.map((r) => [r.productId, pick(r)]));
+  const views30Map = toMap(views30, (r) => r._count._all);
+  const favs30Map = toMap(favs30, (r) => r._count._all);
+  const favsAllMap = toMap(favsAll, (r) => r._count._all);
+  const salesMap = toMap(sales, (r) => ({
+    sales: r._sum.quantity || 0,
+    orders: r._count.orderId || 0,
+    revenue: Number(r._sum.subtotal || 0),
+  }));
+
   // Format the response data
   const formattedProducts = products.map((product) => {
     // Add image URLs and clean up the data
     return {
+      stats: {
+        visits30d: views30Map.get(product.id) || 0,
+        favourites30d: favs30Map.get(product.id) || 0,
+        favouritesAll: favsAllMap.get(product.id) || 0,
+        ...(salesMap.get(product.id) || { sales: 0, orders: 0, revenue: 0 }),
+      },
       ...product,
       videoUrl: product.videoUrl ? getFileUrl(product.videoUrl) : null,
       // Extract categories into a more usable format
@@ -503,7 +547,8 @@ export const createProduct = asyncHandler(async (req, res, next) => {
   // in a separate follow-up request after the product/variants are created)
   const isVariantProduct = hasVariants === "true" || hasVariants === true;
   const uploadedImageFiles = req.files?.images || (Array.isArray(req.files) ? req.files : []);
-  if (!isVariantProduct && uploadedImageFiles.length === 0) {
+  // deferImages: the listing editor uploads photos right after via /listing-media
+  if (!isVariantProduct && uploadedImageFiles.length === 0 && req.body.deferImages !== "true") {
     throw new ApiError(400, "At least one product image is required");
   }
 
@@ -543,7 +588,7 @@ export const createProduct = asyncHandler(async (req, res, next) => {
           hasVariants: hasVariants === "true" || hasVariants === true,
           featured: featured === "true" || featured === true,
           productType: parsedProductType,
-          isActive: isActive === "true" || isActive === true || true,
+          isActive: isActive === undefined ? true : isActive === "true" || isActive === true,
           metaTitle: metaTitle || cleanName,
           metaDescription: metaDescription || description,
           keywords,
@@ -1487,6 +1532,12 @@ export const updateProduct = asyncHandler(async (req, res, next) => {
                   );
                   for (const image of variant.images) {
                     try {
+                      // Linked photos share the product image's file — keep it.
+                      const sharedWithProduct = await prisma.productImage.findFirst({
+                        where: { url: image.url },
+                        select: { id: true },
+                      });
+                      if (sharedWithProduct) continue;
                       await deleteFromS3(image.url);
                       console.log(
                         `✅ Deleted variant image from S3: ${image.url}`

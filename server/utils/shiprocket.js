@@ -606,7 +606,8 @@ export async function buildShiprocketOrderPayload(order) {
         // Include shipping cost in sub_total for Shiprocket
         // Shiprocket calculates: sub_total - total_discount = final amount
         // So we need: (subTotal + shipping) - discount = total
-        sub_total: parseFloat(order.subTotal) + parseFloat(order.shippingCost || 0),
+        // COD surcharge is part of what the courier must collect
+        sub_total: parseFloat(order.subTotal) + parseFloat(order.shippingCost || 0) + parseFloat(order.codCharge || 0),
         total_discount: parseFloat(order.discount) || 0,
 
         // Dimensions

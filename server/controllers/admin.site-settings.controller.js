@@ -21,6 +21,9 @@ function maskSettings(settings) {
   if (masked.paypalClientSecret) masked.paypalClientSecret = "••••••••";
   if (masked.payoneerApiKey) masked.payoneerApiKey = "••••••••";
   if (masked.easyshipApiKey) masked.easyshipApiKey = "••••••••";
+  if (masked.razorpayWebhookSecret) masked.razorpayWebhookSecret = "••••••••";
+  if (masked.fedexClientSecret) masked.fedexClientSecret = "••••••••";
+  if (masked.dhlApiSecret) masked.dhlApiSecret = "••••••••";
   return masked;
 }
 
@@ -73,11 +76,28 @@ export const updateSiteSettings = asyncHandler(async (req, res) => {
     payoneerApiKey,
     payoneerProgramId,
     payoneerEnabled,
+    payoneerMode,
     // Easyship
     easyshipApiKey,
     easyshipEnabled,
     easyshipAccountId,
     usdExchangeRate,
+    razorpayWebhookSecret,
+    fedexEnabled,
+    fedexMode,
+    fedexClientId,
+    fedexClientSecret,
+    fedexAccountNumber,
+    dhlEnabled,
+    dhlMode,
+    dhlApiKey,
+    dhlApiSecret,
+    dhlAccountNumber,
+    exporterIec,
+    intlHsCode,
+    intlCustomsDescription,
+    shiprocketWebhookToken,
+    clearGateway, // "razorpay" | "paypal" | "payoneer" — removes saved credentials and disables it
   } = req.body;
 
   let settings = await prisma.siteSettings.findFirst();
@@ -129,7 +149,10 @@ export const updateSiteSettings = asyncHandler(async (req, res) => {
   }
 
   // PayPal
-  if (paypalClientId !== undefined) updateData.paypalClientId = paypalClientId;
+  if (paypalMode !== undefined && !["sandbox", "live"].includes(paypalMode)) {
+    throw new ApiError(400, "PayPal mode must be sandbox or live");
+  }
+  if (paypalClientId !== undefined) updateData.paypalClientId = paypalClientId ? String(paypalClientId).trim() : null;
   if (typeof paypalEnabled === "boolean") updateData.paypalEnabled = paypalEnabled;
   if (paypalMode !== undefined) updateData.paypalMode = paypalMode;
   if (paypalClientSecret && paypalClientSecret !== "••••••••") {
@@ -141,7 +164,11 @@ export const updateSiteSettings = asyncHandler(async (req, res) => {
   }
 
   // Payoneer
-  if (payoneerProgramId !== undefined) updateData.payoneerProgramId = payoneerProgramId;
+  if (payoneerMode !== undefined && !["sandbox", "live"].includes(payoneerMode)) {
+    throw new ApiError(400, "Payoneer mode must be sandbox or live");
+  }
+  if (payoneerMode !== undefined) updateData.payoneerMode = payoneerMode;
+  if (payoneerProgramId !== undefined) updateData.payoneerProgramId = payoneerProgramId ? String(payoneerProgramId).trim() : null;
   if (typeof payoneerEnabled === "boolean") updateData.payoneerEnabled = payoneerEnabled;
   if (payoneerApiKey && payoneerApiKey !== "••••••••") {
     try {
@@ -150,6 +177,36 @@ export const updateSiteSettings = asyncHandler(async (req, res) => {
       throw new ApiError(400, "Failed to encrypt Payoneer key");
     }
   }
+
+  if (razorpayWebhookSecret !== undefined && razorpayWebhookSecret !== "••••••••") {
+    updateData.razorpayWebhookSecret = razorpayWebhookSecret ? "enc:" + encrypt(String(razorpayWebhookSecret).trim()) : null;
+  }
+
+  // FedEx / DHL Express
+  for (const [label, mode] of [["FedEx", fedexMode], ["DHL", dhlMode]]) {
+    if (mode !== undefined && !["sandbox", "live"].includes(mode)) throw new ApiError(400, `${label} mode must be sandbox or live`);
+  }
+  const trimOrNull = (v) => (v ? String(v).trim() : null);
+  if (typeof fedexEnabled === "boolean") updateData.fedexEnabled = fedexEnabled;
+  if (fedexMode !== undefined) updateData.fedexMode = fedexMode;
+  if (fedexClientId !== undefined) updateData.fedexClientId = trimOrNull(fedexClientId);
+  if (fedexAccountNumber !== undefined) updateData.fedexAccountNumber = trimOrNull(fedexAccountNumber);
+  if (fedexClientSecret && fedexClientSecret !== "••••••••") updateData.fedexClientSecret = "enc:" + encrypt(String(fedexClientSecret).trim());
+  if (typeof dhlEnabled === "boolean") updateData.dhlEnabled = dhlEnabled;
+  if (dhlMode !== undefined) updateData.dhlMode = dhlMode;
+  if (dhlApiKey !== undefined) updateData.dhlApiKey = trimOrNull(dhlApiKey);
+  if (dhlAccountNumber !== undefined) updateData.dhlAccountNumber = trimOrNull(dhlAccountNumber);
+  if (dhlApiSecret && dhlApiSecret !== "••••••••") updateData.dhlApiSecret = "enc:" + encrypt(String(dhlApiSecret).trim());
+  if (exporterIec !== undefined) updateData.exporterIec = trimOrNull(exporterIec);
+  if (intlHsCode !== undefined) {
+    if (!/^\d{4,10}$/.test(String(intlHsCode).trim())) throw new ApiError(400, "HS code must be 4–10 digits");
+    updateData.intlHsCode = String(intlHsCode).trim();
+  }
+  if (intlCustomsDescription !== undefined) {
+    if (!String(intlCustomsDescription).trim()) throw new ApiError(400, "Customs description is required");
+    updateData.intlCustomsDescription = String(intlCustomsDescription).trim().slice(0, 70);
+  }
+  if (shiprocketWebhookToken !== undefined) updateData.shiprocketWebhookToken = trimOrNull(shiprocketWebhookToken);
 
   // Easyship
   if (typeof easyshipEnabled === "boolean") updateData.easyshipEnabled = easyshipEnabled;
@@ -160,6 +217,46 @@ export const updateSiteSettings = asyncHandler(async (req, res) => {
     } catch (e) {
       throw new ApiError(400, "Failed to encrypt Easyship key");
     }
+  }
+
+  if (clearGateway !== undefined) {
+    const clears = {
+      fedex: { fedexEnabled: false, fedexClientId: null, fedexClientSecret: null, fedexAccountNumber: null },
+      dhl: { dhlEnabled: false, dhlApiKey: null, dhlApiSecret: null, dhlAccountNumber: null },
+      easyship: { easyshipEnabled: false, easyshipApiKey: null, easyshipAccountId: null },
+      razorpay: { razorpayEnabled: false, razorpayKeyId: null, razorpayKeySecret: null, razorpayWebhookSecret: null },
+      paypal: { paypalEnabled: false, paypalClientId: null, paypalClientSecret: null },
+      payoneer: { payoneerEnabled: false, payoneerProgramId: null, payoneerApiKey: null },
+    };
+    if (!clears[clearGateway]) throw new ApiError(400, "Unknown gateway");
+    Object.assign(updateData, clears[clearGateway]);
+    if (clearGateway === "razorpay") {
+      await prisma.paymentSettings.updateMany({ data: { razorpayEnabled: false } });
+    }
+  }
+
+  // A gateway cannot be switched on without complete credentials
+  const after = { ...settings, ...updateData };
+  if (after.fedexEnabled && (!after.fedexClientId || !after.fedexClientSecret || !after.fedexAccountNumber)) {
+    throw new ApiError(400, "Add FedEx API key, secret key and account number before enabling FedEx");
+  }
+  if (after.dhlEnabled && (!after.dhlApiKey || !after.dhlApiSecret || !after.dhlAccountNumber)) {
+    throw new ApiError(400, "Add DHL API key, secret and account number before enabling DHL Express");
+  }
+  if (after.easyshipEnabled && !after.easyshipApiKey) {
+    throw new ApiError(400, "Add the Easyship API key before enabling Easyship");
+  }
+  if (after.razorpayEnabled && (!after.razorpayKeyId || !after.razorpayKeySecret)) {
+    throw new ApiError(400, "Add Razorpay Key ID and Key Secret before enabling Razorpay");
+  }
+  if (after.paypalEnabled && (!after.paypalClientId || !after.paypalClientSecret)) {
+    throw new ApiError(400, "Add PayPal Client ID and Client Secret before enabling PayPal");
+  }
+  if (after.payoneerEnabled && (!after.payoneerProgramId || !after.payoneerApiKey)) {
+    throw new ApiError(400, "Add Payoneer merchant code and API token before enabling Payoneer");
+  }
+  if (usdExchangeRate !== undefined && !(parseFloat(usdExchangeRate) > 0)) {
+    throw new ApiError(400, "USD exchange rate must be greater than 0");
   }
 
   if (usdExchangeRate !== undefined) {
@@ -181,7 +278,7 @@ export const updateSiteSettings = asyncHandler(async (req, res) => {
 export const testRazorpayConnection = asyncHandler(async (req, res) => {
   const settings = await prisma.siteSettings.findFirst();
 
-  if (!settings?.razorpayEnabled || !settings?.razorpayKeyId) {
+  if (!settings?.razorpayKeyId) {
     return res.status(200).json(
       new ApiResponsive(200, { connected: false }, "Razorpay not configured")
     );

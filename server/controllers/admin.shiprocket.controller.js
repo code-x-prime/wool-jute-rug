@@ -539,6 +539,14 @@ export const getOrderInvoice = asyncHandler(async (req, res) => {
 
 // Webhook handler for Shiprocket tracking updates
 export const handleWebhook = asyncHandler(async (req, res) => {
+    // Shiprocket sends the token configured in its webhook settings as the x-api-key header
+    const site = await prisma.siteSettings.findFirst({ select: { shiprocketWebhookToken: true } });
+    const expected = site?.shiprocketWebhookToken;
+    if (!expected || req.headers["x-api-key"] !== expected) {
+        console.warn("Shiprocket webhook rejected: missing or wrong x-api-key token");
+        return res.status(401).json({ status: "unauthorized" });
+    }
+
     const {
         awb,
         current_status,
@@ -594,21 +602,11 @@ export const handleWebhook = asyncHandler(async (req, res) => {
         updateData.courierName = courier_name;
     }
 
-    // Map Shiprocket status to our order status
-    const statusMapping = {
-        PICKED_UP: "SHIPPED",
-        SHIPPED: "SHIPPED",
-        IN_TRANSIT: "SHIPPED",
-        OUT_FOR_DELIVERY: "SHIPPED",
-        DELIVERED: "DELIVERED",
-        CANCELLED: "CANCELLED",
-        RTO_INITIATED: "CANCELLED",
-        RTO_DELIVERED: "CANCELLED",
-    };
-
-    if (statusMapping[current_status]) {
-        updateData.status = statusMapping[current_status];
-    }
+    // The order status itself is changed only by the admin; the courier status is recorded for them to see.
+    await prisma.shipment.updateMany({
+        where: { orderId: order.id, carrier: "SHIPROCKET", status: "CREATED", ...(awb && { trackingNumber: String(awb) }) },
+        data: { lastTrackingStatus: current_status, trackedAt: new Date() },
+    });
 
     await prisma.order.update({
         where: { id: order.id },

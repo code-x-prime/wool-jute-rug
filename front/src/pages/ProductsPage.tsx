@@ -1,20 +1,6 @@
-import {
-  useState,
-  useEffect,
-  useCallback,
-  Fragment,
-  useRef,
-  useMemo,
-} from "react";
+import { useState, useEffect, Fragment, useMemo } from "react";
 import { Link, useParams, useLocation, useNavigate } from "react-router-dom";
-import {
-  products,
-  categories,
-  attributes,
-  subCategories,
-  moq,
-} from "@/api/adminService";
-import api from "@/api/api";
+import { products, categories } from "@/api/adminService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -31,21 +17,20 @@ import {
   ChevronRight,
   Image as ImageIcon,
   X,
-  MoreVertical,
-  Info,
-  Video,
+  Settings,
+  ChevronDown,
+  Eye,
+  Star,
+  Power,
+  LayoutGrid,
+  List as ListIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { v4 as uuidv4 } from "uuid";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
 import { DeleteProductDialog } from "@/components/DeleteProductDialog";
-import VariantCard from "@/components/VariantCard";
 import { useDebounce } from "@/utils/debounce";
-import JoditEditor from "jodit-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,4016 +38,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { brands as brandsApi, categories as categoriesApi, attributes as attributesApi, attributeValues as attributeValuesApi, addonServices as addonServicesApi } from "@/api/adminService";
-
 import { useLanguage } from "@/context/LanguageContext";
-import { useTheme } from "@/hooks/useTheme";
-import { WASHING_CARE_ICONS, parseWashingCare } from "@/components/WashingCareIcons";
-import AddonSvgIcon from "@/components/AddonSvgIcon";
-
-function useCategories() {
-  const [categoriesData, setCategoriesData] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        setIsLoading(true);
-        const response = await categories.getCategories();
-
-        if (response.data.success) {
-          setCategoriesData(response.data.data?.categories || []);
-        } else {
-          setError(response.data.message || "Failed to fetch categories");
-        }
-      } catch (error) {
-        console.error("Error fetching categories:", error);
-        setError("An error occurred while fetching categories");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchCategories();
-  }, []);
-
-  // Re-fetch when quick-create triggers event
-  useEffect(() => {
-    const handler = () => {
-      categories.getCategories().then((r) => {
-        if (r.data.success) setCategoriesData(r.data.data?.categories || []);
-      }).catch(() => { });
-    };
-    window.addEventListener("refetch-categories", handler);
-    return () => window.removeEventListener("refetch-categories", handler);
-  }, []);
-
-  return { categories: categoriesData, isLoading, error };
-}
-
-// Export ProductForm for reuse in other components
-export function ProductForm({
-  mode,
-  productId,
-}: {
-  mode: "create" | "edit";
-  productId?: string;
-}) {
-  const { t } = useLanguage();
-  const { theme } = useTheme();
-  const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
-  const [formLoading, setFormLoading] = useState(mode === "edit");
-  const [attributesList, setAttributesList] = useState<any[]>([]);
-  const [attributeValuesMap, setAttributeValuesMap] = useState<
-    Record<string, any[]>
-  >({});
-  const [selectedAttributes, setSelectedAttributes] = useState<
-    Record<string, string[]>
-  >({});
-  const [brandsList, setBrandsList] = useState<any[]>([]);
-  const [hasVariants, setHasVariants] = useState(false);
-  const [allAddonServices, setAllAddonServices] = useState<any[]>([]);
-  const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);
-  // Inline addon CRUD
-  const [showAddonCreate, setShowAddonCreate] = useState(false);
-  const [addonEditingId, setAddonEditingId] = useState<string | null>(null);
-  const [addonForm, setAddonForm] = useState({ name: "", description: "", price: "", icon: "", isActive: true });
-  const [addonSaving, setAddonSaving] = useState(false);
-  const [showAddonIconPicker, setShowAddonIconPicker] = useState(false);
-  const ADDON_ICON_PRESETS = [
-    { label: "Anti-Slip", icon: "🛡️" }, { label: "Stain Resist", icon: "✨" },
-    { label: "Wash", icon: "🧺" }, { label: "Custom Size", icon: "📐" },
-    { label: "Delivery", icon: "🚚" }, { label: "Install", icon: "🔧" },
-    { label: "Protect", icon: "🔒" }, { label: "Gift Wrap", icon: "🎁" },
-    { label: "Fragrance", icon: "🌸" }, { label: "Repair", icon: "🪡" },
-    { label: "Cleaning", icon: "🧹" }, { label: "Padding", icon: "📦" },
-  ];
-
-  // ── Inline quick-create state ──────────────────────────────────────────────
-  const [showQuickBrand, setShowQuickBrand] = useState(false);
-  const [quickBrandName, setQuickBrandName] = useState("");
-  const [quickBrandFile, setQuickBrandFile] = useState<File | null>(null);
-  const [quickBrandLoading, setQuickBrandLoading] = useState(false);
-
-  const [showQuickCategory, setShowQuickCategory] = useState(false);
-  const [quickCatName, setQuickCatName] = useState("");
-  const [quickCatFile, setQuickCatFile] = useState<File | null>(null);
-  const [quickCatLoading, setQuickCatLoading] = useState(false);
-
-  const [showQuickSubCat, setShowQuickSubCat] = useState(false);
-  const [quickSubCatParentId, setQuickSubCatParentId] = useState<string>("");
-  const [quickSubCatName, setQuickSubCatName] = useState("");
-  const [quickSubCatFile, setQuickSubCatFile] = useState<File | null>(null);
-  const [quickSubCatLoading, setQuickSubCatLoading] = useState(false);
-
-  const [showQuickAttr, setShowQuickAttr] = useState(false);
-  const [quickAttrName, setQuickAttrName] = useState("");
-  const [quickAttrType, setQuickAttrType] = useState("select");
-  const [quickAttrValues, setQuickAttrValues] = useState<string[]>([""]);
-  const [quickAttrLoading, setQuickAttrLoading] = useState(false);
-
-  // Per-attribute inline add-value state: attrId → {open, value, hexCode, loading}
-  const [inlineAddValue, setInlineAddValue] = useState<Record<string, { open: boolean; value: string; hexCode: string; loading: boolean }>>({});
-
-  // ── Inline edit state for attribute values: valueId → {value, hexCode, imageFile, imagePreview, loading}
-  const [editingValue, setEditingValue] = useState<Record<string, {
-    value: string; hexCode: string; imageFile: File | null; imagePreview: string | null; loading: boolean;
-  }>>({});
-
-  // ── Edit dialog for category / subcategory ─────────────────────────────────
-  const [editEntityDialog, setEditEntityDialog] = useState<{
-    open: boolean;
-    type: "category" | "subcategory";
-    id: string;
-    name: string;
-    parentId?: string;
-    imageFile: File | null;
-    imagePreview: string | null;
-    loading: boolean;
-  }>({ open: false, type: "category", id: "", name: "", imageFile: null, imagePreview: null, loading: false });
-
-  // ── Confirm-delete dialog state ────────────────────────────────────────────
-  const [confirmDelete, setConfirmDelete] = useState<{
-    open: boolean;
-    label: string; // e.g. "Category: Hand-knotted Rugs"
-    onConfirm: () => Promise<void>;
-  }>({ open: false, label: "", onConfirm: async () => { } });
-  const [confirmDeleteLoading, setConfirmDeleteLoading] = useState(false);
-  const [product, setProduct] = useState({
-    name: "",
-    description: "",
-    categoryId: "",
-    categoryIds: [] as string[],
-    primaryCategoryId: "",
-    subCategoryIds: [] as string[],
-    sku: "",
-    price: "",
-    salePrice: "",
-    quantity: 0,
-    featured: false,
-    ourProduct: false,
-    readyToShip: false,
-    acceptOrders: false,
-    isCustomizable: false,
-    productType: [] as string[],
-    isActive: true,
-    // SEO fields
-    metaTitle: "",
-    metaDescription: "",
-    keywords: "",
-    tags: [] as string[],
-    // Dynamic accordion fields
-    washingAndCare: "",
-    shippingAndReturns: "",
-    aboutThisDesign: "",
-    designStory: "",
-    // single brand association
-    brandId: "",
-    topBrandIds: [] as string[],
-    newBrandIds: [] as string[],
-    hotBrandIds: [] as string[],
-    // Shipping dimensions for Shiprocket (for products without variants)
-    shippingLength: "",
-    shippingBreadth: "",
-    shippingHeight: "",
-    shippingWeight: "",
-  });
-
-  const [imagePreviews, setImagePreviews] = useState<(ImagePreview | null)[]>(
-    Array(5).fill(null)
-  );
-  const [tagInput, setTagInput] = useState("");
-
-  // Video state (optional)
-  const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
-  const [videoRemoved, setVideoRemoved] = useState(false);
-
-  // State for variants
-  const [variants, setVariants] = useState<any[]>([]);
-
-  // MOQ State
-  const [productMOQ, setProductMOQ] = useState({
-    isActive: false,
-    minQuantity: 1,
-  });
-
-  // Shiprocket enabled state
-  const [shiprocketEnabled, setShiprocketEnabled] = useState(false);
-
-  // Add state to track selected categories
-  const [selectedCategories, setSelectedCategories] = useState<any[]>([]);
-  const [subCategoriesMap, setSubCategoriesMap] = useState<
-    Record<string, any[]>
-  >({});
-  const [selectedSubCategories, setSelectedSubCategories] = useState<string[]>(
-    []
-  );
-
-  // Get categories data using the useCategories hook
-  const { categories, isLoading: categoriesLoading } = useCategories();
-
-  // Fetch Shiprocket settings to check if enabled
-  useEffect(() => {
-    const fetchShiprocketSettings = async () => {
-      try {
-        const response = await api.get("/api/admin/shiprocket/settings");
-        if (response.data.success) {
-          setShiprocketEnabled(response.data.data?.settings?.isEnabled || false);
-        }
-      } catch (error) {
-        // Shiprocket not configured, keep disabled
-        console.error("Error fetching shiprocket settings:", error);
-        setShiprocketEnabled(false);
-      }
-    };
-    fetchShiprocketSettings();
-  }, []);
-
-  // Jodit Editor reference and local state
-  const editorRef = useRef<any>(null);
-  const [editorContent, setEditorContent] = useState<string>("");
-  const hasInitializedEditor = useRef(false);
-
-  // Memoize editor config to prevent re-renders when other state changes
-  const editorConfig = useMemo(
-    () => ({
-      height: 400,
-      placeholder:
-        "Enter product description. Use the toolbar to format text, add tables, colors, and more.",
-      toolbar: true,
-      toolbarButtonSize: "middle" as const,
-      toolbarAdaptive: false,
-      showCharsCounter: true,
-      showWordsCounter: true,
-      showXPathInStatusbar: false,
-      askBeforePasteHTML: false,
-      askBeforePasteFromWord: false,
-      defaultActionOnPaste: "insert_as_html" as const,
-      buttons: [
-        "bold",
-        "italic",
-        "underline",
-        "strikethrough",
-        "|",
-        "superscript",
-        "subscript",
-        "|",
-        "align",
-        "|",
-        "ul",
-        "ol",
-        "|",
-        "outdent",
-        "indent",
-        "|",
-        "font",
-        "fontsize",
-        "brush",
-        "paragraph",
-        "|",
-        "image",
-        "link",
-        "|",
-        "undo",
-        "redo",
-        "|",
-        "hr",
-        "eraser",
-        "copyformat",
-        "|",
-        "fullsize",
-        "selectall",
-        "print",
-        "|",
-        "source",
-        "|",
-        "table",
-        "|",
-        "find",
-        "|",
-        "symbol",
-        "|",
-        "about",
-      ],
-      removeButtons: [],
-      zIndex: 0,
-      readonly: false,
-      activeButtonsInReadOnly: ["source", "fullsize"],
-      toolbarSticky: false,
-      toolbarStickyOffset: 0,
-      showPlaceholder: true,
-      language: "en",
-      direction: "ltr" as const,
-      tabIndex: -1,
-      useSearch: true,
-      spellcheck: true,
-      enter: "p" as const,
-      enterBlock: "div" as const,
-      defaultMode: 1,
-      useSplitMode: false,
-      colorPickerDefaultTab: "background" as const,
-      imageDefaultWidth: 300,
-      theme: theme === "dark" ? "dark" : "default",
-    }),
-    [theme]
-  );
-
-  // Fetch sub-categories when categories change
-  useEffect(() => {
-    const fetchSubCategories = async () => {
-      if (product.categoryIds.length === 0) return;
-
-      const subCategoriesData: Record<string, any[]> = {};
-      for (const categoryId of product.categoryIds) {
-        try {
-          const response =
-            await subCategories.getSubCategoriesByCategory(categoryId);
-          if (response.data?.success) {
-            subCategoriesData[categoryId] =
-              response.data.data?.subCategories || [];
-          }
-        } catch (error) {
-          console.error(
-            `Error fetching sub-categories for category ${categoryId}:`,
-            error
-          );
-        }
-      }
-      setSubCategoriesMap(subCategoriesData);
-    };
-
-    fetchSubCategories();
-  }, [product.categoryIds]);
-
-  // Sync editorContent with product.description ONLY when product first loads in edit mode
-  // This prevents cursor jumping during typing
-  useEffect(() => {
-    if (
-      mode === "edit" &&
-      product.description &&
-      !hasInitializedEditor.current
-    ) {
-      setEditorContent(product.description);
-      hasInitializedEditor.current = true;
-    }
-    if (mode === "create") {
-      hasInitializedEditor.current = false;
-    }
-  }, [mode, product.description]);
-
-  interface ImagePreview {
-    url: string;
-    id?: string;
-    isPrimary?: boolean;
-    file?: File;
-  }
-
-  // Handle single file upload for a specific slot
-  const handleSlotFileChange = (slotIndex: number, file: File) => {
-    if (!file) return;
-
-    const isValidType = file.type.startsWith("image/");
-    const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB
-
-    if (!isValidType) {
-      toast.error(`${file.name} is not a valid image file`);
-      return;
-    }
-    if (!isValidSize) {
-      toast.error(`${file.name} is too large. Maximum size is 10MB`);
-      return;
-    }
-
-    const newPreview: ImagePreview = {
-      url: URL.createObjectURL(file),
-      file,
-      isPrimary: slotIndex === 0,
-    };
-
-    setImagePreviews((prev) => {
-      const next = [...prev];
-      next[slotIndex] = newPreview;
-
-      // First non-null is primary
-      const firstNonNullIdx = next.findIndex((p) => p !== null);
-      next.forEach((img, idx) => {
-        if (img) {
-          img.isPrimary = idx === firstNonNullIdx;
-        }
-      });
-      return next;
-    });
-    toast.success(`Image added to Slot ${slotIndex + 1}`);
-  };
-
-  const removeVideo = useCallback(() => {
-    if (videoFile && videoPreviewUrl?.startsWith("blob:")) {
-      URL.revokeObjectURL(videoPreviewUrl);
-    }
-    setVideoFile(null);
-    setVideoPreviewUrl(null);
-    setVideoRemoved(true);
-  }, [videoFile, videoPreviewUrl]);
-
-  const handleVideoFileChange = (file: File) => {
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    const allowedTypes = ["video/mp4", "video/webm"];
-    if (file.size > maxSize) {
-      toast.error("Video must be 10MB or less");
-      return;
-    }
-    if (!allowedTypes.includes(file.type)) {
-      toast.error("Only MP4 and WebM videos are supported");
-      return;
-    }
-    setVideoFile(file);
-    setVideoPreviewUrl(URL.createObjectURL(file));
-    setVideoRemoved(false);
-    toast.success("Video added successfully");
-  };
-
-  // Remove image from specific slot and shift remaining left
-  const removeImageAt = async (index: number) => {
-    const imageToRemove = imagePreviews[index];
-    if (!imageToRemove) return;
-
-    if (imageToRemove.id) {
-      const activeCount = imagePreviews.filter((p) => p !== null).length;
-      if (activeCount === 1) {
-        toast.error(
-          "Cannot delete the only image. Products must have at least one image."
-        );
-        return;
-      }
-
-      try {
-        await products.deleteImage(imageToRemove.id);
-        toast.success("Image deleted successfully");
-      } catch (error: any) {
-        console.error("Error deleting image:", error);
-        toast.error(
-          error.response?.data?.message || "Failed to delete image from server"
-        );
-        return;
-      }
-    } else if (imageToRemove.url.startsWith("blob:")) {
-      URL.revokeObjectURL(imageToRemove.url);
-    }
-
-    setImagePreviews((prev) => {
-      const next = [...prev];
-      next[index] = null;
-
-      const filtered: (ImagePreview | null)[] = next.filter((p) => p !== null);
-      while (filtered.length < 5) {
-        filtered.push(null);
-      }
-
-      // Re-assign primary
-      const first = filtered[0];
-      if (first) {
-        first.isPrimary = true;
-      }
-      for (let i = 1; i < filtered.length; i++) {
-        const item = filtered[i];
-        if (item) {
-          item.isPrimary = false;
-        }
-      }
-      return filtered;
-    });
-  };
-
-  // Move image left/right to reorder
-  const moveImage = (index: number, direction: "left" | "right") => {
-    const targetIndex = direction === "left" ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= 5) return;
-    if (!imagePreviews[index] || !imagePreviews[targetIndex]) return;
-
-    setImagePreviews((prev) => {
-      const next = [...prev];
-      const temp = next[index];
-      next[index] = next[targetIndex];
-      next[targetIndex] = temp;
-
-      // Re-assign primary status (index 0 is primary)
-      next.forEach((img, idx) => {
-        if (img) {
-          img.isPrimary = idx === 0;
-        }
-      });
-      return next;
-    });
-  };
-
-  // Fetch attributes and their values
-  useEffect(() => {
-    const fetchAttributes = async () => {
-      try {
-        const response = await attributes.getAttributes();
-        if (response.data.success) {
-          const attrs = response.data.data?.attributes || [];
-          setAttributesList(attrs);
-
-          // Fetch values for each attribute
-          const valuesMap: Record<string, any[]> = {};
-          for (const attr of attrs) {
-            try {
-              const valuesResponse = await attributes.getAttributeValues(
-                attr.id
-              );
-              if (valuesResponse.data.success) {
-                valuesMap[attr.id] = valuesResponse.data.data?.values || [];
-              }
-            } catch (error) {
-              console.error(
-                `Error fetching values for attribute ${attr.id}:`,
-                error
-              );
-            }
-          }
-          setAttributeValuesMap(valuesMap);
-        }
-      } catch (error) {
-        console.error("Error fetching attributes:", error);
-        toast.error("Failed to load attributes");
-      }
-    };
-
-    fetchAttributes();
-  }, []);
-
-  // Fetch addon services
-  const reloadAddonServices = () => {
-    addonServicesApi.getAll().then((res) => {
-      setAllAddonServices(res.data.data?.addons || []);
-    }).catch(() => { });
-  };
-  useEffect(() => { reloadAddonServices(); }, []);
-
-  const handleAddonSave = async (id?: string) => {
-    if (!addonForm.name.trim() || !addonForm.price) { toast.error("Name and price required"); return; }
-    setAddonSaving(true);
-    try {
-      const data = { name: addonForm.name.trim(), description: addonForm.description || undefined, price: parseFloat(addonForm.price), icon: addonForm.icon || undefined, isActive: addonForm.isActive };
-      if (id) {
-        await addonServicesApi.update(id, data);
-        toast.success("Addon updated");
-        setAddonEditingId(null);
-      } else {
-        const res = await addonServicesApi.create(data);
-        const newId = res.data.data?.addon?.id;
-        toast.success("Addon created");
-        setShowAddonCreate(false);
-        if (newId) setSelectedAddonIds((prev) => [...prev, newId]);
-      }
-      setAddonForm({ name: "", description: "", price: "", icon: "", isActive: true });
-      setShowAddonIconPicker(false);
-      reloadAddonServices();
-    } catch { toast.error("Save failed"); }
-    finally { setAddonSaving(false); }
-  };
-
-  const handleAddonDelete = async (id: string) => {
-    if (!confirm("Delete this addon service? It will be removed from all products.")) return;
-    try {
-      await addonServicesApi.delete(id);
-      toast.success("Deleted");
-      setSelectedAddonIds((prev) => prev.filter((x) => x !== id));
-      reloadAddonServices();
-    } catch { toast.error("Delete failed"); }
-  };
-
-  const startAddonEdit = (a: any) => {
-    setAddonEditingId(a.id);
-    setShowAddonCreate(false);
-    setShowAddonIconPicker(false);
-    setAddonForm({ name: a.name, description: a.description || "", price: String(a.price), icon: a.icon || "", isActive: a.isActive });
-  };
-
-  // Fetch brands for selection
-  useEffect(() => {
-    const fetchBrands = async () => {
-      try {
-        const res = await import("@/api/adminService").then((m) =>
-          m.brands.getBrands()
-        );
-        const raw = res.data.data?.brands || res.data.data || [];
-        setBrandsList(Array.isArray(raw) ? raw : []);
-      } catch (err) {
-        console.error("Failed to load brands for product form", err);
-      }
-    };
-
-    fetchBrands();
-  }, []);
-
-  // ── Quick-create handlers ──────────────────────────────────────────────────
-
-  const handleQuickCreateBrand = async () => {
-    if (!quickBrandName.trim() || !quickBrandFile) {
-      toast.error("Brand name and logo required");
-      return;
-    }
-    setQuickBrandLoading(true);
-    try {
-      const res = await brandsApi.createBrand({ name: quickBrandName.trim(), image: quickBrandFile });
-      const newBrand = res.data.data?.brand || res.data.data;
-      setBrandsList((prev) => [...prev, newBrand]);
-      setProduct((prev) => ({ ...prev, brandId: newBrand.id }));
-      setShowQuickBrand(false);
-      setQuickBrandName("");
-      setQuickBrandFile(null);
-      toast.success(`Brand "${newBrand.name}" created`);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to create brand");
-    } finally {
-      setQuickBrandLoading(false);
-    }
-  };
-
-  const handleQuickCreateCategory = async () => {
-    if (!quickCatName.trim()) { toast.error("Category name required"); return; }
-    setQuickCatLoading(true);
-    try {
-      const fd = new FormData();
-      fd.append("name", quickCatName.trim());
-      if (quickCatFile) fd.append("image", quickCatFile);
-      const res = await categoriesApi.createCategory(fd);
-      const newCat = res.data.data?.category || res.data.data;
-      // Re-fetch categories list to update CategorySelector
-      try {
-        window.dispatchEvent(new CustomEvent("refetch-categories"));
-      } catch { }
-      setShowQuickCategory(false);
-      setQuickCatName("");
-      setQuickCatFile(null);
-      toast.success(`Category "${newCat.name}" created — select it below`);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to create category");
-    } finally {
-      setQuickCatLoading(false);
-    }
-  };
-
-  const handleQuickCreateAttribute = async () => {
-    if (!quickAttrName.trim()) { toast.error("Attribute name required"); return; }
-    setQuickAttrLoading(true);
-    try {
-      const res = await attributesApi.createAttribute({ name: quickAttrName.trim(), inputType: quickAttrType });
-      const newAttr = res.data.data?.attribute || res.data.data;
-      // Add values
-      const valuesToAdd = quickAttrValues.filter((v) => v.trim());
-      const addedValues: any[] = [];
-      for (const val of valuesToAdd) {
-        try {
-          const vRes = await attributeValuesApi.createAttributeValue(newAttr.id, { value: val.trim() });
-          const v = vRes.data.data?.value || vRes.data.data;
-          if (v) addedValues.push(v);
-        } catch { }
-      }
-      setAttributesList((prev) => [...prev, newAttr]);
-      setAttributeValuesMap((prev) => ({ ...prev, [newAttr.id]: addedValues }));
-      setShowQuickAttr(false);
-      setQuickAttrName("");
-      setQuickAttrType("select");
-      setQuickAttrValues([""]);
-      toast.success(`Attribute "${newAttr.name}" created with ${addedValues.length} values`);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to create attribute");
-    } finally {
-      setQuickAttrLoading(false);
-    }
-  };
-
-  const handleQuickCreateSubCat = async () => {
-    if (!quickSubCatName.trim()) { toast.error("Sub-category name required"); return; }
-    if (!quickSubCatParentId) { toast.error("Select a parent category first"); return; }
-    setQuickSubCatLoading(true);
-    try {
-      const res = await import("@/api/adminService").then((m) =>
-        m.subCategories.createSubCategory(quickSubCatParentId, { name: quickSubCatName.trim(), image: quickSubCatFile || undefined })
-      );
-      const newSC = res.data.data?.subCategory || res.data.data;
-      setSubCategoriesMap((prev) => ({
-        ...prev,
-        [quickSubCatParentId]: [...(prev[quickSubCatParentId] || []), newSC],
-      }));
-      setSelectedSubCategories((prev) => [...prev, newSC.id]);
-      setShowQuickSubCat(false);
-      setQuickSubCatName("");
-      setQuickSubCatFile(null);
-      toast.success(`Sub-category "${newSC.name}" created and selected`);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to create sub-category");
-    } finally {
-      setQuickSubCatLoading(false);
-    }
-  };
-
-  // ── Confirm-delete helper — opens dialog, runs action on confirm ─────────
-  const askDelete = (label: string, action: () => Promise<void>) => {
-    setConfirmDelete({ open: true, label, onConfirm: action });
-  };
-
-  const runConfirmedDelete = async () => {
-    setConfirmDeleteLoading(true);
-    try {
-      await confirmDelete.onConfirm();
-      setConfirmDelete({ open: false, label: "", onConfirm: async () => { } });
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Delete failed");
-    } finally {
-      setConfirmDeleteLoading(false);
-    }
-  };
-
-  // ── Delete handlers ────────────────────────────────────────────────────────
-
-  const handleDeleteBrand = (brandId: string, brandName: string) =>
-    askDelete(`Brand: "${brandName}"`, async () => {
-      await brandsApi.deleteBrand(brandId);
-      setBrandsList((prev) => prev.filter((b: { id: string }) => b.id !== brandId));
-      if ((product as { brandId?: string }).brandId === brandId)
-        setProduct((prev) => ({ ...prev, brandId: "" }));
-      toast.success(`Brand "${brandName}" deleted`);
-    });
-
-  const handleDeleteCategory = (categoryId: string, catName: string) =>
-    askDelete(`Category: "${catName}"`, async () => {
-      await categoriesApi.deleteCategory(categoryId);
-      window.dispatchEvent(new CustomEvent("refetch-categories"));
-      setProduct((prev) => ({
-        ...prev,
-        categoryIds: prev.categoryIds.filter((id) => id !== categoryId),
-        primaryCategoryId: prev.primaryCategoryId === categoryId ? "" : prev.primaryCategoryId,
-      }));
-      toast.success(`Category "${catName}" deleted`);
-    });
-
-  const handleDeleteSubCategory = (subCatId: string, subCatName: string, parentCatId: string) =>
-    askDelete(`Sub-category: "${subCatName}"`, async () => {
-      await import("@/api/adminService").then((m) => m.subCategories.deleteSubCategory(subCatId));
-      setSubCategoriesMap((prev) => ({
-        ...prev,
-        [parentCatId]: (prev[parentCatId] || []).filter((sc: { id: string }) => sc.id !== subCatId),
-      }));
-      setSelectedSubCategories((prev) => prev.filter((id) => id !== subCatId));
-      toast.success(`Sub-category "${subCatName}" deleted`);
-    });
-
-  const handleDeleteAttribute = (attrId: string, attrName: string) =>
-    askDelete(`Attribute: "${attrName}"`, async () => {
-      await attributesApi.deleteAttribute(attrId);
-      setAttributesList((prev) => prev.filter((a) => a.id !== attrId));
-      setAttributeValuesMap((prev) => { const n = { ...prev }; delete n[attrId]; return n; });
-      setSelectedAttributes((prev) => { const n = { ...prev }; delete n[attrId]; return n; });
-      toast.success(`Attribute "${attrName}" deleted`);
-    });
-
-  const handleDeleteAttributeValue = (attrId: string, valueId: string, valueName: string) =>
-    askDelete(`Value: "${valueName}"`, async () => {
-      await import("@/api/adminService").then((m) => m.attributeValues.deleteAttributeValue(valueId));
-      setAttributeValuesMap((prev) => ({
-        ...prev,
-        [attrId]: (prev[attrId] || []).filter((v: any) => v.id !== valueId),
-      }));
-      setSelectedAttributes((prev) => ({
-        ...prev,
-        [attrId]: (prev[attrId] || []).filter((id) => id !== valueId),
-      }));
-      toast.success(`Value "${valueName}" deleted`);
-    });
-
-  // ── Edit handlers ──────────────────────────────────────────────────────────
-
-  const startEditValue = (v: { id: string; value: string; hexCode?: string; image?: string }) => {
-    setEditingValue((prev) => ({
-      ...prev,
-      [v.id]: { value: v.value, hexCode: v.hexCode || "", imageFile: null, imagePreview: v.image || null, loading: false },
-    }));
-  };
-
-  const cancelEditValue = (valueId: string) =>
-    setEditingValue((prev) => { const n = { ...prev }; delete n[valueId]; return n; });
-
-  const saveEditValue = async (attrId: string, valueId: string) => {
-    const s = editingValue[valueId];
-    if (!s?.value?.trim()) { toast.error("Value required"); return; }
-    setEditingValue((prev) => ({ ...prev, [valueId]: { ...prev[valueId], loading: true } }));
-    try {
-      const res = await attributeValuesApi.updateAttributeValue(valueId, {
-        value: s.value.trim(),
-        hexCode: s.hexCode || undefined,
-        image: s.imageFile || undefined,
-      });
-      const updated = res.data.data?.value || res.data.data;
-      setAttributeValuesMap((prev) => ({
-        ...prev,
-        [attrId]: (prev[attrId] || []).map((v: { id: string }) => v.id === valueId ? updated : v),
-      }));
-      cancelEditValue(valueId);
-      toast.success("Value updated");
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to update value");
-      setEditingValue((prev) => ({ ...prev, [valueId]: { ...prev[valueId], loading: false } }));
-    }
-  };
-
-  const openEditCategory = (c: { id: string; name: string; image?: string }) =>
-    setEditEntityDialog({ open: true, type: "category", id: c.id, name: c.name, imageFile: null, imagePreview: c.image || null, loading: false });
-
-  const openEditSubCategory = (sc: { id: string; name: string; image?: string }, parentId: string) =>
-    setEditEntityDialog({ open: true, type: "subcategory", id: sc.id, name: sc.name, parentId, imageFile: null, imagePreview: sc.image || null, loading: false });
-
-  const saveEditEntity = async () => {
-    const d = editEntityDialog;
-    if (!d.name.trim()) { toast.error("Name required"); return; }
-    setEditEntityDialog((prev) => ({ ...prev, loading: true }));
-    try {
-      if (d.type === "category") {
-        const fd = new FormData();
-        fd.append("name", d.name.trim());
-        if (d.imageFile) fd.append("image", d.imageFile);
-        await categoriesApi.updateCategory(d.id, fd);
-        window.dispatchEvent(new CustomEvent("refetch-categories"));
-        toast.success("Category updated");
-      } else {
-        const fd = new FormData();
-        fd.append("name", d.name.trim());
-        if (d.imageFile) fd.append("image", d.imageFile);
-        await import("@/api/adminService").then((m) =>
-          m.subCategories.updateSubCategory(d.id, { name: d.name.trim(), image: d.imageFile || undefined })
-        );
-        if (d.parentId) {
-          setSubCategoriesMap((prev) => ({
-            ...prev,
-            [d.parentId!]: (prev[d.parentId!] || []).map((sc: { id: string }) =>
-              sc.id === d.id ? { ...sc, name: d.name.trim() } : sc
-            ),
-          }));
-        }
-        toast.success("Sub-category updated");
-      }
-      setEditEntityDialog({ open: false, type: "category", id: "", name: "", imageFile: null, imagePreview: null, loading: false });
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Update failed");
-      setEditEntityDialog((prev) => ({ ...prev, loading: false }));
-    }
-  };
-
-  const handleInlineAddValue = async (attrId: string) => {
-    const s = inlineAddValue[attrId];
-    if (!s?.value?.trim()) { toast.error("Value required"); return; }
-    setInlineAddValue((prev) => ({ ...prev, [attrId]: { ...prev[attrId], loading: true } }));
-    try {
-      const res = await attributeValuesApi.createAttributeValue(attrId, {
-        value: s.value.trim(),
-        hexCode: s.hexCode || undefined,
-      });
-      const newVal = res.data.data?.value || res.data.data;
-      setAttributeValuesMap((prev) => ({ ...prev, [attrId]: [...(prev[attrId] || []), newVal] }));
-      setInlineAddValue((prev) => ({ ...prev, [attrId]: { open: false, value: "", hexCode: "", loading: false } }));
-      toast.success(`Value "${s.value.trim()}" added`);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to add value");
-      setInlineAddValue((prev) => ({ ...prev, [attrId]: { ...prev[attrId], loading: false } }));
-    }
-  };
-
-  // Fetch product details if in edit mode
-  useEffect(() => {
-    if (mode === "edit" && productId) {
-      const fetchProductDetails = async () => {
-        try {
-          setFormLoading(true);
-          const response = await products.getProductById(productId);
-
-          if (response.data.success) {
-            const productData = response.data.data?.product || {};
-
-            // Get categories from the product
-            const productCategories = productData.categories || [];
-            const primaryCategory =
-              productData.primaryCategory ||
-              (productCategories.length > 0 ? productCategories[0] : null);
-
-            // Set product data
-            const existingSubCategoryIds =
-              productData.subCategories?.map((sc: any) => sc.id) || [];
-
-            // Initialize selected sub-categories with existing ones when editing
-            setSelectedSubCategories(existingSubCategoryIds);
-
-            // Set editor content for edit mode
-            const existingDescription = productData.description || "";
-            setEditorContent(existingDescription);
-
-            setProduct({
-              name: productData.name || "",
-              description: productData.description || "",
-              // Prefill brandId if available
-              brandId: productData.brand?.id || productData.brandId || "",
-              categoryId: primaryCategory?.id || "",
-              categoryIds: productCategories.map((c: any) => c.id),
-              primaryCategoryId: primaryCategory?.id || "",
-              subCategoryIds: existingSubCategoryIds,
-              sku:
-                productData.variants?.length === 1 &&
-                  (!productData.variants[0].attributes ||
-                    productData.variants[0].attributes.length === 0)
-                  ? productData.variants[0].sku
-                  : "",
-              price:
-                productData.variants?.length === 1 &&
-                  (!productData.variants[0].attributes ||
-                    productData.variants[0].attributes.length === 0)
-                  ? productData.variants[0].price.toString()
-                  : "",
-              salePrice:
-                productData.variants?.length === 1 &&
-                  (!productData.variants[0].attributes ||
-                    productData.variants[0].attributes.length === 0) &&
-                  productData.variants[0].salePrice
-                  ? productData.variants[0].salePrice.toString()
-                  : "",
-              quantity:
-                productData.variants?.length === 1 &&
-                  !productData.variants[0].colorId &&
-                  !productData.variants[0].sizeId
-                  ? productData.variants[0].quantity
-                  : 0,
-              featured: productData.featured || false,
-              ourProduct: productData.ourProduct || false,
-              readyToShip: productData.readyToShip || false,
-              acceptOrders: productData.acceptOrders || false,
-              isCustomizable: productData.isCustomizable || false,
-              productType: Array.isArray(productData.productType)
-                ? productData.productType
-                : typeof productData.productType === "string"
-                  ? (() => {
-                    try {
-                      const parsed = JSON.parse(productData.productType);
-                      return Array.isArray(parsed) ? parsed : [];
-                    } catch {
-                      return [];
-                    }
-                  })()
-                  : [],
-              isActive:
-                productData.isActive !== undefined
-                  ? productData.isActive
-                  : true,
-              // SEO fields
-              metaTitle: productData.metaTitle || "",
-              metaDescription: productData.metaDescription || "",
-              keywords: productData.keywords || "",
-              tags: (() => {
-                const raw = productData.tags;
-                if (!raw || raw.length === 0) return [];
-                // Fix: if stored as single-element array containing JSON string e.g. ['["a","b"]']
-                if (raw.length === 1 && typeof raw[0] === "string" && raw[0].startsWith("[")) {
-                  try { return JSON.parse(raw[0]); } catch { return raw; }
-                }
-                return raw;
-              })(),
-              topBrandIds: productData.topBrandIds || [],
-              newBrandIds: productData.newBrandIds || [],
-              hotBrandIds: productData.hotBrandIds || [],
-              // Dynamic accordion fields
-              washingAndCare: productData.washingAndCare || "",
-              shippingAndReturns: productData.shippingAndReturns || "",
-              aboutThisDesign: productData.aboutThisDesign || "",
-              designStory: productData.designStory || "",
-              // Shipping dimensions (from first variant if no variants)
-              shippingLength: productData.variants?.[0]?.shippingLength?.toString() || "",
-              shippingBreadth: productData.variants?.[0]?.shippingBreadth?.toString() || "",
-              shippingHeight: productData.variants?.[0]?.shippingHeight?.toString() || "",
-              shippingWeight: productData.variants?.[0]?.shippingWeight?.toString() || "",
-            });
-
-            // Set selected categories (for radio buttons, not checkboxes)
-            setSelectedCategories(productCategories);
-
-            const loadedSlots: (ImagePreview | null)[] = Array(5).fill(null);
-            if (productData.images && productData.images.length > 0) {
-              const sorted = [...productData.images].sort(
-                (a: any, b: any) => (a.order ?? 999) - (b.order ?? 999)
-              );
-              sorted.slice(0, 5).forEach((img: any, idx: number) => {
-                loadedSlots[idx] = {
-                  url: img.url,
-                  id: img.id,
-                  isPrimary: idx === 0,
-                };
-              });
-            }
-            setImagePreviews(loadedSlots);
-
-            // Setup video preview if product has video
-            if (productData.videoUrl) {
-              setVideoPreviewUrl(productData.videoUrl);
-              setVideoRemoved(false);
-            }
-
-            if (productData.variants && productData.variants.length > 0) {
-              const hasRealVariants =
-                productData.variants.length > 1 ||
-                (productData.variants.length === 1 &&
-                  productData.variants[0].attributes?.length > 0);
-
-              setHasVariants(hasRealVariants);
-
-              if (hasRealVariants) {
-                // Map the backend variants to the format expected by the form
-                const formattedVariants = productData.variants.map(
-                  (variant: any) => ({
-                    id: variant.id,
-                    attributeValueIds: variant.attributes
-                      ? variant.attributes.map((a: any) => a.attributeValueId)
-                      : [],
-                    attributes: variant.attributes || [],
-                    sku: variant.sku || "",
-                    price: variant.price ? variant.price.toString() : "0.00",
-                    salePrice: variant.salePrice
-                      ? variant.salePrice.toString()
-                      : "",
-                    quantity: variant.quantity || 0,
-                    isActive:
-                      variant.isActive !== undefined ? variant.isActive : true,
-                    images: Array.isArray(variant.images)
-                      ? [...variant.images]
-                        .sort((a: any, b: any) => (a.order ?? 999) - (b.order ?? 999))
-                        .map((img: any) => ({
-                          url: img.url,
-                          id: img.id,
-                          isPrimary: img.isPrimary || false,
-                          isNew: false,
-                          order: img.order,
-                        }))
-                      : [],
-                    videoUrl: variant.videoUrl || null,
-                  })
-                );
-
-                setVariants(formattedVariants);
-
-                // Set selected attributes based on existing variants
-                const selectedAttrs: Record<string, string[]> = {};
-
-                productData.variants.forEach((variant: any) => {
-                  // Handle attributes for variant selection
-                  if (variant.attributes) {
-                    variant.attributes.forEach((attr: any) => {
-                      if (!selectedAttrs[attr.attributeId]) {
-                        selectedAttrs[attr.attributeId] = [];
-                      }
-                      if (
-                        !selectedAttrs[attr.attributeId].includes(
-                          attr.attributeValueId
-                        )
-                      ) {
-                        selectedAttrs[attr.attributeId].push(
-                          attr.attributeValueId
-                        );
-                      }
-                    });
-                  }
-                });
-
-                setSelectedAttributes(selectedAttrs);
-              }
-            }
-          } else {
-            toast.error(
-              response.data.message || "Failed to fetch product details"
-            );
-          }
-        } catch (error) {
-          console.error("Error fetching product:", error);
-          toast.error("An error occurred while fetching product data");
-        } finally {
-          setFormLoading(false);
-        }
-      };
-
-      fetchProductDetails();
-
-      // Fetch product addons
-      addonServicesApi.getProductAddons(productId).then((res) => {
-        const ids = (res.data.data?.addons || []).map((a: any) => a.id);
-        setSelectedAddonIds(ids);
-      }).catch(() => { });
-
-      // Fetch Product MOQ
-      if (mode === "edit" && productId) {
-        moq.getProductMOQ(productId)
-          .then((response) => {
-            if (response.data.success && response.data.data) {
-              setProductMOQ({
-                isActive: response.data.data.isActive,
-                minQuantity: response.data.data.minQuantity,
-              });
-            }
-          })
-          .catch(() => {
-            // MOQ not set, that's okay
-          });
-      }
-    }
-  }, [mode, productId]);
-
-  // Handle form input changes
-  const handleChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    >
-  ) => {
-    const { name, value, type } = e.target as HTMLInputElement;
-
-    if (type === "checkbox") {
-      const { checked } = e.target as HTMLInputElement;
-      setProduct((prev) => ({ ...prev, [name]: checked }));
-    } else {
-      setProduct((prev) => {
-        const updated: any = { ...prev, [name]: value };
-        // Auto-fill metaTitle from product name if metaTitle is empty
-        if (name === "name" && (!prev.metaTitle || prev.metaTitle === prev.name)) {
-          updated.metaTitle = value;
-        }
-        return updated;
-      });
-    }
-  };
-
-  // Handle attribute value selection
-  const handleAttributeValueToggle = (attributeId: string, valueId: string) => {
-    setSelectedAttributes((prev) => {
-      const currentValues = prev[attributeId] || [];
-      const newValues = currentValues.includes(valueId)
-        ? currentValues.filter((id) => id !== valueId)
-        : [...currentValues, valueId];
-      return { ...prev, [attributeId]: newValues };
-    });
-  };
-
-  // Generate variants based on selected attribute values
-  const generateVariants = () => {
-    // Check if at least one attribute has selected values
-    const hasSelectedValues = Object.values(selectedAttributes).some(
-      (values) => values.length > 0
-    );
-
-    if (!hasSelectedValues) {
-      toast.error(
-        "Please select at least one attribute value to generate variants"
-      );
-      return;
-    }
-
-    // Generate all combinations of selected attribute values
-    const attributeIds = Object.keys(selectedAttributes).filter(
-      (attrId) => selectedAttributes[attrId].length > 0
-    );
-
-    // Create arrays of selected values for each attribute
-    const valueArrays = attributeIds.map((attrId) =>
-      selectedAttributes[attrId].map((valueId) => {
-        const attr = attributesList.find((a) => a.id === attrId);
-        const value = attributeValuesMap[attrId]?.find((v) => v.id === valueId);
-        return { attributeId: attrId, attribute: attr, valueId, value };
-      })
-    );
-
-    // Generate cartesian product of all value combinations
-    const combinations = valueArrays.reduce((acc, curr) => {
-      if (acc.length === 0) return curr.map((v) => [v]);
-      const result: any[][] = [];
-      acc.forEach((accItem) => {
-        curr.forEach((currItem) => {
-          result.push([...accItem, currItem]);
-        });
-      });
-      return result;
-    }, [] as any[][]);
-
-    // Generate variants from combinations
-    const newVariants: any[] = [];
-
-    combinations.forEach((combination) => {
-      const attributeValueIds = combination.map((c) => c.valueId);
-      const attributeNames = combination.map(
-        (c) => `${c.attribute?.name}: ${c.value?.value}`
-      );
-      const variantName = attributeNames.join(", ");
-
-      // Check for duplicate (same attributeValueIds combination)
-      const isDuplicate = variants.some((v) => {
-        const existingIds = (v.attributeValueIds || []).sort().join(",");
-        const newIds = attributeValueIds.sort().join(",");
-        return existingIds === newIds;
-      });
-
-      if (isDuplicate) {
-        return;
-      }
-
-      const skuBase = product.sku || "";
-      const skuSuffix = combination
-        .map((c) => c.value?.value?.substring(0, 3).toUpperCase() || "")
-        .join("-");
-      const variantSku = skuSuffix ? `${skuBase}-${skuSuffix}` : skuBase;
-
-      newVariants.push({
-        id: uuidv4(),
-        name: variantName,
-        attributeValueIds,
-        attributes: combination.map((c) => ({
-          attribute: c.attribute?.name,
-          value: c.value?.value,
-          attributeId: c.attributeId,
-          attributeValueId: c.valueId,
-        })),
-        sku: variantSku,
-        price: product.price || "",
-        salePrice: product.salePrice || "",
-        quantity: product.quantity || 0,
-        isActive: true,
-        images: [],
-      });
-    });
-
-    if (newVariants.length === 0) {
-      toast.error(
-        "No new variants generated. All selected combinations already exist.",
-        {
-          position: "top-center",
-        }
-      );
-      return;
-    }
-
-    setVariants((prev) => [...prev, ...newVariants]);
-    toast.success(`${newVariants.length} new variant(s) generated!`, {
-      position: "top-center",
-    });
-  };
-
-  // Handle variant images change (used by VariantCard)
-  const handleVariantImagesChange = (variantIndex: number, images: any[]) => {
-    setVariants((prev) =>
-      prev.map((variant, i) =>
-        i === variantIndex ? { ...variant, images } : variant
-      )
-    );
-  };
-
-  // Update variant by index (used by VariantCard)
-  const updateVariantByIndex = (
-    variantIndex: number,
-    field: string,
-    value: any
-  ) => {
-    setVariants((prev) =>
-      prev.map((variant, i) =>
-        i === variantIndex ? { ...variant, [field]: value } : variant
-      )
-    );
-  };
-
-  // Remove variant by index (used by VariantCard)
-  const removeVariantByIndex = (variantIndex: number) => {
-    setVariants((prev) => prev.filter((_, i) => i !== variantIndex));
-  };
-
-  // Handle form submission
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    // Validate product name
-    if (!product.name || product.name.trim() === "") {
-      toast.error("Please provide a valid product name");
-      setIsLoading(false);
-      return;
-    }
-
-    // Validate category selection
-    if (!product.categoryIds || product.categoryIds.length === 0) {
-      toast.error("Please select at least one category");
-      setIsLoading(false);
-      return;
-    }
-
-    // Validate variants for variant products
-    if (hasVariants && (!variants || variants.length === 0)) {
-      toast.error("Please add at least one variant for this product");
-      setIsLoading(false);
-      return;
-    }
-
-    // Validate images
-    const activeImages = imagePreviews.filter((p) => p !== null);
-    if (!hasVariants && activeImages.length === 0) {
-      toast.error("At least one product image is required");
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      // Create FormData object for API submission
-      const formData = new FormData();
-
-      // Add basic product information
-      formData.append("name", product.name);
-      // Use editorContent if available, otherwise use product.description
-      // Get the latest content - prioritize editorContent as it's the most up-to-date
-      let finalDescription = "";
-
-      // First try editorContent (most recent)
-      if (editorContent && editorContent.trim()) {
-        finalDescription = editorContent.trim();
-      }
-      // Fallback to product.description
-      else if (product.description && product.description.trim()) {
-        finalDescription = product.description.trim();
-      }
-
-      // Try to get from editor ref as last resort
-      if (!finalDescription && editorRef.current) {
-        try {
-          const editorValue =
-            (editorRef.current as any).value ||
-            (editorRef.current as any).getEditorValue?.();
-          if (
-            editorValue &&
-            typeof editorValue === "string" &&
-            editorValue.trim()
-          ) {
-            finalDescription = editorValue.trim();
-          }
-        } catch (e) {
-          console.warn("Could not get editor value from ref", e);
-        }
-      }
-
-      formData.append("description", finalDescription);
-      formData.append("featured", String(product.featured));
-      formData.append("ourProduct", String(product.ourProduct));
-      formData.append("readyToShip", String(product.readyToShip));
-      formData.append("acceptOrders", String(product.acceptOrders));
-      formData.append("isCustomizable", String(product.isCustomizable));
-      formData.append("productType", JSON.stringify(product.productType));
-      formData.append("isActive", String(product.isActive));
-      formData.append("hasVariants", String(hasVariants));
-      // Add SEO fields
-      formData.append("metaTitle", product.metaTitle || "");
-      // Auto-generate meta description from description if not provided
-      let metaDesc = product.metaDescription || "";
-      if (!metaDesc || metaDesc.trim() === "") {
-        // Strip HTML tags and create plain text version
-        const tempDiv = document.createElement("div");
-        tempDiv.innerHTML = product.description || "";
-        const plainText = tempDiv.textContent || tempDiv.innerText || "";
-        metaDesc = plainText.replace(/\s+/g, " ").trim().substring(0, 160);
-        if (plainText.length > 160) {
-          metaDesc += "...";
-        }
-      }
-      formData.append("metaDescription", metaDesc);
-      formData.append("keywords", product.keywords || "");
-      if (product.tags && product.tags.length > 0) {
-        formData.append("tags", JSON.stringify(product.tags));
-      }
-
-      formData.append("washingAndCare", product.washingAndCare || "");
-      formData.append("shippingAndReturns", product.shippingAndReturns || "");
-      formData.append("aboutThisDesign", product.aboutThisDesign || "");
-      formData.append("designStory", product.designStory || "");
-
-      // Add categories information
-      if (product.categoryIds && product.categoryIds.length > 0) {
-        formData.append("categoryIds", JSON.stringify(product.categoryIds));
-        if (product.primaryCategoryId) {
-          formData.append("primaryCategoryId", product.primaryCategoryId);
-        }
-      }
-      // Add sub-categories information
-      if (selectedSubCategories.length > 0) {
-        formData.append(
-          "subCategoryIds",
-          JSON.stringify(selectedSubCategories)
-        );
-      }
-
-      // Add simple product data if no variants
-      if (!hasVariants) {
-        // Add simple product data
-        formData.append("price", String(product.price || 0));
-        // Explicitly check for salePrice and handle it correctly
-        if (product.salePrice) {
-          formData.append("salePrice", String(product.salePrice));
-        }
-        formData.append("quantity", String(product.quantity || 0));
-
-        // Add shipping dimensions for simple product
-        if (shiprocketEnabled) {
-          if (product.shippingLength) formData.append("shippingLength", product.shippingLength);
-          if (product.shippingBreadth) formData.append("shippingBreadth", product.shippingBreadth);
-          if (product.shippingHeight) formData.append("shippingHeight", product.shippingHeight);
-          if (product.shippingWeight) formData.append("shippingWeight", product.shippingWeight);
-        }
-
-        // Ensure pricing slabs for simple products are sent if state variable exists
-        try {
-          // We check if pricingSlabs state exists in scope (it might be defined but not visible in snippet)
-          // If not found, we skip it (assuming feature not fully implemented for simple products yet)
-          // But we MUST send MOQ settings
-        } catch (e) {
-          console.error("Error adding pricing slabs to form data:", e);
-        }
-      }
-
-      // Add Product Level MOQ Settings
-      // This applies to Simple Products directly, and as product-level fallback for Variable Products
-      if (productMOQ) {
-        formData.append("moqSettings", JSON.stringify(productMOQ));
-      }
-
-      // Add variants if product has variants
-      if (hasVariants && variants.length > 0) {
-        // Ensure all required fields are in each variant
-        const processedVariants = variants.map((variant) => {
-          return {
-            id: variant.id,
-            attributeValueIds: variant.attributeValueIds || [],
-            sku: variant.sku || "",
-            price: String(variant.price || 0),
-            salePrice: variant.salePrice ? String(variant.salePrice) : "",
-            quantity: String(variant.quantity || 0),
-            isActive: variant.isActive !== undefined ? variant.isActive : true,
-            removedImageIds: variant.removedImageIds || [], // Include removed image IDs for cleanup
-
-            // Include Shipping, MOQ, and Pricing Slabs
-            shippingLength: variant.shippingLength,
-            shippingBreadth: variant.shippingBreadth,
-            shippingHeight: variant.shippingHeight,
-            shippingWeight: variant.shippingWeight,
-            moq: variant.moq,
-            pricingSlabs: variant.pricingSlabs
-          };
-        });
-
-        formData.append("variants", JSON.stringify(processedVariants));
-      }
-
-      // Add images (only for non-variant products)
-      const activeImages = imagePreviews.filter((p): p is ImagePreview => p !== null);
-      const hasNewImages = activeImages.some((p) => p.file);
-      const allImagesAreNew = activeImages.length > 0 && activeImages.every((p) => p.file);
-      if (!hasVariants && hasNewImages) {
-        console.log(
-          `📸 Submitting ${activeImages.filter((p) => p.file).length} images for simple product`
-        );
-
-        // When editing and all images are new (user replaced all), tell backend to replace
-        if (mode === "edit" && productId && allImagesAreNew) {
-          formData.append("replaceAllImages", "true");
-        }
-
-        // Add primary image index (index in activeImages array)
-        const primaryIndex = activeImages.findIndex(
-          (img) => img.isPrimary === true
-        );
-        if (primaryIndex >= 0) {
-          formData.append("primaryImageIndex", String(primaryIndex));
-          console.log(`📸 Primary image index: ${primaryIndex}`);
-        } else {
-          formData.append("primaryImageIndex", "0");
-          console.log(`📸 Default primary image index: 0`);
-        }
-
-        // Append each image file in display order
-        activeImages.forEach((preview, idx) => {
-          if (preview.file) {
-            formData.append("images", preview.file);
-            console.log(
-              `📸 Added image ${idx + 1}: ${preview.file.name} (${preview.file.size} bytes)`
-            );
-          }
-        });
-
-        // Also log the FormData contents
-        console.log(
-          `📸 FormData contents:`,
-          Object.fromEntries(formData.entries())
-        );
-      } else if (hasVariants) {
-        console.log(
-          `📸 Skipping product images for variant product - will use variant-specific images`
-        );
-      }
-
-      // Add video if provided (optional)
-      if (videoFile) {
-        formData.append("video", videoFile);
-      }
-      if (mode === "edit" && videoRemoved) {
-        formData.append("removeVideo", "true");
-      }
-
-      // Add topBrandIds, newBrandIds, hotBrandIds to formData
-      // Include single brand association if set
-      if ((product as any).brandId) {
-        formData.append("brandId", (product as any).brandId);
-      }
-      formData.append("topBrandIds", JSON.stringify(product.topBrandIds || []));
-      formData.append("newBrandIds", JSON.stringify(product.newBrandIds || []));
-      formData.append("hotBrandIds", JSON.stringify(product.hotBrandIds || []));
-
-      let response;
-      let savedProductId = productId;
-      if (mode === "create") {
-        response = await products.createProduct(formData as any);
-        if (response.data.success) {
-          savedProductId = response.data.data?.product?.id;
-        }
-      } else {
-        response = await products.updateProduct(productId!, formData as any);
-      }
-
-      if (response.data.success) {
-        // If product creation/update was successful and we have variant images, upload them
-        if (hasVariants && response.data.data?.product?.variants) {
-          const productVariants = response.data.data.product.variants;
-          console.log(
-            `📸 Processing variant images for ${productVariants.length} variants`
-          );
-
-          const uploadPromises = [];
-
-          // Match variants by their temporary IDs or color/size combination
-          for (let i = 0; i < variants.length; i++) {
-            const localVariant = variants[i];
-
-            // In create mode: match by index
-            // In edit mode: match by ID or create new mapping for newly generated variants
-            let serverVariant;
-
-            if (mode === "create") {
-              serverVariant = productVariants[i]; // Match by index since they're created in same order
-            } else {
-              // Edit mode: find matching variant by ID or create new one
-              const isNewVariant =
-                localVariant.id && localVariant.id.includes("-"); // UUID format
-
-              if (isNewVariant) {
-                // This is a newly generated variant, find it in the updated product variants
-                // Match by color/size combination
-                serverVariant = productVariants.find(
-                  (sv: any) =>
-                    sv.colorId === localVariant.colorId &&
-                    sv.sizeId === localVariant.sizeId
-                );
-              } else {
-                // This is an existing variant, find by ID
-                serverVariant = productVariants.find(
-                  (sv: any) => sv.id === localVariant.id
-                );
-              }
-            }
-
-            if (localVariant && localVariant.images && serverVariant) {
-              // Filter only new images that need to be uploaded
-              const newImages = localVariant.images.filter(
-                (img: any) => img.isNew && img.file
-              );
-
-              if (newImages.length > 0) {
-                console.log(
-                  `📸 Found ${newImages.length} new images for variant ${serverVariant.id} (${localVariant.color?.name || "N/A"} - ${localVariant.size?.name || "N/A"}) [Mode: ${mode}]`
-                );
-
-                // Upload each new image for this variant
-                for (let j = 0; j < newImages.length; j++) {
-                  const imageData = newImages[j];
-
-                  // FIXED: Send undefined for non-explicitly-marked images to let backend decide
-                  // Only send true/false when explicitly set, otherwise let backend handle it
-                  const isPrimary =
-                    imageData.isPrimary === true ? true : undefined;
-
-                  console.log(`📸 Upload decision for image ${j + 1}:`, {
-                    imageDataIsPrimary: imageData.isPrimary,
-                    finalIsPrimary: isPrimary,
-                    note: "undefined = let backend decide, true = force primary",
-                  });
-
-                  const uploadPromise = products
-                    .uploadVariantImage(
-                      serverVariant.id,
-                      imageData.file,
-                      isPrimary
-                    )
-                    .then(() => {
-                      console.log(
-                        `📸 Uploaded image ${j + 1}/${newImages.length} for variant ${serverVariant.id} (isPrimary: ${isPrimary})`
-                      );
-                    })
-                    .catch((error) => {
-                      console.error(
-                        `❌ Failed to upload image ${j + 1} for variant ${serverVariant.id}:`,
-                        error
-                      );
-                      throw error;
-                    });
-
-                  uploadPromises.push(uploadPromise);
-                }
-              }
-
-              // Upload variant video file if present
-              if (localVariant.videoFile) {
-                console.log(`📹 Uploading video for variant ${serverVariant.id}`);
-                const videoPromise = products
-                  .uploadVariantVideo(serverVariant.id, localVariant.videoFile)
-                  .then(() => {
-                    console.log(`📹 Uploaded video for variant ${serverVariant.id}`);
-                  })
-                  .catch((error) => {
-                    console.error(`❌ Failed to upload video for variant ${serverVariant.id}:`, error);
-                    throw error;
-                  });
-                uploadPromises.push(videoPromise);
-              }
-            }
-          }
-
-          // Wait for all uploads to complete
-          if (uploadPromises.length > 0) {
-            try {
-              await Promise.all(uploadPromises);
-              toast.success(
-                `Successfully uploaded ${uploadPromises.length} variant image(s)`
-              );
-            } catch (error) {
-              console.error("Some variant image uploads failed:", error);
-              toast.error("Failed to upload some variant images");
-            }
-          }
-
-          // Save Variant MOQ settings
-          if (response.data.data?.product?.variants) {
-            const productVariants = response.data.data.product.variants;
-            for (let i = 0; i < variants.length; i++) {
-              const localVariant = variants[i];
-              if (localVariant.moq) {
-                // Find matching server variant
-                let serverVariant;
-                if (mode === "create") {
-                  serverVariant = productVariants[i];
-                } else {
-                  serverVariant = productVariants.find(
-                    (sv: any) => sv.id === localVariant.id
-                  );
-                }
-
-                if (serverVariant && serverVariant.id) {
-                  try {
-                    if (localVariant.moq.isActive) {
-                      await moq.setVariantMOQ(serverVariant.id, {
-                        minQuantity: localVariant.moq.minQuantity,
-                        isActive: true,
-                      });
-                    } else {
-                      await moq.deleteVariantMOQ(serverVariant.id);
-                    }
-                  } catch (error: any) {
-                    console.error(`Error saving MOQ for variant ${serverVariant.id}:`, error);
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        // Save Product MOQ
-        if (savedProductId) {
-          try {
-            if (productMOQ.isActive) {
-              await moq.setProductMOQ(savedProductId, {
-                minQuantity: productMOQ.minQuantity,
-                isActive: true,
-              });
-            } else {
-              // Delete MOQ if disabled
-              await moq.deleteProductMOQ(savedProductId);
-            }
-          } catch (error: any) {
-            console.error("Error saving MOQ:", error);
-            // Don't fail the whole operation if MOQ save fails
-            toast.error("Product saved but MOQ settings failed to update");
-          }
-        }
-
-        // Save addon services for this product
-        if (savedProductId) {
-          try {
-            await addonServicesApi.setProductAddons(savedProductId, selectedAddonIds);
-          } catch (error: any) {
-            console.error("Error saving addon services:", error?.response?.data || error);
-            toast.error("Product saved but addon services failed to update");
-          }
-        }
-
-        toast.success(
-          mode === "create"
-            ? "Product created successfully"
-            : "Product updated successfully"
-        );
-        navigate("/products");
-      } else {
-        toast.error(response.data.message || "Failed to save product");
-      }
-    } catch (error: any) {
-      console.error("Error saving product:", error);
-      const errorMessage =
-        error.response?.data?.message || "Failed to save product";
-      toast.error(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Add this function to handle hasVariants toggle
-  const handleVariantsToggle = (value: boolean) => {
-    setHasVariants(value);
-
-    // If toggling to simple product and we have variants, clear them
-    if (!value && variants.length > 0) {
-      if (
-        window.confirm(
-          "Switching to simple product will remove all your variant configurations. Continue?"
-        )
-      ) {
-        setVariants([]);
-        setSelectedAttributes({});
-      } else {
-        setHasVariants(true);
-      }
-    }
-  };
-
-  // Handle category selection from CategorySelector
-  const handleSelectCategory = (categoryId: string) => {
-    // Check if the category is already selected
-    const isSelected = product.categoryIds.includes(categoryId);
-
-    // Get parent-child relationships
-    const parentChildMap = new Map();
-    const childParentMap = new Map();
-
-    categories.forEach((category) => {
-      if (category.children && category.children.length > 0) {
-        parentChildMap.set(
-          category.id,
-          category.children.map((child: any) => child.id)
-        );
-      }
-      if (category.parentId) {
-        childParentMap.set(category.id, category.parentId);
-      }
-    });
-
-    // Helper functions
-    const isParent = (id: string) => parentChildMap.has(id);
-    const isChild = (id: string) => childParentMap.has(id);
-    const getParentId = (id: string) => childParentMap.get(id);
-    const getChildrenIds = (id: string) => parentChildMap.get(id) || [];
-
-    let newSelectedCategoryIds: string[] = [...product.categoryIds];
-
-    if (isSelected) {
-      // If selected, remove it from the array
-      newSelectedCategoryIds = newSelectedCategoryIds.filter(
-        (id) => id !== categoryId
-      );
-
-      // If this is a parent, also remove all its children
-      if (isParent(categoryId)) {
-        const childrenIds = getChildrenIds(categoryId);
-        newSelectedCategoryIds = newSelectedCategoryIds.filter(
-          (id) => !childrenIds.includes(id)
-        );
-      }
-    } else {
-      // If not selected, add it to the array
-      newSelectedCategoryIds.push(categoryId);
-
-      // If this is a child, also select its parent if not already selected
-      if (isChild(categoryId)) {
-        const parentId = getParentId(categoryId);
-        if (parentId && !newSelectedCategoryIds.includes(parentId)) {
-          newSelectedCategoryIds.push(parentId);
-        }
-      }
-    }
-
-    // Update primary category if needed
-    if (product.primaryCategoryId === categoryId && isSelected) {
-      // If removing the primary category, set a new primary if possible
-      if (newSelectedCategoryIds.length > 0) {
-        setProduct((prev) => ({
-          ...prev,
-          primaryCategoryId: newSelectedCategoryIds[0],
-        }));
-      } else {
-        // If no categories left, clear primary category
-        setProduct((prev) => ({
-          ...prev,
-          primaryCategoryId: "", // Use empty string instead of null
-        }));
-      }
-    } else if (
-      !product.primaryCategoryId &&
-      newSelectedCategoryIds.length > 0
-    ) {
-      // If this is the first category, set it as primary
-      setProduct((prev) => ({
-        ...prev,
-        primaryCategoryId: newSelectedCategoryIds[0],
-      }));
-    }
-
-    // Update the product with new category IDs
-    setProduct((prev) => ({
-      ...prev,
-      categoryIds: newSelectedCategoryIds,
-    }));
-  };
-
-  // Handle setting primary category
-  const handleSetPrimaryCategory = (categoryId: string) => {
-    // Update product with new primary category
-    setProduct((prev) => ({
-      ...prev,
-      primaryCategoryId: categoryId,
-    }));
-
-    // Also update selectedCategories to reflect the primary category change
-    setSelectedCategories((prev) =>
-      prev.map((category) => ({
-        ...category,
-        isPrimary: category.id === categoryId,
-      }))
-    );
-  };
-
-  useEffect(() => {
-    // Auto-generate SKU when not using variants
-    if (
-      !hasVariants &&
-      product.name &&
-      product.price &&
-      categories.length > 0 &&
-      product.categoryIds.length > 0
-    ) {
-      const categoryName =
-        categories.find((c) => c.id === product.categoryIds[0])?.name || "";
-      // Create SKU from first 3 chars of name + price + first 3 chars of category
-      const namePart = product.name
-        .replace(/\s+/g, "")
-        .substring(0, 3)
-        .toUpperCase();
-      const pricePart = Math.floor(parseFloat(product.price)).toString();
-      const categoryPart = categoryName
-        .replace(/\s+/g, "")
-        .substring(0, 3)
-        .toUpperCase();
-
-      const generatedSku = `${namePart}${pricePart}${categoryPart}`;
-
-      setProduct((prev) => ({
-        ...prev,
-        sku: generatedSku,
-      }));
-    }
-  }, [
-    hasVariants,
-    product.name,
-    product.price,
-    product.categoryIds,
-    categories,
-  ]);
-
-  // ... inside ProductForm, after brands state:
-  // const [brands, setBrands] = useState<{ label: string; value: string }[]>([]); // Removed unused brands state
-
-  // useEffect(() => {
-  //   async function fetchBrands() {
-  //     try {
-  //       const res = await import("@/api/adminService").then((m) =>
-  //         m.brands.getBrands()
-  //       );
-  //       const brandOptions = (res.data.data.brands || []).map((b: any) => ({
-  //         label: b.name,
-  //         value: b.id,
-  //       }));
-  //       setBrands(brandOptions);
-  //     } catch (e) {
-  //       // ignore
-  //     }
-  //   }
-  //   fetchBrands();
-  // }, []);
-
-  if (formLoading) {
-    return (
-      <div className="flex h-full w-full items-center justify-center py-10">
-        <div className="flex flex-col items-center">
-          <Loader2 className="h-10 w-10 animate-spin text-[var(--accent)]" />
-          <p className="mt-4 text-lg text-[var(--text-secondary)]">
-            {mode === "edit" ? "Loading product..." : "Preparing form..."}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/products">
-              <ChevronLeft className="h-4 w-4" />
-              Back
-            </Link>
-          </Button>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">
-            {mode === "create"
-              ? t("products.add_new")
-              : `${t("products.edit_product")}: ${product.name}`}
-          </h1>
-        </div>
-      </div>
-
-      <Card className="overflow-hidden bg-[var(--bg-card)] border-[var(--border-color)]">
-        <form onSubmit={handleSubmit} className="space-y-8 p-6">
-          {/* Basic Information */}
-          <div className="space-y-4 rounded-lg border border-[var(--border-color)] p-4 bg-[var(--bg-secondary)]">
-            <h2 className="text-xl font-semibold border-b border-[var(--border-color)] pb-2 text-[var(--text-primary)]">
-              {t("products.form.sections.basic_info")}
-            </h2>
-
-            <div className="space-y-4 grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-[var(--text-primary)]">{t("products.form.labels.name")} *</Label>
-                <Input
-                  id="name"
-                  name="name"
-                  value={product.name}
-                  onChange={handleChange}
-                  placeholder={t("products.form.placeholders.enter_name")}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="categories">{t("products.form.labels.category")} *</Label>
-                  <Button type="button" size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setShowQuickCategory(true)}>
-                    <Plus className="h-3 w-3" /> New Category
-                  </Button>
-                </div>
-                <CategorySelector
-                  selectedCategoryIds={product.categoryIds}
-                  onSelectCategory={handleSelectCategory}
-                  primaryCategoryId={product.primaryCategoryId}
-                  onSetPrimaryCategory={handleSetPrimaryCategory}
-                  categories={categories}
-                  isLoading={categoriesLoading}
-                />
-                {/* Delete existing categories */}
-                {categories.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {categories.filter((c: { parentId?: string }) => !c.parentId).map((c: { id: string; name: string; image?: string }) => (
-                      <div key={c.id} className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-[var(--border-color)] bg-[var(--bg-secondary)] text-xs group">
-                        <span className="text-[var(--text-primary)]">{c.name}</span>
-                        <button type="button" title="Edit category"
-                          className="opacity-0 group-hover:opacity-100 text-blue-500 hover:text-blue-700 transition-opacity"
-                          onClick={() => openEditCategory(c)}>
-                          <Edit className="h-3 w-3" />
-                        </button>
-                        <button type="button" title="Delete category"
-                          className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity"
-                          onClick={() => handleDeleteCategory(c.id, c.name)}>
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Primary Category Selection - only show if multiple categories selected */}
-              {product.categoryIds.length > 1 && (
-                <div className="space-y-2">
-                  <Label>{t("products.form.categories.primary_category")} *</Label>
-                  <div className="space-y-2 rounded-md border border-[var(--border-color)] p-3 bg-[var(--bg-card)]">
-                    {selectedCategories.map((category) => (
-                      <div
-                        key={category.id}
-                        className="flex items-center space-x-2"
-                      >
-                        <input
-                          type="radio"
-                          id={`primary-${category.id}`}
-                          name="primaryCategory"
-                          value={category.id}
-                          checked={product.primaryCategoryId === category.id}
-                          onChange={() => handleSetPrimaryCategory(category.id)}
-                          className="h-4 w-4 rounded-full border-[var(--border-color)]"
-                        />
-                        <label
-                          htmlFor={`primary-${category.id}`}
-                          className="text-sm text-[var(--text-primary)]"
-                        >
-                          {category.name}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    The primary category determines where the product appears in
-                    main listings
-                  </p>
-                </div>
-              )}
-
-              {/* Sub-Categories Selection */}
-              {product.categoryIds.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="subCategories">
-                      {t("products.form.categories.sub_categories_optional")}
-                    </Label>
-                    <Button type="button" size="sm" variant="outline" className="h-7 text-xs gap-1"
-                      onClick={() => {
-                        setQuickSubCatParentId(product.categoryIds[0] || "");
-                        setShowQuickSubCat(true);
-                      }}>
-                      <Plus className="h-3 w-3" /> New Sub-category
-                    </Button>
-                  </div>
-                  <p className="text-xs text-[var(--text-secondary)] mb-2">
-                    {t("products.form.categories.select_sub_categories_hint")}
-                  </p>
-                  <div className="space-y-3 rounded-md border border-[var(--border-color)] p-4 bg-[var(--bg-secondary)]">
-                    {product.categoryIds.map((categoryId) => {
-                      const category = categories.find(
-                        (c) => c.id === categoryId
-                      );
-                      const subCats = subCategoriesMap[categoryId] || [];
-                      if (subCats.length === 0) return (
-                        <div key={categoryId} className="flex items-center justify-between p-2 rounded border border-dashed border-[var(--border-color)]">
-                          <span className="text-sm text-[var(--text-secondary)]">{category?.name} — no sub-categories yet</span>
-                          <Button type="button" size="sm" variant="ghost" className="h-6 text-xs gap-1 text-[var(--accent)]"
-                            onClick={() => { setQuickSubCatParentId(categoryId); setShowQuickSubCat(true); }}>
-                            <Plus className="h-3 w-3" /> Add
-                          </Button>
-                        </div>
-                      );
-
-                      return (
-                        <div
-                          key={categoryId}
-                          className="space-y-2 p-3 bg-[var(--bg-card)] rounded-md border border-[var(--border-color)]"
-                        >
-                          <p className="text-sm font-semibold text-[var(--text-primary)]">
-                            {category?.name || "Category"} {t("products.form.categories.sub_categories_label")}:
-                          </p>
-                          <div className="flex flex-wrap gap-3 mt-2">
-                            {subCats.map((subCat: { id: string; name: string }) => (
-                              <div key={subCat.id} className="flex items-center gap-1 group">
-                                <label className="flex items-center space-x-2 cursor-pointer p-2 rounded-md hover:bg-[var(--bg-secondary)] transition-colors border border-transparent hover:border-[var(--accent)]/20 text-[var(--text-primary)]">
-                                  <Checkbox
-                                    checked={selectedSubCategories.includes(subCat.id)}
-                                    onCheckedChange={(checked) => {
-                                      if (checked) {
-                                        setSelectedSubCategories([...selectedSubCategories, subCat.id]);
-                                      } else {
-                                        setSelectedSubCategories(selectedSubCategories.filter((id) => id !== subCat.id));
-                                      }
-                                    }}
-                                  />
-                                  <span className="text-sm font-medium text-[var(--text-primary)]">{subCat.name}</span>
-                                </label>
-                                <button type="button" title="Edit sub-category"
-                                  className="opacity-0 group-hover:opacity-100 text-blue-500 hover:text-blue-700 transition-opacity"
-                                  onClick={() => openEditSubCategory(subCat, categoryId)}>
-                                  <Edit className="h-3 w-3" />
-                                </button>
-                                <button type="button" title="Delete sub-category"
-                                  className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity"
-                                  onClick={() => handleDeleteSubCategory(subCat.id, subCat.name, categoryId)}>
-                                  <Trash2 className="h-3 w-3" />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {Object.values(subCategoriesMap).flat().length === 0 && (
-                      <div className="text-center py-6">
-                        <p className="text-sm text-[var(--text-secondary)]">
-                          {t("products.form.categories.no_sub_categories")}
-                        </p>
-                        <p className="text-xs text-[var(--text-secondary)] mt-1">
-                          You can create sub-categories from the{" "}
-                          <Link
-                            to="/categories"
-                            className="text-primary hover:underline"
-                          >
-                            Categories page
-                          </Link>
-                          .
-                        </p>
-                      </div>
-                    )}
-                    {selectedSubCategories.length > 0 && (
-                      <div className="mt-4 p-3 bg-[var(--accent)]/10 rounded-md border border-[var(--accent)]/20">
-                        <p className="text-sm font-medium mb-2 text-[var(--text-primary)]">
-                          {t("products.form.categories.selected_sub_categories")} (
-                          {selectedSubCategories.length}):
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {selectedSubCategories.map((subCatId) => {
-                            // Find the sub-category name
-                            let subCatName = "";
-                            for (const subCats of Object.values(
-                              subCategoriesMap
-                            )) {
-                              const found = subCats.find(
-                                (sc: any) => sc.id === subCatId
-                              );
-                              if (found) {
-                                subCatName = found.name;
-                                break;
-                              }
-                            }
-                            return (
-                              <Badge
-                                key={subCatId}
-                                variant="default"
-                                className="text-xs"
-                              >
-                                {subCatName || subCatId}
-                              </Badge>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="description" className="text-[var(--text-primary)]">{t("products.form.labels.description")}</Label>
-                <div className="border border-[var(--border-color)] rounded-md overflow-hidden [&_.jodit-container]:!bg-[var(--input-bg)] [&_.jodit-wysiwyg]:!bg-[var(--input-bg)] [&_.jodit-wysiwyg]:!text-[var(--input-text)] [&_.jodit-status-bar]:!bg-[var(--bg-secondary)] [&_.jodit-status-bar]:!text-[var(--text-secondary)] [&_.jodit-toolbar__box]:!bg-[var(--bg-secondary)] [&_.jodit-toolbar__box]:!border-[var(--border-color)]">
-                  <JoditEditor
-                    ref={editorRef}
-                    value={editorContent}
-                    config={editorConfig}
-                    onBlur={(content: string) => {
-                      // Only update if content actually changed
-                      if (content !== editorContent) {
-                        setEditorContent(content);
-                        setProduct((prev) => ({
-                          ...prev,
-                          description: content,
-                        }));
-                      }
-
-                      // Auto-generate meta description if not provided
-                      if (
-                        !product.metaDescription ||
-                        product.metaDescription.trim() === ""
-                      ) {
-                        // Strip HTML tags and create plain text version
-                        const tempDiv = document.createElement("div");
-                        tempDiv.innerHTML = content;
-                        const plainText =
-                          tempDiv.textContent || tempDiv.innerText || "";
-                        const metaDesc = plainText
-                          .replace(/\s+/g, " ")
-                          .trim()
-                          .substring(0, 160);
-                        if (plainText.length > 160) {
-                          setProduct((prev) => ({
-                            ...prev,
-                            metaDescription: metaDesc + "...",
-                          }));
-                        } else if (metaDesc) {
-                          setProduct((prev) => ({
-                            ...prev,
-                            metaDescription: metaDesc,
-                          }));
-                        }
-                      }
-                    }}
-                    onChange={(content: string) => {
-                      // Only update product.description for form submission
-                      // DON'T update editorContent here to prevent cursor jumping
-                      // editorContent is only updated on initial load and onBlur
-                      setProduct((prev) => ({ ...prev, description: content }));
-                    }}
-                  />
-                </div>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  Use the toolbar to format your description. Supports rich text
-                  formatting, tables, colors, images, links, and much more.
-                </p>
-              </div>
-
-              {/* Brand selection */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="brandId" className="text-[var(--text-primary)]">{t("products.form.labels.brand_optional")}</Label>
-                  <Button type="button" size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setShowQuickBrand(true)}>
-                    <Plus className="h-3 w-3" /> New Brand
-                  </Button>
-                </div>
-                {/* Brand custom list with delete */}
-                <div className="rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] max-h-36 overflow-y-auto divide-y divide-[var(--border-color)]">
-                  <label className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-[var(--bg-secondary)]">
-                    <input type="radio" name="brandId" value=""
-                      checked={!(product as { brandId?: string }).brandId}
-                      onChange={() => setProduct((prev) => ({ ...prev, brandId: "" }))}
-                      className="h-3 w-3" />
-                    <span className="text-sm text-[var(--text-secondary)]">— None —</span>
-                  </label>
-                  {brandsList.map((b: { id: string; name: string }) => (
-                    <div key={b.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--bg-secondary)] group">
-                      <label className="flex items-center gap-2 flex-1 cursor-pointer">
-                        <input type="radio" name="brandId" value={b.id}
-                          checked={(product as { brandId?: string }).brandId === b.id}
-                          onChange={() => setProduct((prev) => ({ ...prev, brandId: b.id }))}
-                          className="h-3 w-3" />
-                        <span className="text-sm text-[var(--text-primary)]">{b.name}</span>
-                      </label>
-                      <button type="button" title="Delete brand"
-                        className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity"
-                        onClick={() => handleDeleteBrand(b.id, b.name)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  Optional - associate this product with a brand
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 p-1">
-                <Label className="text-base text-[var(--text-primary)]">{t("products.form.labels.has_variants")}</Label>
-                <Checkbox
-                  checked={hasVariants}
-                  onCheckedChange={handleVariantsToggle}
-                  className="h-6 w-6 border-[var(--border-color)] cursor-pointer"
-                />
-              </div>
-
-              {/* Product Settings */}
-              <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
-                <h3 className="text-lg font-semibold text-[var(--text-primary)]">{t("products.form.settings.product_settings")}</h3>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="isActive"
-                      name="isActive"
-                      checked={product.isActive}
-                      onCheckedChange={(checked) =>
-                        setProduct((prev) => ({ ...prev, isActive: !!checked }))
-                      }
-                    />
-                    <Label htmlFor="isActive" className="text-[var(--text-primary)]">{t("products.form.labels.active")}</Label>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="ourProduct"
-                      name="ourProduct"
-                      checked={product.ourProduct}
-                      onCheckedChange={(checked) =>
-                        setProduct((prev) => ({
-                          ...prev,
-                          ourProduct: !!checked,
-                        }))
-                      }
-                    />
-                    <Label htmlFor="ourProduct" className="text-[var(--text-primary)]">
-                      {t("products.form.labels.our_product")}
-                    </Label>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="readyToShip"
-                      checked={product.readyToShip}
-                      onCheckedChange={(checked) => setProduct((prev) => ({ ...prev, readyToShip: !!checked }))}
-                    />
-                    <Label htmlFor="readyToShip" className="text-[var(--text-primary)]">Ready to Ship</Label>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="acceptOrders"
-                      checked={product.acceptOrders}
-                      onCheckedChange={(checked) => setProduct((prev) => ({ ...prev, acceptOrders: !!checked }))}
-                    />
-                    <Label htmlFor="acceptOrders" className="text-[var(--text-primary)]">Accept / Possible Orders</Label>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="isCustomizable"
-                      checked={product.isCustomizable}
-                      onCheckedChange={(checked) => setProduct((prev) => ({ ...prev, isCustomizable: !!checked }))}
-                    />
-                    <Label htmlFor="isCustomizable" className="text-[var(--text-primary)]">Customizable</Label>
-                  </div>
-                </div>
-
-                {/* Product Type Selection */}
-                <div className="space-y-2">
-                  <Label>{t("products.form.settings.product_type")}</Label>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    {t("products.form.settings.select_type_hint")}
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {[
-                      { key: "featured", label: t("products.form.settings.types.featured"), icon: "⭐" },
-                      { key: "bestseller", label: t("products.form.settings.types.bestseller"), icon: "📈" },
-                      { key: "trending", label: t("products.form.settings.types.trending"), icon: "🔥" },
-                      { key: "new", label: t("products.form.settings.types.new"), icon: "🆕" },
-                    ].map((type) => (
-                      <div key={type.key} className="flex items-center gap-2">
-                        <Checkbox
-                          id={`productType-${type.key}`}
-                          checked={
-                            Array.isArray(product.productType) &&
-                            product.productType.includes(type.key)
-                          }
-                          onCheckedChange={(checked) => {
-                            setProduct((prev) => ({
-                              ...prev,
-                              productType: checked
-                                ? [...prev.productType, type.key]
-                                : prev.productType.filter(
-                                  (t) => t !== type.key
-                                ),
-                            }));
-                          }}
-                          className="h-6 w-6 border-[var(--border-color)] cursor-pointer"
-                        />
-                        <Label
-                          htmlFor={`productType-${type.key}`}
-                          className="flex items-center gap-1 cursor-pointer"
-                        >
-                          <span>{type.icon}</span>
-                          {type.label}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {!hasVariants && (
-                <>
-                  <div className="grid gap-2">
-                    <Label htmlFor="quantity">{t("products.form.labels.stock_quantity")} *</Label>
-                    <Input
-                      id="quantity"
-                      name="quantity"
-                      type="number"
-                      min="0"
-                      value={product.quantity}
-                      onChange={handleChange}
-                      placeholder="0"
-                      required
-                    />
-                  </div>
-                </>
-              )}
-
-              <div className="grid gap-2">
-                <Label htmlFor="sku">
-                  {!hasVariants
-                    ? t("products.form.placeholders.sku_auto")
-                    : "Base SKU (Auto-generated)"}
-                </Label>
-                <Input
-                  id="sku"
-                  name="sku"
-                  value={product.sku}
-                  onChange={handleChange}
-                  placeholder={t("products.form.placeholders.sku_auto_hint")}
-                  readOnly
-                  className="bg-[var(--bg-secondary)]"
-                />
-              </div>
-
-              {!hasVariants && (
-                <div className="grid gap-2">
-                  <Label htmlFor="price">{t("products.form.labels.price")} *</Label>
-                  <div className="relative">
-                    <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-[var(--text-secondary)]">
-                      ₹
-                    </span>
-                    <Input
-                      id="price"
-                      name="price"
-                      type="number"
-                      min="0"
-                      value={product.price}
-                      onChange={handleChange}
-                      placeholder="0.00"
-                      className="pl-8"
-                      required
-                    />
-                  </div>
-                </div>
-              )}
-              {!hasVariants && (
-                <div className="grid gap-2">
-                  <Label htmlFor="salePrice">{t("products.form.labels.sale_price_optional")}</Label>
-                  <div className="relative">
-                    <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-[var(--text-secondary)]">
-                      ₹
-                    </span>
-                    <Input
-                      id="salePrice"
-                      name="salePrice"
-                      type="number"
-                      min="0"
-                      value={product.salePrice}
-                      onChange={handleChange}
-                      placeholder="0.00"
-                      className="pl-8"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <Card className="p-6">
-            <h3 className="text-lg font-medium mb-4">Additional Information (Dynamic Sections)</h3>
-            <div className="space-y-4">
-              {/* Washing & Care — structured icon + text rows */}
-              <div className="space-y-2">
-                <Label>Washing & Care</Label>
-                <WashingCareEditor
-                  value={product.washingAndCare}
-                  onChange={(val) => setProduct((prev) => ({ ...prev, washingAndCare: val }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="shippingAndReturns">Shipping & Returns</Label>
-                <div className="border border-[var(--border-color)] rounded-md overflow-hidden [&_.jodit-container]:!bg-[var(--input-bg)] [&_.jodit-wysiwyg]:!bg-[var(--input-bg)] [&_.jodit-wysiwyg]:!text-[var(--input-text)] [&_.jodit-status-bar]:!bg-[var(--bg-secondary)] [&_.jodit-status-bar]:!text-[var(--text-secondary)] [&_.jodit-toolbar__box]:!bg-[var(--bg-secondary)] [&_.jodit-toolbar__box]:!border-[var(--border-color)]">
-                  <JoditEditor
-                    value={product.shippingAndReturns}
-                    config={editorConfig}
-                    onBlur={(content: string) => {
-                      setProduct((prev) => ({ ...prev, shippingAndReturns: content }));
-                    }}
-                    onChange={() => { }}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="aboutThisDesign">About This Design</Label>
-                <div className="border border-[var(--border-color)] rounded-md overflow-hidden [&_.jodit-container]:!bg-[var(--input-bg)] [&_.jodit-wysiwyg]:!bg-[var(--input-bg)] [&_.jodit-wysiwyg]:!text-[var(--input-text)] [&_.jodit-status-bar]:!bg-[var(--bg-secondary)] [&_.jodit-status-bar]:!text-[var(--text-secondary)] [&_.jodit-toolbar__box]:!bg-[var(--bg-secondary)] [&_.jodit-toolbar__box]:!border-[var(--border-color)]">
-                  <JoditEditor
-                    value={product.aboutThisDesign}
-                    config={editorConfig}
-                    onBlur={(content: string) => {
-                      setProduct((prev) => ({ ...prev, aboutThisDesign: content }));
-                    }}
-                    onChange={() => { }}
-                  />
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Product Images & Video - 6 sequential boxes (5 images + 1 video) - Only show when variants are NOT enabled */}
-          {!hasVariants && (
-            <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
-              <h2 className="text-xl font-semibold border-b pb-2">
-                Product Images & Video
-              </h2>
-              <p className="text-xs text-[var(--text-secondary)]">
-                Provide up to 5 images (the first slot represents the primary image) and 1 optional video.
-              </p>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-                {imagePreviews.map((preview, i) => {
-                  const isSlotPrimary = i === 0;
-                  if (preview) {
-                    return (
-                      <div
-                        key={preview.id || preview.url || `slot-${i}`}
-                        className={`relative group rounded-lg overflow-hidden border-2 transition-all aspect-square bg-[var(--bg-card)] ${preview.isPrimary
-                          ? "border-green-500 ring-2 ring-green-200 shadow-md"
-                          : "border-[var(--border-color)]"
-                          }`}
-                      >
-                        {/* Image */}
-                        <img
-                          src={preview.url}
-                          alt={`Slot ${i + 1}`}
-                          className="h-full w-full object-cover"
-                        />
-
-                        {/* Top Overlay Badges */}
-                        <div className="absolute top-2 left-2 flex gap-1">
-                          {preview.isPrimary && (
-                            <span className="bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                              PRIMARY
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Delete Button (Top Right) */}
-                        <button
-                          type="button"
-                          onClick={() => removeImageAt(i)}
-                          className="absolute top-2 right-2 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors shadow-sm"
-                          title="Remove image"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-
-                        {/* Order Controls Overlay (Bottom) */}
-                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-1.5 flex items-center justify-between text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                          <span className="text-[10px] font-medium ml-1">Slot {i + 1}</span>
-                          <div className="flex gap-1">
-                            {i > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => moveImage(i, "left")}
-                                className="p-1 bg-white/20 hover:bg-white/40 rounded transition-colors"
-                                title="Move Left"
-                              >
-                                <ChevronLeft className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                            {i < 4 && imagePreviews[i + 1] !== null && (
-                              <button
-                                type="button"
-                                onClick={() => moveImage(i, "right")}
-                                className="p-1 bg-white/20 hover:bg-white/40 rounded transition-colors"
-                                title="Move Right"
-                              >
-                                <ChevronRight className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  } else {
-                    return (
-                      <label
-                        key={`empty-slot-${i}`}
-                        className="relative flex flex-col items-center justify-center border-2 border-dashed border-[var(--border-color)] hover:border-primary/50 hover:bg-[var(--bg-secondary)] rounded-lg cursor-pointer transition-all aspect-square bg-[var(--bg-card)] text-center p-4 group"
-                      >
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp,image/gif"
-                          onChange={(e) => {
-                            if (e.target.files && e.target.files[0]) {
-                              handleSlotFileChange(i, e.target.files[0]);
-                            }
-                            // Clear input value
-                            e.target.value = "";
-                          }}
-                          className="hidden"
-                        />
-                        <div className="flex flex-col items-center space-y-1.5 text-[var(--text-secondary)] group-hover:text-primary transition-colors">
-                          <Plus className="h-6 w-6" />
-                          <span className="text-xs font-semibold">Image {i + 1}</span>
-                          {isSlotPrimary && (
-                            <span className="text-[9px] text-green-500 font-bold bg-green-50 px-1 rounded">
-                              (Primary)
-                            </span>
-                          )}
-                        </div>
-                      </label>
-                    );
-                  }
-                })}
-
-                {/* 6th Slot - Video (Optional) */}
-                {videoPreviewUrl ? (
-                  <div
-                    className="relative group rounded-lg overflow-hidden border-2 border-[var(--border-color)] transition-all aspect-square bg-[var(--bg-card)]"
-                  >
-                    {/* Video Player */}
-                    <video
-                      src={videoPreviewUrl}
-                      className="h-full w-full object-cover"
-                      controls
-                    />
-
-                    {/* Delete Button (Top Right) */}
-                    <button
-                      type="button"
-                      onClick={removeVideo}
-                      className="absolute top-2 right-2 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors shadow-sm z-10"
-                      title="Remove video"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-
-                    {/* Overlay Label */}
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-1.5 flex items-center justify-between text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                      <span className="text-[10px] font-medium ml-1">Product Video</span>
-                    </div>
-                  </div>
-                ) : (
-                  <label
-                    className="relative flex flex-col items-center justify-center border-2 border-dashed border-[var(--border-color)] hover:border-primary/50 hover:bg-[var(--bg-secondary)] rounded-lg cursor-pointer transition-all aspect-square bg-[var(--bg-card)] text-center p-4 group"
-                  >
-                    <input
-                      type="file"
-                      accept="video/mp4,video/webm"
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          handleVideoFileChange(e.target.files[0]);
-                        }
-                        e.target.value = "";
-                      }}
-                      className="hidden"
-                    />
-                    <div className="flex flex-col items-center space-y-1 text-[var(--text-secondary)] group-hover:text-primary transition-colors">
-                      <Video className="h-6 w-6" />
-                      <span className="text-xs font-semibold">Add Video</span>
-                      <span className="text-[9px] text-[var(--text-secondary)]">
-                        MP4/WebM • Max 10MB
-                      </span>
-                    </div>
-                  </label>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* SEO Section */}
-          <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
-            <h2 className="text-xl font-semibold border-b pb-2">
-              {t("products.form.sections.seo_information")}
-            </h2>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="metaTitle">{t("products.form.seo.title_label")}</Label>
-                <Input
-                  id="metaTitle"
-                  name="metaTitle"
-                  value={product.metaTitle}
-                  onChange={handleChange}
-                  placeholder={t("products.form.seo.title_placeholder")}
-                />
-                <p className="text-xs text-[var(--text-secondary)]">
-                  {t("products.form.seo.title_hint")}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="metaDescription">{t("products.form.seo.description_label")}</Label>
-                <Textarea
-                  id="metaDescription"
-                  name="metaDescription"
-                  value={product.metaDescription}
-                  onChange={handleChange}
-                  placeholder={t("products.form.seo.description_placeholder")}
-                  rows={3}
-                />
-                <p className="text-xs text-[var(--text-secondary)]">
-                  {t("products.form.seo.description_hint")}
-                </p>
-                <div className="text-xs text-[var(--text-secondary)]">
-                  {t("products.form.seo.current_length")}: {product.metaDescription?.length || 0} / 160
-                  {t("products.form.seo.characters")}
-                  {product.metaDescription &&
-                    product.metaDescription.length > 160 && (
-                      <span className="text-destructive ml-2">⚠️ {t("products.form.seo.too_long")}</span>
-                    )}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="keywords">{t("products.form.seo.keywords_label")}</Label>
-                <Input
-                  id="keywords"
-                  name="keywords"
-                  value={product.keywords}
-                  onChange={handleChange}
-                  placeholder={t("products.form.seo.keywords_placeholder")}
-                />
-                <p className="text-xs text-[var(--text-secondary)]">
-                  {t("products.form.seo.keywords_hint")}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Tags</Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if ((e.key === "Enter" || e.key === ",") && tagInput.trim()) {
-                        e.preventDefault();
-                        const tag = tagInput.trim().replace(/,$/, "");
-                        if (tag && !product.tags.includes(tag)) {
-                          setProduct((prev) => ({ ...prev, tags: [...prev.tags, tag] }));
-                        }
-                        setTagInput("");
-                      }
-                    }}
-                    placeholder="Type tag and press Enter"
-                  />
-                  <Button type="button" variant="outline" size="sm"
-                    onClick={() => {
-                      const tag = tagInput.trim().replace(/,$/, "");
-                      if (tag && !product.tags.includes(tag)) {
-                        setProduct((prev) => ({ ...prev, tags: [...prev.tags, tag] }));
-                      }
-                      setTagInput("");
-                    }}>
-                    Add
-                  </Button>
-                </div>
-                {product.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {product.tags.map((tag) => (
-                      <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--accent)]/10 text-[var(--accent)] text-xs font-medium border border-[var(--accent)]/20">
-                        #{tag}
-                        <button type="button" onClick={() => setProduct((prev) => ({ ...prev, tags: prev.tags.filter((t) => t !== tag) }))}
-                          className="ml-0.5 hover:text-red-500 transition-colors">
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <p className="text-xs text-[var(--text-secondary)]">Press Enter or comma to add. Tags show on product page.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Variants Configuration */}
-          {hasVariants && (
-            <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
-              <div className="flex items-center justify-between border-b pb-2">
-                <h2 className="text-xl font-semibold">
-                  {t("products.form.sections.variants_configuration")}
-                </h2>
-                <Badge variant="secondary" className="text-xs">
-                  {t("products.form.variants.using_variant_images")}
-                </Badge>
-              </div>
-
-              <div className="bg-green-50 border border-green-200 rounded-md p-3">
-                <p className="text-sm text-green-700">
-                  <strong>✓ {t("products.form.variants.variant_mode")}:</strong> {t("products.form.variants.variant_mode_hint")}
-                </p>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm text-[var(--text-secondary)]">Select attribute values for variants</span>
-                  <Button type="button" size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setShowQuickAttr(true)}>
-                    <Plus className="h-3 w-3" /> New Attribute
-                  </Button>
-                </div>
-                <div className="space-y-4">
-                  {attributesList.length === 0 ? (
-                    <div className="rounded-md border p-4 bg-yellow-50">
-                      <p className="text-sm text-yellow-700">
-                        No attributes yet.{" "}
-                        <button type="button" className="underline font-medium" onClick={() => setShowQuickAttr(true)}>
-                          Create one now
-                        </button>
-                        {" "}or go to the{" "}
-                        <Link to="/attributes" className="underline font-medium">Attributes page</Link>.
-                      </p>
-                    </div>
-                  ) : (
-                    attributesList.map((attribute) => {
-                      const iav = inlineAddValue[attribute.id] || { open: false, value: "", hexCode: "", loading: false };
-                      const isColor = attribute.name?.toLowerCase().includes("color");
-                      return (
-                        <div key={attribute.id} className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label>
-                              {attribute.name} <span className="text-[var(--text-secondary)] font-normal text-xs">({attribute.inputType})</span>
-                            </Label>
-                            <div className="flex items-center gap-1">
-                              <Button type="button" size="sm" variant="ghost" className="h-6 text-xs gap-1 text-[var(--accent)]"
-                                onClick={() => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { open: !iav.open, value: "", hexCode: "", loading: false } }))}>
-                                <Plus className="h-3 w-3" /> Add Value
-                              </Button>
-                              <button type="button" title="Delete attribute"
-                                className="text-red-500 hover:text-red-700 p-1"
-                                onClick={() => handleDeleteAttribute(attribute.id, attribute.name)}>
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                          {iav.open && (
-                            <div className="flex items-center gap-2 p-2 rounded-md border border-dashed border-[var(--accent)]/40 bg-[var(--bg-secondary)]">
-                              <Input
-                                placeholder="Value name"
-                                value={iav.value}
-                                onChange={(e) => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { ...prev[attribute.id], value: e.target.value } }))}
-                                className="h-7 text-xs flex-1"
-                                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleInlineAddValue(attribute.id); } }}
-                              />
-                              {isColor && (
-                                <input type="color" title="Pick color"
-                                  value={iav.hexCode || "#000000"}
-                                  onChange={(e) => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { ...prev[attribute.id], hexCode: e.target.value } }))}
-                                  className="h-7 w-7 rounded cursor-pointer border border-[var(--border-color)]"
-                                />
-                              )}
-                              <Button type="button" size="sm" className="h-7 text-xs" disabled={iav.loading}
-                                onClick={() => handleInlineAddValue(attribute.id)}>
-                                {iav.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
-                              </Button>
-                              <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0"
-                                onClick={() => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { open: false, value: "", hexCode: "", loading: false } }))}>
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          )}
-                          <div className="space-y-1 rounded-md border p-3 max-h-52 overflow-y-auto bg-[var(--bg-card)]">
-                            {attributeValuesMap[attribute.id]?.length > 0 ? (
-                              attributeValuesMap[attribute.id].map(
-                                (value: { id: string; value: string; hexCode?: string; image?: string }) => {
-                                  const ev = editingValue[value.id];
-                                  if (ev) {
-                                    // ── Inline edit row ──────────────────────
-                                    return (
-                                      <div key={value.id} className="flex flex-col gap-1 p-2 rounded border border-[var(--accent)]/30 bg-[var(--bg-secondary)]">
-                                        <div className="flex items-center gap-2">
-                                          <Input value={ev.value} placeholder="Value name"
-                                            onChange={(e) => setEditingValue((prev) => ({ ...prev, [value.id]: { ...prev[value.id], value: e.target.value } }))}
-                                            className="h-7 text-xs flex-1"
-                                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveEditValue(attribute.id, value.id); } }}
-                                          />
-                                          {isColor && (
-                                            <input type="color" title="Color"
-                                              value={ev.hexCode || "#000000"}
-                                              onChange={(e) => setEditingValue((prev) => ({ ...prev, [value.id]: { ...prev[value.id], hexCode: e.target.value } }))}
-                                              className="h-7 w-7 rounded cursor-pointer border border-[var(--border-color)] flex-shrink-0"
-                                            />
-                                          )}
-                                          <Button type="button" size="sm" className="h-7 text-xs" disabled={ev.loading}
-                                            onClick={() => saveEditValue(attribute.id, value.id)}>
-                                            {ev.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
-                                          </Button>
-                                          <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0"
-                                            onClick={() => cancelEditValue(value.id)}>
-                                            <X className="h-3 w-3" />
-                                          </Button>
-                                        </div>
-                                        {/* Image upload */}
-                                        <div className="flex items-center gap-2">
-                                          {(ev.imagePreview || value.image) && (
-                                            <img src={ev.imagePreview || value.image} alt="preview" className="h-10 w-10 rounded-md object-cover border border-gray-200 shadow-sm flex-shrink-0" />
-                                          )}
-                                          <label className="flex items-center gap-1 cursor-pointer text-xs text-[var(--accent)] hover:underline">
-                                            <ImageIcon className="h-3 w-3" />
-                                            {(ev.imagePreview || value.image) ? "Change image" : "Add image"}
-                                            <input type="file" accept="image/*" className="hidden"
-                                              onChange={(e) => {
-                                                const file = e.target.files?.[0] || null;
-                                                setEditingValue((prev) => ({
-                                                  ...prev,
-                                                  [value.id]: { ...prev[value.id], imageFile: file, imagePreview: file ? URL.createObjectURL(file) : prev[value.id].imagePreview },
-                                                }));
-                                              }}
-                                            />
-                                          </label>
-                                        </div>
-                                      </div>
-                                    );
-                                  }
-                                  // ── Normal display row ───────────────────
-                                  return (
-                                    <div key={value.id} className="flex items-center gap-2 group py-1">
-                                      <input
-                                        type="checkbox"
-                                        id={`attr-${attribute.id}-value-${value.id}`}
-                                        checked={selectedAttributes[attribute.id]?.includes(value.id) || false}
-                                        onChange={() => handleAttributeValueToggle(attribute.id, value.id)}
-                                        className="h-5 w-5 rounded border-[var(--border-color)] text-[var(--accent)] focus:ring-[var(--accent)] cursor-pointer flex-shrink-0"
-                                      />
-                                      {/* Image swatch — show if image exists */}
-                                      {value.image ? (
-                                        <img src={value.image} alt={value.value} className="h-10 w-10 rounded-md object-cover flex-shrink-0 border border-gray-200 shadow-sm" />
-                                      ) : value.hexCode ? (
-                                        <span className="inline-block h-7 w-7 rounded-full border-2 border-gray-300 flex-shrink-0 shadow-sm" style={{ background: value.hexCode }} />
-                                      ) : null}
-                                      <Label htmlFor={`attr-${attribute.id}-value-${value.id}`}
-                                        className="text-sm font-normal cursor-pointer text-[var(--text-primary)] flex-1">
-                                        {value.value}
-                                        {value.hexCode && (
-                                          <span className="ml-1.5 text-xs text-gray-400 font-mono">{value.hexCode}</span>
-                                        )}
-                                      </Label>
-                                      <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity flex-shrink-0">
-                                        <button type="button" title="Edit value"
-                                          className="text-blue-500 hover:text-blue-700"
-                                          onClick={() => startEditValue(value)}>
-                                          <Edit className="h-3 w-3" />
-                                        </button>
-                                        <button type="button" title="Delete value"
-                                          className="text-red-500 hover:text-red-700"
-                                          onClick={() => handleDeleteAttributeValue(attribute.id, value.id, value.value)}>
-                                          <Trash2 className="h-3 w-3" />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  );
-                                }
-                              )
-                            ) : (
-                              <p className="text-sm text-gray-500">
-                                No values yet.{" "}
-                                <button type="button" className="underline text-[var(--accent)]"
-                                  onClick={() => setInlineAddValue((prev) => ({ ...prev, [attribute.id]: { open: true, value: "", hexCode: "", loading: false } }))}>
-                                  Add first value
-                                </button>
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                <Button
-                  type="button"
-                  onClick={generateVariants}
-                  disabled={
-                    !Object.values(selectedAttributes).some(
-                      (values) => values.length > 0
-                    ) || isLoading
-                  }
-                  className="w-full"
-                >
-                  {t("products.form.variants.generate_variants_button")}
-                </Button>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <Label>{t("products.form.variants.variants_label")}</Label>
-                    <Badge variant="outline" className="ml-2">
-                      {variants.length} {t("products.form.variants.variants_count")}
-                    </Badge>
-                  </div>
-
-                  {variants.length > 0 ? (
-                    <div className="space-y-4">
-                      {variants.map((variant, variantIndex) => (
-                        <VariantCard
-                          key={variant.id || `variant-${variantIndex}`}
-                          variant={variant}
-                          index={variantIndex}
-                          onUpdate={updateVariantByIndex}
-                          onRemove={removeVariantByIndex}
-                          onImagesChange={handleVariantImagesChange}
-                          isEditMode={mode === "edit"}
-                          shiprocketEnabled={shiprocketEnabled}
-                          attributeValuesMap={attributeValuesMap}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center p-4 border rounded-md bg-[var(--bg-card)]">
-                      <p className="text-sm text-gray-500">
-                        {t("products.form.variants.no_variants_yet")}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* MOQ Settings Section */}
-          <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
-            <h2 className="text-xl font-semibold border-b pb-2">
-              {t("products.form.sections.moq_settings")}
-            </h2>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 border rounded-lg bg-[var(--bg-card)]">
-                <div className="space-y-0.5">
-                  <Label htmlFor="product-moq-enabled" className="text-base font-medium">
-                    {t("products.form.moq.enable_moq_label")}
-                  </Label>
-                  <p className="text-sm text-[var(--text-secondary)]">
-                    {t("products.form.moq.enable_moq_hint")}
-                  </p>
-                </div>
-                <Switch
-                  id="product-moq-enabled"
-                  checked={productMOQ.isActive}
-                  onCheckedChange={(checked) =>
-                    setProductMOQ({ ...productMOQ, isActive: checked })
-                  }
-                />
-              </div>
-
-              {productMOQ.isActive && (
-                <div className="space-y-2">
-                  <Label htmlFor="product-min-quantity">
-                    {t("products.form.moq.minimum_quantity_label")} <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="product-min-quantity"
-                    type="number"
-                    min="1"
-                    value={productMOQ.minQuantity}
-                    onChange={(e) =>
-                      setProductMOQ({
-                        ...productMOQ,
-                        minQuantity: parseInt(e.target.value) || 1,
-                      })
-                    }
-                    placeholder={t("products.form.moq.minimum_quantity_placeholder")}
-                    className="max-w-xs"
-                  />
-                  <p className="text-sm text-[var(--text-secondary)]">
-                    {t("products.form.moq.minimum_quantity_hint")}
-                  </p>
-                </div>
-              )}
-
-              <div className="flex gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-blue-900">
-                    {t("products.form.moq.moq_priority_title")}
-                  </p>
-                  <p className="text-sm text-blue-800">
-                    {t("products.form.moq.moq_priority_hint")}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Shipping Dimensions Section - Only show when Shiprocket is enabled and no variants */}
-          {shiprocketEnabled && !hasVariants && (
-            <div className="space-y-4 rounded-lg border p-4 bg-[var(--bg-secondary)]">
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl font-semibold">
-                  {t("products.form.shipping.title")}
-                </h2>
-                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
-                  {t("common.optional") || "Optional"}
-                </Badge>
-              </div>
-              <p className="text-sm text-[var(--text-secondary)]">
-                {t("products.form.shipping.description")}
-              </p>
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                <div className="space-y-2">
-                  <Label htmlFor="shipping-length">{t("products.form.shipping.length_label")}</Label>
-                  <Input
-                    id="shipping-length"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={product.shippingLength || ""}
-                    onChange={(e) => setProduct({ ...product, shippingLength: e.target.value })}
-                    placeholder="e.g. 10"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="shipping-breadth">{t("products.form.shipping.breadth_label")}</Label>
-                  <Input
-                    id="shipping-breadth"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={product.shippingBreadth || ""}
-                    onChange={(e) => setProduct({ ...product, shippingBreadth: e.target.value })}
-                    placeholder="e.g. 10"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="shipping-height">{t("products.form.shipping.height_label")}</Label>
-                  <Input
-                    id="shipping-height"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={product.shippingHeight || ""}
-                    onChange={(e) => setProduct({ ...product, shippingHeight: e.target.value })}
-                    placeholder="e.g. 10"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="shipping-weight">{t("products.form.shipping.weight_label")}</Label>
-                  <Input
-                    id="shipping-weight"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={product.shippingWeight || ""}
-                    onChange={(e) => setProduct({ ...product, shippingWeight: e.target.value })}
-                    placeholder="e.g. 0.5"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-[var(--text-secondary)]">
-                {t("products.form.shipping.optional_hint")}
-              </p>
-            </div>
-          )}
-
-          {/* Addon Services — inline CRUD + assign */}
-          <div className="rounded-lg border bg-[var(--bg-secondary)]">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b">
-              <div>
-                <h2 className="text-base font-semibold">Add-on Services</h2>
-                <p className="text-xs text-[var(--text-secondary)] mt-0.5">Create services here, then check to assign to this product</p>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs gap-1"
-                onClick={() => { setShowAddonCreate(true); setAddonEditingId(null); setAddonForm({ name: "", description: "", price: "", icon: "", isActive: true }); setShowAddonIconPicker(false); }}
-              >
-                <Plus className="h-3.5 w-3.5" /> New Service
-              </Button>
-            </div>
-
-            <div className="p-4 space-y-2">
-              {/* Inline create form */}
-              {showAddonCreate && (
-                <div className="rounded-lg border border-dashed border-[var(--accent)]/40 bg-[var(--bg-primary)] p-3 space-y-3 mb-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-xs mb-1 block">Name *</Label>
-                      <Input value={addonForm.name} onChange={(e) => setAddonForm({ ...addonForm, name: e.target.value })} placeholder="e.g. Anti-Slip Mat" className="h-8 text-sm" />
-                    </div>
-                    <div>
-                      <Label className="text-xs mb-1 block">Price (₹) *</Label>
-                      <Input type="number" value={addonForm.price} onChange={(e) => setAddonForm({ ...addonForm, price: e.target.value })} placeholder="5200" className="h-8 text-sm" min="0" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-xs mb-1 block">Description</Label>
-                      <Input value={addonForm.description} onChange={(e) => setAddonForm({ ...addonForm, description: e.target.value })} placeholder="Short description" className="h-8 text-sm" />
-                    </div>
-                    <div>
-                      <Label className="text-xs mb-1 block">Icon</Label>
-                      <div className="flex gap-1.5">
-                        <Input value={addonForm.icon} onChange={(e) => setAddonForm({ ...addonForm, icon: e.target.value })} placeholder="emoji" className="h-8 text-sm flex-1" maxLength={8} />
-                        <Button type="button" size="sm" variant="outline" className="h-8 px-2 text-xs" onClick={() => setShowAddonIconPicker((v) => !v)}>Pick</Button>
-                      </div>
-                      {showAddonIconPicker && (
-                        <div className="flex flex-wrap gap-1 mt-1.5 p-2 rounded border bg-[var(--bg-secondary)]">
-                          {ADDON_ICON_PRESETS.map((p) => (
-                            <button key={p.icon} type="button" title={p.label} onClick={() => { setAddonForm((f) => ({ ...f, icon: p.icon })); setShowAddonIconPicker(false); }}
-                              className={`flex flex-col items-center px-1.5 py-1 rounded text-center hover:bg-[var(--bg-primary)] transition-colors ${addonForm.icon === p.icon ? "ring-1 ring-[var(--accent)]" : ""}`}>
-                              <AddonSvgIcon icon={p.icon} size={22} className="text-gray-700" />
-                              <span className="text-[9px] text-[var(--text-secondary)]">{p.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={addonForm.isActive} onChange={(e) => setAddonForm({ ...addonForm, isActive: e.target.checked })} className="h-3.5 w-3.5" />
-                      <span className="text-xs">Active</span>
-                    </label>
-                    <div className="flex gap-2">
-                      <Button type="button" size="sm" className="h-7 text-xs" onClick={() => handleAddonSave()} disabled={addonSaving}>
-                        {addonSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />} Create
-                      </Button>
-                      <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setShowAddonCreate(false); setShowAddonIconPicker(false); }}>
-                        <X className="h-3 w-3" /> Cancel
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Addon list */}
-              {allAddonServices.length === 0 ? (
-                <p className="text-sm text-[var(--text-secondary)] text-center py-4">No addon services yet — create one above.</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {allAddonServices.map((addon) => {
-                    const isSelected = selectedAddonIds.includes(addon.id);
-                    const isEditing = addonEditingId === addon.id;
-                    return (
-                      <div key={addon.id} className={`rounded-lg border transition-colors ${isSelected ? "border-[var(--accent)] bg-[var(--accent)]/5" : "border-[var(--border-color)] bg-[var(--bg-primary)]"}`}>
-                        {isEditing ? (
-                          /* Inline edit form */
-                          <div className="p-3 space-y-3">
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <Label className="text-xs mb-1 block">Name *</Label>
-                                <Input value={addonForm.name} onChange={(e) => setAddonForm({ ...addonForm, name: e.target.value })} className="h-8 text-sm" />
-                              </div>
-                              <div>
-                                <Label className="text-xs mb-1 block">Price (₹) *</Label>
-                                <Input type="number" value={addonForm.price} onChange={(e) => setAddonForm({ ...addonForm, price: e.target.value })} className="h-8 text-sm" min="0" />
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <Label className="text-xs mb-1 block">Description</Label>
-                                <Input value={addonForm.description} onChange={(e) => setAddonForm({ ...addonForm, description: e.target.value })} className="h-8 text-sm" />
-                              </div>
-                              <div>
-                                <Label className="text-xs mb-1 block">Icon</Label>
-                                <div className="flex gap-1.5">
-                                  <Input value={addonForm.icon} onChange={(e) => setAddonForm({ ...addonForm, icon: e.target.value })} placeholder="emoji" className="h-8 text-sm flex-1" maxLength={8} />
-                                  <Button type="button" size="sm" variant="outline" className="h-8 px-2 text-xs" onClick={() => setShowAddonIconPicker((v) => !v)}>Pick</Button>
-                                </div>
-                                {showAddonIconPicker && (
-                                  <div className="flex flex-wrap gap-1 mt-1.5 p-2 rounded border bg-[var(--bg-secondary)]">
-                                    {ADDON_ICON_PRESETS.map((p) => (
-                                      <button key={p.icon} type="button" title={p.label} onClick={() => { setAddonForm((f) => ({ ...f, icon: p.icon })); setShowAddonIconPicker(false); }}
-                                        className={`flex flex-col items-center px-1.5 py-1 rounded text-center hover:bg-[var(--bg-primary)] transition-colors ${addonForm.icon === p.icon ? "ring-1 ring-[var(--accent)]" : ""}`}>
-                                        <AddonSvgIcon icon={p.icon} size={22} className="text-gray-700" />
-                                        <span className="text-[9px] text-[var(--text-secondary)]">{p.label}</span>
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" checked={addonForm.isActive} onChange={(e) => setAddonForm({ ...addonForm, isActive: e.target.checked })} className="h-3.5 w-3.5" />
-                                <span className="text-xs">Active</span>
-                              </label>
-                              <div className="flex gap-2">
-                                <Button type="button" size="sm" className="h-7 text-xs" onClick={() => handleAddonSave(addon.id)} disabled={addonSaving}>
-                                  {addonSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : null} Save
-                                </Button>
-                                <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setAddonEditingId(null); setShowAddonIconPicker(false); }}>
-                                  Cancel
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          /* Normal row */
-                          <label className="flex items-center gap-3 p-3 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => setSelectedAddonIds((prev) => isSelected ? prev.filter((id) => id !== addon.id) : [...prev, addon.id])}
-                              className="h-4 w-4 rounded flex-shrink-0"
-                            />
-                            <AddonSvgIcon icon={addon.icon} size={18} className="text-gray-700 flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium flex items-center gap-2">
-                                {addon.name}
-                                {!addon.isActive && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--text-secondary)]/20 text-[var(--text-secondary)]">Inactive</span>}
-                              </div>
-                              {addon.description && <div className="text-xs text-[var(--text-secondary)] truncate">{addon.description}</div>}
-                            </div>
-                            <div className="text-sm font-mono font-semibold text-[var(--accent)] flex-shrink-0 mr-1">
-                              ₹{parseFloat(String(addon.price)).toLocaleString("en-IN")}
-                            </div>
-                            <div className="flex gap-0.5 flex-shrink-0" onClick={(e) => e.preventDefault()}>
-                              <Button
-                                type="button" size="sm" variant="ghost"
-                                className="h-7 w-7 p-0 hover:bg-[var(--bg-secondary)]"
-                                onClick={(e) => { e.preventDefault(); startAddonEdit(addon); }}
-                              >
-                                <Edit className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                type="button" size="sm" variant="ghost"
-                                className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-50"
-                                onClick={(e) => { e.preventDefault(); handleAddonDelete(addon.id); }}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </label>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {selectedAddonIds.length > 0 && (
-                <p className="text-xs text-[var(--text-secondary)] pt-1">
-                  {selectedAddonIds.length} service{selectedAddonIds.length > 1 ? "s" : ""} selected for this product
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Submit Buttons */}
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => navigate("/products")}
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {mode === "create" ? t("common.creating") : t("common.updating")}
-                </>
-              ) : mode === "create" ? (
-                t("products.form.add_product_button")
-              ) : (
-                t("products.form.update_product_button")
-              )}
-            </Button>
-          </div>
-        </form>
-
-        {/* ── Quick Create: Brand ─────────────────────────────────────────────── */}
-        <Dialog open={showQuickBrand} onOpenChange={setShowQuickBrand}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Create New Brand</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="space-y-1">
-                <Label>Brand Name *</Label>
-                <Input placeholder="e.g. Wool & Jute" value={quickBrandName}
-                  onChange={(e) => setQuickBrandName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleQuickCreateBrand(); } }}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Logo / Image *</Label>
-                <input type="file" accept="image/*" className="block w-full text-sm"
-                  onChange={(e) => setQuickBrandFile(e.target.files?.[0] || null)} />
-                {quickBrandFile && (
-                  <img src={URL.createObjectURL(quickBrandFile)} alt="preview" className="mt-2 h-16 w-16 rounded object-cover border" />
-                )}
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowQuickBrand(false)}>Cancel</Button>
-              <Button onClick={handleQuickCreateBrand} disabled={quickBrandLoading}>
-                {quickBrandLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Brand"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* ── Quick Create: Sub-Category ─────────────────────────────────────── */}
-        <Dialog open={showQuickSubCat} onOpenChange={(o) => { setShowQuickSubCat(o); if (!o) { setQuickSubCatName(""); setQuickSubCatFile(null); } }}>
-          <DialogContent className="sm:max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Create New Sub-category</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              {product.categoryIds.length > 1 && (
-                <div className="space-y-1">
-                  <Label>Parent Category</Label>
-                  <select value={quickSubCatParentId} onChange={(e) => setQuickSubCatParentId(e.target.value)}
-                    className="rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm w-full">
-                    {product.categoryIds.map((cid) => {
-                      const cat = categories.find((c) => c.id === cid);
-                      return <option key={cid} value={cid}>{cat?.name || cid}</option>;
-                    })}
-                  </select>
-                </div>
-              )}
-              <div className="space-y-1">
-                <Label>Sub-category Name *</Label>
-                <Input placeholder="e.g. Modern Rugs" value={quickSubCatName}
-                  onChange={(e) => setQuickSubCatName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleQuickCreateSubCat(); } }}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Image (optional)</Label>
-                <div className="flex items-center gap-3">
-                  {quickSubCatFile && (
-                    <img src={URL.createObjectURL(quickSubCatFile)} alt="preview" className="h-12 w-12 rounded object-cover border flex-shrink-0" />
-                  )}
-                  <label className="flex items-center gap-2 cursor-pointer border border-dashed border-[var(--border-color)] rounded-md px-3 py-2 text-sm text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors flex-1">
-                    <ImageIcon className="h-4 w-4 flex-shrink-0" />
-                    {quickSubCatFile ? quickSubCatFile.name : "Upload image"}
-                    <input type="file" accept="image/*" className="hidden"
-                      onChange={(e) => setQuickSubCatFile(e.target.files?.[0] || null)} />
-                  </label>
-                  {quickSubCatFile && (
-                    <button type="button" onClick={() => setQuickSubCatFile(null)} className="text-red-500 hover:text-red-700">
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => { setShowQuickSubCat(false); setQuickSubCatName(""); setQuickSubCatFile(null); }}>Cancel</Button>
-              <Button onClick={handleQuickCreateSubCat} disabled={quickSubCatLoading}>
-                {quickSubCatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Sub-category"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* ── Quick Create: Category ──────────────────────────────────────────── */}
-        <Dialog open={showQuickCategory} onOpenChange={(o) => { setShowQuickCategory(o); if (!o) { setQuickCatName(""); setQuickCatFile(null); } }}>
-          <DialogContent className="sm:max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Create New Category</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="space-y-1">
-                <Label>Category Name *</Label>
-                <Input placeholder="e.g. Hand-knotted Rugs" value={quickCatName}
-                  onChange={(e) => setQuickCatName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleQuickCreateCategory(); } }}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Image (optional)</Label>
-                <div className="flex items-center gap-3">
-                  {quickCatFile && (
-                    <img src={URL.createObjectURL(quickCatFile)} alt="preview" className="h-12 w-12 rounded object-cover border flex-shrink-0" />
-                  )}
-                  <label className="flex items-center gap-2 cursor-pointer border border-dashed border-[var(--border-color)] rounded-md px-3 py-2 text-sm text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors flex-1">
-                    <ImageIcon className="h-4 w-4 flex-shrink-0" />
-                    {quickCatFile ? quickCatFile.name : "Upload category image"}
-                    <input type="file" accept="image/*" className="hidden"
-                      onChange={(e) => setQuickCatFile(e.target.files?.[0] || null)} />
-                  </label>
-                  {quickCatFile && (
-                    <button type="button" onClick={() => setQuickCatFile(null)} className="text-red-500 hover:text-red-700">
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => { setShowQuickCategory(false); setQuickCatName(""); setQuickCatFile(null); }}>Cancel</Button>
-              <Button onClick={handleQuickCreateCategory} disabled={quickCatLoading}>
-                {quickCatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Category"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* ── Quick Create: Attribute + Values ────────────────────────────────── */}
-        <Dialog open={showQuickAttr} onOpenChange={setShowQuickAttr}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Create New Attribute</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label>Attribute Name *</Label>
-                  <Input placeholder="e.g. Color, Size, Material" value={quickAttrName}
-                    onChange={(e) => setQuickAttrName(e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label>Input Type</Label>
-                  <select value={quickAttrType} onChange={(e) => setQuickAttrType(e.target.value)}
-                    className="rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm w-full">
-                    <option value="select">Select</option>
-                    <option value="multiselect">Multi-select</option>
-                    <option value="text">Text</option>
-                    <option value="number">Number</option>
-                  </select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>Values (optional — add now or later)</Label>
-                  <Button type="button" size="sm" variant="ghost" className="h-6 text-xs gap-1"
-                    onClick={() => setQuickAttrValues((prev) => [...prev, ""])}>
-                    <Plus className="h-3 w-3" /> Add row
-                  </Button>
-                </div>
-                {quickAttrValues.map((val, idx) => (
-                  <div key={idx} className="flex gap-2">
-                    <Input placeholder={`Value ${idx + 1}`} value={val}
-                      onChange={(e) => setQuickAttrValues((prev) => prev.map((v, i) => i === idx ? e.target.value : v))}
-                      className="h-8 text-sm flex-1" />
-                    {quickAttrValues.length > 1 && (
-                      <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0"
-                        onClick={() => setQuickAttrValues((prev) => prev.filter((_, i) => i !== idx))}>
-                        <X className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowQuickAttr(false)}>Cancel</Button>
-              <Button onClick={handleQuickCreateAttribute} disabled={quickAttrLoading}>
-                {quickAttrLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Attribute"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* ── Edit Category / Sub-category Dialog ────────────────────────────── */}
-        <Dialog open={editEntityDialog.open} onOpenChange={(open) => { if (!open) setEditEntityDialog((prev) => ({ ...prev, open: false })); }}>
-          <DialogContent className="sm:max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Edit {editEntityDialog.type === "category" ? "Category" : "Sub-category"}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="space-y-1">
-                <Label>Name *</Label>
-                <Input value={editEntityDialog.name}
-                  onChange={(e) => setEditEntityDialog((prev) => ({ ...prev, name: e.target.value }))}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveEditEntity(); } }}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Image (optional — replaces existing)</Label>
-                <div className="flex items-center gap-3">
-                  {editEntityDialog.imagePreview && (
-                    <img src={editEntityDialog.imagePreview} alt="preview" className="h-12 w-12 rounded object-cover border" />
-                  )}
-                  <label className="flex items-center gap-1 cursor-pointer text-sm text-[var(--accent)] hover:underline">
-                    <ImageIcon className="h-4 w-4" />
-                    {editEntityDialog.imagePreview ? "Change" : "Upload image"}
-                    <input type="file" accept="image/*" className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0] || null;
-                        setEditEntityDialog((prev) => ({
-                          ...prev,
-                          imageFile: file,
-                          imagePreview: file ? URL.createObjectURL(file) : prev.imagePreview,
-                        }));
-                      }}
-                    />
-                  </label>
-                </div>
-                {editEntityDialog.imageFile && (
-                  <p className="text-xs text-green-600">New image selected — old one will be replaced on save</p>
-                )}
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setEditEntityDialog((prev) => ({ ...prev, open: false }))}
-                disabled={editEntityDialog.loading}>Cancel</Button>
-              <Button onClick={saveEditEntity} disabled={editEntityDialog.loading}>
-                {editEntityDialog.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* ── Confirm Delete Dialog ───────────────────────────────────────────── */}
-        <Dialog open={confirmDelete.open} onOpenChange={(open) => { if (!open) setConfirmDelete({ open: false, label: "", onConfirm: async () => { } }); }}>
-          <DialogContent className="sm:max-w-sm">
-            <DialogHeader>
-              <DialogTitle className="text-red-600">Confirm Delete</DialogTitle>
-            </DialogHeader>
-            <div className="py-3">
-              <p className="text-sm text-[var(--text-primary)]">
-                Permanently delete <span className="font-semibold">{confirmDelete.label}</span>?
-              </p>
-              <p className="text-xs text-[var(--text-secondary)] mt-1">This cannot be undone.</p>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setConfirmDelete({ open: false, label: "", onConfirm: async () => { } })}
-                disabled={confirmDeleteLoading}>
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={runConfirmedDelete} disabled={confirmDeleteLoading}>
-                {confirmDeleteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Yes, Delete"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-      </Card>
-    </div>
-  );
-}
-
-// CategorySelector component
-const CategorySelector = ({
-  selectedCategoryIds,
-  onSelectCategory,
-  primaryCategoryId,
-  onSetPrimaryCategory,
-  categories,
-  isLoading,
-}: {
-  selectedCategoryIds: string[];
-  onSelectCategory: (categoryId: string) => void;
-  primaryCategoryId: string | null;
-  onSetPrimaryCategory: (categoryId: string) => void;
-  categories: any[];
-  isLoading: boolean;
-}) => {
-  const { t } = useLanguage();
-  const [catSearch, setCatSearch] = useState("");
-  if (isLoading) {
-    return <div className="text-sm text-gray-500">{t("products.form.categories.loading")}</div>;
-  }
-
-  if (!categories || categories.length === 0) {
-    return <div className="text-sm text-gray-500">{t("products.form.categories.no_categories")}</div>;
-  }
-
-  // Create a map of parent-child relationships for quick access
-  const parentChildMap = new Map();
-  categories.forEach((category) => {
-    if (category.children && category.children.length > 0) {
-      parentChildMap.set(
-        category.id,
-        category.children.map((child: any) => child.id)
-      );
-    }
-  });
-
-  // Create a map of child-parent relationships for quick access
-  const childParentMap = new Map();
-  categories.forEach((category) => {
-    if (category.parentId) {
-      childParentMap.set(category.id, category.parentId);
-    }
-  });
-
-  // Ensure we have a primary category if we have selected categories
-  const ensuredPrimaryId =
-    primaryCategoryId ||
-    (selectedCategoryIds.length > 0 ? selectedCategoryIds[0] : null);
-
-  // Helper functions
-  const isParent = (categoryId: string) => parentChildMap.has(categoryId);
-  const isChild = (categoryId: string) => childParentMap.has(categoryId);
-  const getParentId = (categoryId: string) => childParentMap.get(categoryId);
-  const getChildrenIds = (categoryId: string) =>
-    parentChildMap.get(categoryId) || [];
-
-  // Handle selection with parent-child logic
-  const handleCategorySelect = (categoryId: string) => {
-    let newSelectionIds = [...selectedCategoryIds];
-    const isCurrentlySelected = newSelectionIds.includes(categoryId);
-
-    if (isCurrentlySelected) {
-      // If deselecting, remove this category
-      newSelectionIds = newSelectionIds.filter(
-        (id: string) => id !== categoryId
-      );
-
-      // If this is a parent, also remove all its children
-      if (isParent(categoryId)) {
-        const childrenIds = getChildrenIds(categoryId);
-        newSelectionIds = newSelectionIds.filter(
-          (id: string) => !childrenIds.includes(id)
-        );
-      }
-    } else {
-      // If selecting, add this category
-      newSelectionIds.push(categoryId);
-
-      // If this is a child, also select its parent if not already selected
-      if (isChild(categoryId)) {
-        const parentId = getParentId(categoryId);
-        if (parentId && !newSelectionIds.includes(parentId)) {
-          newSelectionIds.push(parentId);
-        }
-      }
-    }
-
-    // Update primary category if needed
-    let newPrimaryId = ensuredPrimaryId;
-    if (isCurrentlySelected && categoryId === ensuredPrimaryId) {
-      // If deselecting the primary category, choose a new one
-      newPrimaryId = newSelectionIds.length > 0 ? newSelectionIds[0] : null;
-      if (newPrimaryId) {
-        onSetPrimaryCategory(newPrimaryId);
-      }
-    } else if (!ensuredPrimaryId && newSelectionIds.length > 0) {
-      // If no primary category exists yet, set the first selected one
-      newPrimaryId = newSelectionIds[0];
-      onSetPrimaryCategory(newPrimaryId);
-    }
-
-    // Call parent's handler with new selection
-    onSelectCategory(categoryId);
-  };
-
-  // Filter categories by search
-  const searchLower = catSearch.toLowerCase();
-  const filteredAll = catSearch
-    ? categories.filter((c) => c.name?.toLowerCase().includes(searchLower))
-    : categories;
-
-  // Filter only parent categories (those without parentId)
-  const parentCategories = filteredAll.filter((category) => !category.parentId);
-
-  // Render a category and its children recursively
-  const renderCategory = (category: any) => {
-    const categoryId = category._id || category.id;
-    const isSelected = selectedCategoryIds.includes(categoryId);
-    const isPrimary = ensuredPrimaryId === categoryId;
-
-    // Find children of this category
-    const childCategories = categories.filter((c) => c.parentId === categoryId);
-
-    return (
-      <div key={categoryId} className="category-group">
-        <div className="flex items-center justify-between py-1">
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id={`cat-${categoryId}`}
-              checked={isSelected}
-              onChange={() => handleCategorySelect(categoryId)}
-              className="mr-2 h-6 w-6 rounded border-[var(--border-color)] text-[var(--accent)] focus:ring-[var(--accent)] cursor-pointer"
-            />
-            <label
-              htmlFor={`cat-${categoryId}`}
-              className="text-sm font-medium cursor-pointer"
-            >
-              {category.name}
-            </label>
-          </div>
-
-          {isSelected && selectedCategoryIds.length > 1 && (
-            <button
-              type="button"
-              onClick={() => {
-                onSetPrimaryCategory(categoryId);
-              }}
-              className={`text-xs px-2 py-1 rounded-full ${isPrimary
-                ? "bg-[var(--accent)]/20 text-[var(--accent)]"
-                : "bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--border-color)]"
-                }`}
-            >
-              {isPrimary ? t("products.form.categories.primary") : t("products.form.categories.set_as_primary")}
-            </button>
-          )}
-        </div>
-
-        {/* Render children with indentation */}
-        {childCategories.length > 0 && (
-          <div className="pl-6 border-l-2 border-[var(--border-color)] ml-1.5 mt-1">
-            {childCategories.map((child) => {
-              const childId = child._id || child.id;
-              const isChildSelected = selectedCategoryIds.includes(childId);
-              const isChildPrimary = ensuredPrimaryId === childId;
-
-              return (
-                <div
-                  key={childId}
-                  className="flex items-center justify-between py-1"
-                >
-                  <div className="flex items-center">
-                    <span className="mr-2 text-xs text-[var(--text-secondary)]">
-                      ↳
-                    </span>
-                    <input
-                      type="checkbox"
-                      id={`cat-${childId}`}
-                      checked={isChildSelected}
-                      onChange={() => handleCategorySelect(childId)}
-                      className="mr-2 h-6 w-6 rounded border-[var(--border-color)] text-[var(--accent)] focus:ring-[var(--accent)] cursor-pointer"
-                    />
-                    <label
-                      htmlFor={`cat-${childId}`}
-                      className="text-sm cursor-pointer text-[var(--text-primary)]"
-                    >
-                      {child.name}
-                    </label>
-                  </div>
-
-                  {isChildSelected && selectedCategoryIds.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onSetPrimaryCategory(childId);
-                      }}
-                      className={`text-xs px-2 py-1 rounded-full ${isChildPrimary
-                        ? "bg-[var(--accent)]/20 text-[var(--accent)]"
-                        : "bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--border-color)]"
-                        }`}
-                    >
-                      {isChildPrimary ? "Primary" : "Set as Primary"}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  return (
-    <div className="border rounded-md bg-[var(--bg-card)]">
-      {/* Search bar */}
-      <div className="p-3 border-b border-[var(--border-color)] sticky top-0 bg-[var(--bg-card)] z-10">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-secondary)]" />
-          <input
-            type="text"
-            placeholder="Search categories..."
-            value={catSearch}
-            onChange={(e) => setCatSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2.5 text-sm rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] text-[var(--input-text)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
-          />
-          {catSearch && (
-            <button type="button" onClick={() => setCatSearch("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-      </div>
-      <div className="p-3 max-h-52 overflow-y-auto space-y-1">
-        {parentCategories.length === 0 ? (
-          <p className="text-sm text-[var(--text-secondary)] py-2 text-center">
-            {catSearch ? `No categories matching "${catSearch}"` : "No categories yet"}
-          </p>
-        ) : (
-          parentCategories.map((category) => renderCategory(category))
-        )}
-      </div>
-    </div>
-  );
-};
-
-function WashingCareEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [rows, setRows] = useState<Array<{ iconName: string; text: string }>>(
-    () => parseWashingCare(value) || [{ iconName: "", text: "" }]
-  );
-  const [iconPickerOpen, setIconPickerOpen] = useState<number | null>(null);
-
-  const commit = (updated: Array<{ iconName: string; text: string }>) => {
-    setRows(updated);
-    onChange(JSON.stringify(updated));
-  };
-
-  const addRow = () => commit([...rows, { iconName: "", text: "" }]);
-
-  const removeRow = (i: number) => {
-    const updated = rows.filter((_, idx) => idx !== i);
-    commit(updated.length ? updated : [{ iconName: "", text: "" }]);
-  };
-
-  const updateRow = (i: number, field: "iconName" | "text", val: string) => {
-    const updated = rows.map((r, idx) => idx === i ? { ...r, [field]: val } : r);
-    commit(updated);
-  };
-
-  return (
-    <div className="border border-[var(--border-color)] rounded-lg">
-      {/* Icon picker overlay — rendered outside table to avoid overflow clipping */}
-      {iconPickerOpen !== null && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setIconPickerOpen(null)}
-        />
-      )}
-      <table className="w-full text-sm">
-        <thead className="bg-[var(--bg-secondary)]">
-          <tr>
-            <th className="px-3 py-2 text-left font-medium text-[var(--text-secondary)] w-20">Icon</th>
-            <th className="px-3 py-2 text-left font-medium text-[var(--text-secondary)]">Care Instruction Text</th>
-            <th className="px-3 py-2 w-10"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => {
-            const icon = WASHING_CARE_ICONS.find((ic) => ic.name === row.iconName);
-            return (
-              <tr key={i} className="border-t border-[var(--border-color)]">
-                <td className="px-3 py-2">
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setIconPickerOpen(iconPickerOpen === i ? null : i)}
-                      className="flex flex-col items-center justify-center w-14 h-14 border border-[var(--border-color)] rounded-md bg-[var(--input-bg)] hover:bg-[var(--bg-secondary)] transition-colors gap-1"
-                      title="Click to pick icon"
-                    >
-                      {icon ? (
-                        (() => { const IconSvg = icon.svg; return <IconSvg width={26} height={26} className="text-[var(--text-primary)]" />; })()
-                      ) : (
-                        <span className="text-[var(--text-secondary)] text-[10px] leading-tight text-center">click<br />icon</span>
-                      )}
-                    </button>
-                    {iconPickerOpen === i && (
-                      <div
-                        className="absolute z-50 top-16 left-0 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl shadow-2xl p-4"
-                        style={{ width: 380, minWidth: 380 }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <p className="text-xs font-semibold text-[var(--text-secondary)] mb-3 uppercase tracking-wide">Select Icon</p>
-                        <div className="grid grid-cols-4 gap-3">
-                          <button
-                            type="button"
-                            onClick={() => { updateRow(i, "iconName", ""); setIconPickerOpen(null); }}
-                            className={`flex flex-col items-center justify-center gap-1 h-16 border-2 border-dashed rounded-lg text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors ${row.iconName === "" ? "border-[var(--accent)] bg-[var(--accent)]/10" : "border-[var(--border-color)]"}`}
-                          >
-                            <span className="text-lg">∅</span>
-                            <span className="text-[10px]">None</span>
-                          </button>
-                          {WASHING_CARE_ICONS.map((ic) => {
-                            const IcSvg = ic.svg;
-                            return (
-                              <button
-                                key={ic.name}
-                                type="button"
-                                onClick={() => { updateRow(i, "iconName", ic.name); setIconPickerOpen(null); }}
-                                className={`flex flex-col items-center justify-center gap-1 h-16 border-2 rounded-lg hover:bg-[var(--bg-secondary)] transition-colors px-1 ${row.iconName === ic.name ? "border-[var(--accent)] bg-[var(--accent)]/10" : "border-[var(--border-color)]"}`}
-                              >
-                                <IcSvg width={24} height={24} className="text-[var(--text-primary)] flex-shrink-0" />
-                                <span className="text-[9px] text-[var(--text-secondary)] leading-tight text-center line-clamp-2">{ic.label}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </td>
-                <td className="px-3 py-2">
-                  <input
-                    type="text"
-                    value={row.text}
-                    onChange={(e) => updateRow(i, "text", e.target.value)}
-                    placeholder="e.g. Do Not Brush Or Scrub The Rug."
-                    className="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-md px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-                  />
-                </td>
-                <td className="px-3 py-2">
-                  <button
-                    type="button"
-                    onClick={() => removeRow(i)}
-                    className="text-destructive hover:opacity-70 p-1"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      <div className="px-3 py-2 border-t border-[var(--border-color)] bg-[var(--bg-secondary)]">
-        <Button type="button" variant="outline" size="sm" onClick={addRow}>
-          <Plus className="h-3 w-3 mr-1" /> Add Row
-        </Button>
-      </div>
-    </div>
-  );
-}
+import ListingEditor from "./ListingEditor";
 
 export default function ProductsPage() {
   const { id } = useParams();
@@ -4072,19 +49,50 @@ export default function ProductsPage() {
 
   // Show appropriate content based on route
   if (isNewProduct) {
-    return <ProductForm mode="create" />;
+    return <ListingEditor mode="create" />;
   }
 
   if (isEditProduct) {
-    return <ProductForm mode="edit" productId={id} />;
+    return <ListingEditor key={id} mode="edit" productId={id} />;
   }
 
   return <ProductsList />;
 }
 
-// Product List Component
+// Product List Component (Etsy-style listings grid)
+type ListingStatus = "all" | "active" | "inactive";
+
+const getListingImage = (product: any) => {
+  if (product.images?.length) {
+    return (product.images.find((img: any) => img.isPrimary) || product.images[0])?.url;
+  }
+  const v = product.variants?.find((x: any) => x.images?.length);
+  if (v) return (v.images.find((img: any) => img.isPrimary) || v.images[0])?.url;
+  return null;
+};
+
+const getListingPriceRange = (product: any) => {
+  const prices = (product.variants || [])
+    .map((v: any) => Number(v.salePrice || v.price))
+    .filter((n: number) => !isNaN(n) && n > 0);
+  if (prices.length === 0) return null;
+  return { min: Math.min(...prices), max: Math.max(...prices) };
+};
+
+const getListingStock = (product: any) =>
+  (product.variants || []).reduce(
+    (sum: number, v: any) => sum + (Number(v.stock ?? v.quantity) || 0),
+    0
+  );
+
+const getListingSku = (product: any) =>
+  product.sku || product.variants?.find((v: any) => v.sku)?.sku || "";
+
+const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
+
 function ProductsList() {
   const { t } = useLanguage();
+  const navigate = useNavigate();
   const [productsList, setProductsList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -4092,697 +100,622 @@ function ProductsList() {
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [categoriesList, setCategoriesList] = useState<any[]>([]);
+  const [status, setStatus] = useState<ListingStatus>("all");
+  const [sortKey, setSortKey] = useState("createdAt:desc");
+  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
+    try {
+      return (localStorage.getItem("products-view") as "grid" | "list") || "grid";
+    } catch {
+      return "grid";
+    }
+  });
+  const [statusCounts, setStatusCounts] = useState({ all: 0, active: 0, inactive: 0 });
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  // States for delete dialog
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isForceDeleteDialogOpen, setIsForceDeleteDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
   const [deletingProduct, setDeletingProduct] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
-  // Fetch products
+  const PAGE_SIZE = 20;
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("products-view", viewMode);
+    } catch {
+      // storage unavailable (private mode)
+    }
+  }, [viewMode]);
+
   useEffect(() => {
     const fetchProducts = async () => {
       try {
         setIsLoading(true);
-        const params = {
+        const [sort, order] = sortKey.split(":");
+        const response = await products.getProducts({
           page: currentPage,
-          limit: 10,
+          limit: PAGE_SIZE,
+          sort,
+          order: order as "asc" | "desc",
           ...(debouncedSearchQuery && { search: debouncedSearchQuery }),
           ...(selectedCategory && { category: selectedCategory }),
-        };
-
-        const response = await products.getProducts(params);
-
+          ...(status !== "all" && { isActive: status === "active" ? "true" : "false" }),
+        });
         if (response.data.success) {
-          const products = response.data.data?.products || [];
-
-          setProductsList(products);
+          setProductsList(response.data.data?.products || []);
           setTotalPages(response.data.data?.pagination?.pages || 1);
+          setTotalCount(response.data.data?.pagination?.total || 0);
+          setError(null);
         } else {
           setError(response.data.message || "Failed to fetch products");
         }
-      } catch (error: any) {
-        console.error("Error fetching products:", error);
+      } catch (err) {
+        console.error("Error fetching products:", err);
         setError("Failed to load products. Please try again.");
       } finally {
         setIsLoading(false);
       }
     };
-
     fetchProducts();
-  }, [currentPage, debouncedSearchQuery, selectedCategory]);
+  }, [currentPage, debouncedSearchQuery, selectedCategory, status, sortKey, reloadKey]);
 
-  // Fetch categories for filter
   useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const response = await categories.getCategories();
-
-        if (response.data.success) {
-          setCategoriesList(response.data.data?.categories || []);
-        }
-      } catch (error) {
-        console.error("Error fetching categories:", error);
-      }
+    const base = {
+      limit: 1,
+      ...(debouncedSearchQuery && { search: debouncedSearchQuery }),
+      ...(selectedCategory && { category: selectedCategory }),
     };
+    Promise.all([
+      products.getProducts(base),
+      products.getProducts({ ...base, isActive: "true" }),
+      products.getProducts({ ...base, isActive: "false" }),
+    ])
+      .then(([a, b, c]) =>
+        setStatusCounts({
+          all: a.data.data?.pagination?.total || 0,
+          active: b.data.data?.pagination?.total || 0,
+          inactive: c.data.data?.pagination?.total || 0,
+        })
+      )
+      .catch(() => { });
+  }, [debouncedSearchQuery, selectedCategory, reloadKey]);
 
-    fetchCategories();
+  useEffect(() => {
+    categories
+      .getCategories()
+      .then((r) => {
+        if (r.data.success) setCategoriesList(r.data.data?.categories || []);
+      })
+      .catch(() => { });
   }, []);
 
-  // Get base price and sale price for a product
-  const getProductPrices = (product: any) => {
-    if (!product.variants || product.variants.length === 0) {
-      return { basePrice: "0", regularPrice: "0", hasSale: false };
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [currentPage, debouncedSearchQuery, selectedCategory, status, sortKey]);
+
+  const refresh = () => setReloadKey((k) => k + 1);
+
+  const hierarchicalCategories = useMemo(
+    () =>
+      categoriesList
+        .filter((c) => !c.parentId)
+        .map((p) => ({ ...p, children: categoriesList.filter((c) => c.parentId === p.id) })),
+    [categoriesList]
+  );
+
+  const renderCategoryOption = (category: any, level = 0): any => (
+    <Fragment key={category.id}>
+      <option value={category.id}>
+        {level > 0 ? "↳ ".repeat(level) : ""}
+        {category.name}
+      </option>
+      {category.children?.map((child: any) => renderCategoryOption(child, level + 1))}
+    </Fragment>
+  );
+
+  const updateLocal = (id: string, patch: any) =>
+    setProductsList((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+
+  const patchProduct = async (id: string, fields: Record<string, string>) => {
+    const fd = new FormData();
+    Object.entries(fields).forEach(([k, v]) => fd.append(k, v));
+    const res = await products.updateProduct(id, fd as any);
+    if (!res.data.success) throw new Error(res.data.message || "Update failed");
+  };
+
+  const handleToggleProductStatus = async (id: string, current: boolean) => {
+    try {
+      await patchProduct(id, { isActive: String(!current) });
+      updateLocal(id, { isActive: !current });
+      toast.success(`Listing ${current ? "deactivated" : "activated"}`);
+      refresh();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update status");
     }
+  };
 
-    // For products with variants, show the lowest price
-    if (product.hasVariants && product.variants.length > 1) {
-      // Find the lowest regular price and its corresponding sale price
-      const lowestPriceVariant = product.variants.reduce(
-        (lowest: any, current: any) => {
-          const currentPrice = Number(current.price);
-          const lowestPrice = Number(lowest.price);
-          return currentPrice < lowestPrice ? current : lowest;
-        },
-        product.variants[0]
-      );
-
-      return {
-        basePrice: lowestPriceVariant.salePrice || lowestPriceVariant.price,
-        regularPrice: lowestPriceVariant.salePrice
-          ? lowestPriceVariant.price
-          : null,
-        hasSale: !!lowestPriceVariant.salePrice,
-      };
+  const handleToggleFeatured = async (id: string, current: boolean) => {
+    updateLocal(id, { featured: !current });
+    try {
+      await patchProduct(id, { featured: String(!current) });
+    } catch (err: any) {
+      updateLocal(id, { featured: current });
+      toast.error(err.message || "Failed to update featured");
     }
-
-    // For simple products
-    const variant = product.variants[0];
-    return {
-      basePrice: variant.salePrice || variant.price,
-      regularPrice: variant.salePrice ? variant.price : null,
-      hasSale: !!variant.salePrice,
-    };
   };
 
-  // Organize categories into a hierarchical structure
-  const organizeCategories = () => {
-    // Create parent categories
-    const parentCategories = categoriesList
-      .filter((category) => !category.parentId)
-      .map((parent) => ({
-        ...parent,
-        children: categoriesList.filter(
-          (child) => child.parentId === parent.id
-        ),
-      }));
-
-    return parentCategories;
-  };
-
-  // Handle search
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setCurrentPage(1);
-  };
-
-  // Handle product deletion
-  const handleDeleteProduct = async (
-    productId: string,
-    force: boolean = false
-  ) => {
+  const handleDeleteProduct = async (productId: string, force = false) => {
     setDeletingProduct(true);
-
     try {
       const response = await products.deleteProduct(productId, force);
-
-      if (response.data.success) {
-        // Check if the message indicates the product has orders and cannot be deleted
-        if (
-          !force &&
-          response.data.message?.includes("has associated orders") &&
-          response.data.message?.includes("cannot be deleted")
-        ) {
-          // Show force delete dialog
-          setProductToDelete(productId);
-          setIsForceDeleteDialogOpen(true);
-        }
-        // If message indicates product is just marked inactive
-        else if (
-          response.data.message?.includes("cannot be deleted") &&
-          response.data.message?.includes("marked as inactive")
-        ) {
-          toast.success("Product marked as inactive");
-
-          // Update product status in the list
-          setProductsList((prevProducts) =>
-            prevProducts.map((product) =>
-              product.id === productId
-                ? { ...product, isActive: false }
-                : product
-            )
-          );
-
-          // Close dialogs if open
-          setIsDeleteDialogOpen(false);
-          setIsForceDeleteDialogOpen(false);
-        } else {
-          toast.success("Product deleted successfully");
-          // Remove from product list
-          setProductsList((prevProducts) =>
-            prevProducts.filter((product) => product.id !== productId)
-          );
-
-          // Close dialogs if open
-          setIsDeleteDialogOpen(false);
-          setIsForceDeleteDialogOpen(false);
-        }
+      const msg: string = response.data.message || "";
+      if (!response.data.success) {
+        toast.error(msg || "Failed to delete product");
+      } else if (!force && msg.includes("has associated orders") && msg.includes("cannot be deleted")) {
+        setProductToDelete(productId);
+        setIsForceDeleteDialogOpen(true);
+      } else if (msg.includes("cannot be deleted") && msg.includes("marked as inactive")) {
+        toast.success("Product marked as inactive");
+        updateLocal(productId, { isActive: false });
+        setIsDeleteDialogOpen(false);
+        setIsForceDeleteDialogOpen(false);
+        refresh();
       } else {
-        toast.error(response.data.message || "Failed to delete product");
+        toast.success("Product deleted successfully");
+        setProductsList((prev) => prev.filter((p) => p.id !== productId));
+        setIsDeleteDialogOpen(false);
+        setIsForceDeleteDialogOpen(false);
+        refresh();
       }
-    } catch (error: any) {
-      console.error("Error deleting product:", error);
-      toast.error(
-        error.message || "An error occurred while deleting the product"
-      );
+    } catch (err: any) {
+      toast.error(err.message || "An error occurred while deleting the product");
     } finally {
       setDeletingProduct(false);
     }
   };
 
-  // Handle marking product as inactive instead of deleting
   const handleMarkAsInactive = async (productId: string) => {
     try {
-      const formData = new FormData();
-      formData.append("isActive", "false");
-
-      const response = await products.updateProduct(productId, formData as any);
-
-      if (response.data.success) {
-        toast.success("Product marked as inactive successfully");
-
-        // Update product status in the list
-        setProductsList((prevProducts) =>
-          prevProducts.map((product) =>
-            product.id === productId ? { ...product, isActive: false } : product
-          )
-        );
-
-        // Close force delete dialog
-        setIsForceDeleteDialogOpen(false);
-      } else {
-        toast.error(
-          response.data.message || "Failed to mark product as inactive"
-        );
-      }
-    } catch (error: any) {
-      console.error("Error marking product as inactive:", error);
-      toast.error(
-        error.message ||
-        "An error occurred while marking the product as inactive"
-      );
+      await patchProduct(productId, { isActive: "false" });
+      updateLocal(productId, { isActive: false });
+      toast.success("Product marked as inactive successfully");
+      setIsForceDeleteDialogOpen(false);
+      refresh();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to mark product as inactive");
     }
   };
 
-  // Function to open delete dialog
-  const openDeleteDialog = (productId: string) => {
-    setProductToDelete(productId);
-    setIsDeleteDialogOpen(true);
-  };
-
-  // Handle product status toggle (active/inactive)
-  const handleToggleProductStatus = async (
-    productId: string,
-    currentStatus: boolean
-  ) => {
-    try {
-      const formData = new FormData();
-      formData.append("isActive", (!currentStatus).toString());
-
-      const response = await products.updateProduct(productId, formData as any);
-
-      if (response.data.success) {
-        toast.success(
-          `Product ${currentStatus ? "deactivated" : "activated"} successfully`
-        );
-
-        // Update product status in the list
-        setProductsList((prevProducts) =>
-          prevProducts.map((product) =>
-            product.id === productId
-              ? { ...product, isActive: !currentStatus }
-              : product
-          )
-        );
-      } else {
-        toast.error(
-          response.data.message ||
-          `Failed to ${currentStatus ? "deactivate" : "activate"} product`
-        );
+  const runBulk = async (action: "activate" | "deactivate" | "delete") => {
+    if (selectedIds.length === 0) return;
+    setBulkBusy(true);
+    let ok = 0;
+    for (const id of selectedIds) {
+      try {
+        if (action === "delete") {
+          const r = await products.deleteProduct(id, false);
+          if (r.data.success) ok++;
+        } else {
+          await patchProduct(id, { isActive: String(action === "activate") });
+          ok++;
+        }
+      } catch {
+        /* counted as failure */
       }
-    } catch (error: any) {
-      console.error(
-        `Error ${currentStatus ? "deactivating" : "activating"} product:`,
-        error
-      );
-      toast.error(
-        error.message ||
-        `An error occurred while ${currentStatus ? "deactivating" : "activating"} the product`
-      );
     }
+    setBulkBusy(false);
+    setBulkDeleteOpen(false);
+    const failed = selectedIds.length - ok;
+    toast[failed ? "warning" : "success"](
+      `${ok} listing${ok === 1 ? "" : "s"} updated${failed ? `, ${failed} failed` : ""}`
+    );
+    setSelectedIds([]);
+    refresh();
   };
 
-  // Render option for a category with proper indentation
-  const renderCategoryOption = (category: any, level = 0) => {
-    return (
-      <Fragment key={category.id}>
-        <option value={category.id}>
-          {level > 0 ? "↳ ".repeat(level) : ""}
-          {category.name}
-        </option>
-        {category.children &&
-          category.children.map((child: any) =>
-            renderCategoryOption(child, level + 1)
-          )}
-      </Fragment>
-    );
-  };
+  const allOnPageSelected =
+    productsList.length > 0 && productsList.every((p) => selectedIds.includes(p.id));
 
-  // Loading state
-  if (isLoading && productsList.length === 0) {
-    return (
-      <div className="flex h-full w-full items-center justify-center py-20">
-        <div className="flex flex-col items-center">
-          <Loader2 className="h-10 w-10 animate-spin text-[var(--accent)]" />
-          <p className="mt-4 text-base text-[var(--text-secondary)]">Loading products...</p>
-        </div>
-      </div>
-    );
-  }
+  const toggleSelectAll = () =>
+    setSelectedIds(allOnPageSelected ? [] : productsList.map((p) => p.id));
 
-  // Error state
-  if (error && productsList.length === 0) {
-    return (
-      <div className="flex h-full w-full flex-col items-center justify-center py-20">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[var(--destructive)]/10 mb-4">
-          <AlertTriangle className="h-8 w-8 text-[var(--destructive)]" />
-        </div>
-        <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-1.5">
-          Something went wrong
-        </h2>
-        <p className="text-center text-[var(--text-secondary)] mb-6">{error}</p>
-        <Button
-          variant="outline"
-          className="border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)]/10"
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const GearMenu = ({ product }: { product: any }) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="flex items-center gap-0.5 rounded-full px-2 py-1 text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]"
+          title="Options"
+        >
+          <Settings className="h-4 w-4" />
+          <ChevronDown className="h-3 w-3" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="bg-[var(--bg-card)] border-[var(--border-color)] shadow-lg">
+        <DropdownMenuItem onClick={() => navigate(`/products/edit/${product.id}`)}>
+          <Edit className="h-4 w-4 mr-2" /> Edit
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate(`/products/${product.id}`)}>
+          <Eye className="h-4 w-4 mr-2" /> View details
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleToggleFeatured(product.id, !!product.featured)}>
+          <Star className="h-4 w-4 mr-2" /> {product.featured ? "Remove from featured" : "Mark as featured"}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleToggleProductStatus(product.id, product.isActive)}>
+          <Power className="h-4 w-4 mr-2" /> {product.isActive ? "Deactivate" : "Activate"}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator className="bg-[var(--border-color)]" />
+        <DropdownMenuItem
+          className="text-[var(--destructive)]"
           onClick={() => {
-            setError(null);
-            setCurrentPage(1);
-            setIsLoading(true);
+            setProductToDelete(product.id);
+            setIsDeleteDialogOpen(true);
           }}
         >
-          Try Again
-        </Button>
+          <Trash2 className="h-4 w-4 mr-2" /> Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  const ListingMeta = ({ product }: { product: any }) => {
+    const range = getListingPriceRange(product);
+    const stock = getListingStock(product);
+    const sku = getListingSku(product);
+    const primaryCat = product.categories?.find((c: any) => c.isPrimary) || product.categories?.[0];
+    return (
+      <div className="space-y-0.5 text-xs text-[var(--text-secondary)]">
+        {sku && <p className="truncate">{sku}</p>}
+        <p className={stock === 0 ? "text-[var(--destructive)] font-medium" : ""}>
+          {stock === 0 ? "Out of stock" : `${stock} in stock`}
+        </p>
+        <p className="text-[var(--text-primary)] font-medium">
+          {range
+            ? range.min === range.max
+              ? inr(range.min)
+              : `${inr(range.min)} – ${inr(range.max)}`
+            : "No price"}
+        </p>
+        <p className="truncate">
+          {primaryCat?.name || "Uncategorized"}
+          {product.hasVariants && product.variants?.length > 0 && ` · ${product.variants.length} variants`}
+        </p>
       </div>
     );
-  }
+  };
 
-  // Organize categories hierarchically
-  const hierarchicalCategories = organizeCategories();
+  const ListingStats = ({ product }: { product: any }) => {
+    const s = product.stats || {};
+    const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+    return (
+      <div className="space-y-2 text-[11px]">
+        <div>
+          <p className="font-semibold uppercase tracking-wide text-[var(--text-primary)]">Last 30 days</p>
+          <p className="text-[var(--text-secondary)]">
+            {plural(s.visits30d || 0, "visit")} · {plural(s.favourites30d || 0, "favourite")}
+          </p>
+        </div>
+        <div>
+          <p className="font-semibold uppercase tracking-wide text-[var(--text-primary)]">All time</p>
+          <p className="text-[var(--text-secondary)]">
+            {plural(s.sales || 0, "sale")} · {inr(Math.round(s.revenue || 0))} revenue
+          </p>
+          <p className="text-[var(--text-secondary)]">
+            {plural(s.favouritesAll || 0, "favourite")} · {plural(product._count?.reviews || 0, "review")}
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  const statusOptions: { key: ListingStatus; label: string; count: number }[] = [
+    { key: "all", label: "All", count: statusCounts.all },
+    { key: "active", label: "Active", count: statusCounts.active },
+    { key: "inactive", label: "Inactive / Draft", count: statusCounts.inactive },
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* Delete Confirmation Dialog */}
+    <div className="space-y-5">
       <DeleteProductDialog
         open={isDeleteDialogOpen}
         setOpen={setIsDeleteDialogOpen}
         title={t("products.details.dialogs.delete_title")}
         description={t("products.details.dialogs.delete_desc")}
-        onConfirm={() => {
-          if (productToDelete) {
-            handleDeleteProduct(productToDelete, false);
-          }
-        }}
+        onConfirm={() => productToDelete && handleDeleteProduct(productToDelete, false)}
         loading={deletingProduct}
         confirmText={t("products.details.actions.delete")}
       />
-
-      {/* Force Delete Confirmation Dialog */}
       <DeleteProductDialog
         open={isForceDeleteDialogOpen}
         setOpen={setIsForceDeleteDialogOpen}
         title={t("products.details.dialogs.force_delete_title")}
         description={t("products.details.dialogs.force_delete_desc")}
-        onConfirm={() => {
-          if (productToDelete) {
-            handleDeleteProduct(productToDelete, true);
-          }
-        }}
+        onConfirm={() => productToDelete && handleDeleteProduct(productToDelete, true)}
         loading={deletingProduct}
         confirmText={t("products.details.actions.delete")}
         isDestructive={true}
         secondaryAction={{
           text: t("products.details.dialogs.mark_inactive"),
-          onClick: () => {
-            if (productToDelete) {
-              handleMarkAsInactive(productToDelete);
-            }
-          },
+          onClick: () => productToDelete && handleMarkAsInactive(productToDelete),
         }}
       />
+      <DeleteProductDialog
+        open={bulkDeleteOpen}
+        setOpen={setBulkDeleteOpen}
+        title={`Delete ${selectedIds.length} listing${selectedIds.length === 1 ? "" : "s"}?`}
+        description="Listings with existing orders will be marked inactive instead of deleted."
+        onConfirm={() => runBulk("delete")}
+        loading={bulkBusy}
+        confirmText="Delete"
+        isDestructive={true}
+      />
 
-      {/* Premium Page Header */}
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-semibold text-[var(--text-primary)] tracking-tight">
-              {t("products.title")}
-            </h1>
-            <p className="text-[var(--text-secondary)] text-sm mt-1.5">
-              {t("products.form.sections.basic_desc")}
-            </p>
+      {/* Header */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight text-[var(--text-primary)]">Listings</h1>
+        <div className="flex items-center gap-3">
+          <div className="relative w-full md:w-96">
+            <Input
+              type="search"
+              placeholder="Search by title or description"
+              className="rounded-full pr-10"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+            />
+            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-secondary)]" />
           </div>
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-secondary)]" />
-              <Input
-                type="search"
-                placeholder={t("products.list.search_placeholder")}
-                className="pl-9 rounded-full"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && handleSearch(e)}
-              />
-            </div>
-            <Button
-              asChild
-            >
-              <Link to="/products/new">
-                <Plus className="mr-2 h-4 w-4" />
-                {t("products.add_new")}
-              </Link>
-            </Button>
-          </div>
-        </div>
-        <div className="h-px bg-[var(--border-color)]" />
-      </div>
-
-      {/* Premium Filters Bar */}
-      <div className="flex flex-wrap items-center gap-3 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-full px-4 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-        <select
-          className="flex-1 min-w-[150px] rounded-full border border-[var(--border-color)] bg-[var(--bg-card)] px-4 py-2 text-sm text-[var(--text-primary)] focus:outline-none"
-          value={selectedCategory}
-          onChange={(e) => {
-            setSelectedCategory(e.target.value);
-            setCurrentPage(1);
-          }}
-        >
-          <option value="">{t("products.list.all_categories")}</option>
-          {hierarchicalCategories.map((category) =>
-            renderCategoryOption(category)
-          )}
-        </select>
-        <select
-          className="rounded-full border border-[var(--border-color)] bg-[var(--bg-card)] px-4 py-2 text-sm text-[var(--text-primary)] focus:outline-none"
-          value=""
-          onChange={() => { }}
-        >
-          <option value="">{t("products.list.all_status")}</option>
-          <option value="active">{t("products.list.status.active")}</option>
-          <option value="draft">{t("products.list.status.inactive")}</option>
-        </select>
-        {(selectedCategory || searchQuery) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs text-[var(--text-primary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]"
-            onClick={() => {
-              setSelectedCategory("");
-              setSearchQuery("");
-            }}
-          >
-            <X className="h-3 w-3 mr-1" />
-            Clear filters
+          <Button asChild className="rounded-full whitespace-nowrap">
+            <Link to="/products/new">
+              <Plus className="mr-1.5 h-4 w-4" /> Add a listing
+            </Link>
           </Button>
-        )}
+        </div>
       </div>
 
-      {/* Premium Products List - Card-Table Hybrid */}
-      {isLoading && productsList.length > 0 && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[var(--bg-secondary)]/80 backdrop-blur-sm">
-          <Loader2 className="h-8 w-8 animate-spin text-[var(--accent)]" />
-        </div>
-      )}
-
-      {productsList.length === 0 ? (
-        <Card className="bg-[var(--bg-card)] border-[var(--border-color)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] rounded-xl">
-          <div className="text-center py-16">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[var(--bg-secondary)] mb-4">
-              <Package className="h-8 w-8 text-[var(--text-secondary)]" />
-            </div>
-            <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-1.5">
-              {t("products.list.table.no_products")}
-            </h3>
-            <p className="text-sm text-[var(--text-secondary)] mb-6 max-w-sm mx-auto">
-              {t("products.list.table.empty_desc")}
-            </p>
-            <Button
-              asChild
-            >
-              <Link to="/products/new">
-                <Plus className="mr-2 h-4 w-4" />
-                {t("products.add_new")}
-              </Link>
+      <div className="flex flex-col-reverse gap-5 lg:flex-row">
+        {/* Main */}
+        <div className="min-w-0 flex-1 space-y-4">
+          {/* Bulk action bar */}
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex h-9 cursor-pointer items-center gap-2 rounded-full border border-[var(--border-color)] px-3 text-sm">
+              <Checkbox checked={allOnPageSelected} onCheckedChange={toggleSelectAll} />
+              {selectedIds.length > 0 && <span className="text-xs">{selectedIds.length}</span>}
+            </label>
+            <Button variant="outline" size="sm" className="rounded-full" disabled={!selectedIds.length || bulkBusy} onClick={() => runBulk("activate")}>
+              Activate
             </Button>
+            <Button variant="outline" size="sm" className="rounded-full" disabled={!selectedIds.length || bulkBusy} onClick={() => runBulk("deactivate")}>
+              Deactivate
+            </Button>
+            <Button variant="outline" size="sm" className="rounded-full" disabled={!selectedIds.length || bulkBusy} onClick={() => setBulkDeleteOpen(true)}>
+              Delete
+            </Button>
+            {bulkBusy && <Loader2 className="h-4 w-4 animate-spin text-[var(--accent)]" />}
+            <span className="ml-auto text-xs text-[var(--text-secondary)]">
+              {totalCount} listing{totalCount === 1 ? "" : "s"}
+            </span>
           </div>
-        </Card>
-      ) : (
-        <Card className="bg-[var(--bg-card)] border-[var(--border-color)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] rounded-xl overflow-hidden">
-          <div className="divide-y divide-[var(--border-color)]">
-            <SafeRender>
-              {productsList.map((product) => {
-                const { basePrice, regularPrice, hasSale } =
-                  getProductPrices(product);
-                // Get image with fallback logic
-                let productImage = null;
 
-                // Priority 1: Product images
-                if (product.images && product.images.length > 0) {
-                  productImage =
-                    product.images.find((img: any) => img.isPrimary) ||
-                    product.images[0];
-                }
-                // Priority 2: Any variant images
-                else if (product.variants && product.variants.length > 0) {
-                  const variantWithImages = product.variants.find(
-                    (variant: any) =>
-                      variant.images && variant.images.length > 0
-                  );
-                  if (variantWithImages) {
-                    productImage =
-                      variantWithImages.images.find(
-                        (img: any) => img.isPrimary
-                      ) || variantWithImages.images[0];
-                  }
-                }
-
-                // Get stock count - check both stock and quantity fields
-                const totalStock = product.variants?.reduce(
-                  (sum: number, variant: any) => sum + (variant.stock || variant.quantity || 0),
-                  0
-                ) || 0;
-
-                return (
-                  <div
-                    key={product.id}
-                    className="flex items-center gap-4 p-4 hover:bg-[var(--bg-secondary)] transition-colors"
-                  >
-                    {/* Product Image */}
-                    <div className="flex-shrink-0">
-                      {productImage ? (
-                        <img
-                          src={productImage.url}
-                          alt={product.name}
-                          className="h-14 w-14 rounded-lg object-cover border border-[var(--border-color)]"
-                        />
-                      ) : (
-                        <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)]">
-                          <Package className="h-6 w-6 text-[var(--text-secondary)]" />
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Product Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-semibold text-[var(--text-primary)] text-base truncate">
+          {error && productsList.length === 0 ? (
+            <Card className="flex flex-col items-center py-16 text-center">
+              <AlertTriangle className="mb-3 h-8 w-8 text-[var(--destructive)]" />
+              <p className="mb-4 text-[var(--text-secondary)]">{error}</p>
+              <Button variant="outline" onClick={refresh}>Try Again</Button>
+            </Card>
+          ) : isLoading && productsList.length === 0 ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="h-8 w-8 animate-spin text-[var(--accent)]" />
+            </div>
+          ) : productsList.length === 0 ? (
+            <Card className="py-16 text-center">
+              <Package className="mx-auto mb-3 h-10 w-10 text-[var(--text-secondary)]" />
+              <h3 className="mb-1 text-lg font-semibold text-[var(--text-primary)]">{t("products.list.table.no_products")}</h3>
+              <p className="mx-auto mb-6 max-w-sm text-sm text-[var(--text-secondary)]">{t("products.list.table.empty_desc")}</p>
+              <Button asChild className="rounded-full">
+                <Link to="/products/new"><Plus className="mr-1.5 h-4 w-4" /> Add a listing</Link>
+              </Button>
+            </Card>
+          ) : (
+            <div className={`relative ${isLoading ? "pointer-events-none opacity-60" : ""}`}>
+              <SafeRender>
+                {viewMode === "grid" ? (
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                    {productsList.map((product) => {
+                      const img = getListingImage(product);
+                      const selected = selectedIds.includes(product.id);
+                      return (
+                        <div
+                          key={product.id}
+                          className={`group flex flex-col overflow-hidden rounded-lg border bg-[var(--bg-card)] transition-shadow hover:shadow-md ${selected ? "border-[var(--accent)] ring-1 ring-[var(--accent)]" : "border-[var(--border-color)]"}`}
+                        >
+                          <Link to={`/products/edit/${product.id}`} className="relative block aspect-[4/3] bg-[var(--bg-secondary)]">
+                            {img ? (
+                              <img src={img} alt={product.name} className="h-full w-full object-cover" loading="lazy" />
+                            ) : (
+                              <div className="flex h-full items-center justify-center">
+                                <ImageIcon className="h-8 w-8 text-[var(--text-secondary)]" />
+                              </div>
+                            )}
+                            {!product.isActive && (
+                              <span className="absolute left-2 top-2 rounded bg-black/70 px-2 py-0.5 text-[10px] font-semibold uppercase text-white">Inactive</span>
+                            )}
+                          </Link>
+                          <div className="flex flex-1 flex-col gap-3 p-3">
+                            <Link to={`/products/edit/${product.id}`} className="line-clamp-1 text-sm font-semibold text-[var(--text-primary)] hover:underline" title={product.name}>
                               {product.name}
-                            </h3>
-                            {product.ourProduct && (
-                              <Badge className="bg-[var(--accent)]/10 text-[var(--accent)] border-[var(--accent)]/30 text-xs">
-                                {t("products.list.status.our_product")}
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 flex-wrap">
-                            {/* Category - Hidden on mobile */}
-                            <div className="hidden md:flex items-center gap-1.5 flex-wrap">
-                              {product.categories &&
-                                product.categories.length > 0 ? (
-                                product.categories
-                                  .slice(0, 2)
-                                  .map((category: any) => (
-                                    <span
-                                      key={category.id}
-                                      className="text-xs text-[var(--text-secondary)]"
-                                    >
-                                      {category.name}
-                                    </span>
-                                  ))
-                              ) : (
-                                <span className="text-xs text-[var(--text-secondary)]">
-                                  Uncategorized
-                                </span>
-                              )}
-                            </div>
-                            {product.hasVariants && (
-                              <span className="text-xs text-[var(--text-secondary)]">
-                                {product.variants.length} variants
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Price */}
-                        <div className="text-right flex-shrink-0">
-                          {hasSale ? (
-                            <div className="flex flex-col items-end">
-                              <span className="font-bold text-[var(--text-primary)]">
-                                ₹{basePrice}
-                              </span>
-                              <span className="text-xs line-through text-[var(--text-secondary)]">
-                                ₹{regularPrice}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="font-bold text-[var(--text-primary)]">
-                              ₹{basePrice}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Status & Stock - Hidden on mobile */}
-                    <div className="hidden lg:flex items-center gap-4 flex-shrink-0">
-                      <div className="text-right">
-                        <Badge
-                          className={
-                            product.isActive
-                              ? "bg-[var(--accent)]/20 text-[var(--accent)] border-[var(--accent)]/30 text-xs"
-                              : "bg-[var(--bg-secondary)] text-[var(--text-primary)] border-[var(--border-color)] text-xs"
-                          }
-                        >
-                          {product.isActive ? "Active" : "Draft"}
-                        </Badge>
-                        {totalStock === 0 && (
-                          <Badge className="bg-[var(--destructive)]/10 text-[var(--destructive)] border-[var(--destructive)]/30 text-xs mt-1 block">
-                            Out of stock
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Actions Menu */}
-                    <div className="flex-shrink-0">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 hover:bg-[var(--bg-secondary)]"
-                          >
-                            <MoreVertical className="h-4 w-4 text-[var(--text-primary)]" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          align="end"
-                          className="bg-[var(--bg-card)] border-[var(--border-color)] shadow-lg"
-                        >
-                          <DropdownMenuItem
-                            className="text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]"
-                            asChild
-                          >
-                            <Link to={`/products/${product.id}`}>
-                              <Edit className="h-4 w-4 mr-2" />
-                              Edit
                             </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]"
-                            onClick={() =>
-                              handleToggleProductStatus(
-                                product.id,
-                                product.isActive
-                              )
-                            }
-                          >
-                            {product.isActive ? "Deactivate" : "Activate"}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator className="bg-[var(--border-color)]" />
-                          <DropdownMenuItem
-                            className="text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
-                            onClick={() => openDeleteDialog(product.id)}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
+                            <ListingMeta product={product} />
+                            <ListingStats product={product} />
+                          </div>
+                          <div className="flex items-center justify-between border-t border-[var(--border-color)] px-3 py-2">
+                            <Checkbox checked={selected} onCheckedChange={() => toggleSelect(product.id)} />
+                            <button
+                              type="button"
+                              title={product.featured ? "Featured" : "Mark as featured"}
+                              onClick={() => handleToggleFeatured(product.id, !!product.featured)}
+                              className="rounded-full p-1 hover:bg-[var(--bg-secondary)]"
+                            >
+                              <Star className={`h-4 w-4 ${product.featured ? "fill-amber-400 text-amber-400" : "text-[var(--text-secondary)]"}`} />
+                            </button>
+                            <GearMenu product={product} />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </SafeRender>
-          </div>
-
-          {/* Premium Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-[var(--border-color)] px-6 py-4 bg-[var(--bg-secondary)]">
-              <div className="text-sm text-[var(--text-secondary)]">
-                Page {currentPage} of {totalPages}
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-[var(--border-color)] hover:bg-[var(--bg-card)]"
-                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-[var(--border-color)] hover:bg-[var(--bg-card)]"
-                  onClick={() =>
-                    setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-                  }
-                  disabled={currentPage === totalPages}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+                ) : (
+                  <Card className="divide-y divide-[var(--border-color)] overflow-hidden">
+                    {productsList.map((product) => {
+                      const img = getListingImage(product);
+                      const selected = selectedIds.includes(product.id);
+                      return (
+                        <div key={product.id} className={`flex items-center gap-4 p-3 ${selected ? "bg-[var(--accent)]/5" : "hover:bg-[var(--bg-secondary)]"}`}>
+                          <Checkbox checked={selected} onCheckedChange={() => toggleSelect(product.id)} />
+                          <Link to={`/products/edit/${product.id}`} className="h-16 w-20 flex-shrink-0 overflow-hidden rounded bg-[var(--bg-secondary)]">
+                            {img ? <img src={img} alt={product.name} className="h-full w-full object-cover" loading="lazy" /> : null}
+                          </Link>
+                          <div className="min-w-0 flex-1">
+                            <Link to={`/products/edit/${product.id}`} className="block truncate text-sm font-semibold text-[var(--text-primary)] hover:underline">
+                              {product.name}
+                            </Link>
+                            <div className="mt-1 flex flex-wrap gap-x-4">
+                              <ListingMeta product={product} />
+                            </div>
+                          </div>
+                          <div className="hidden w-40 md:block">
+                            <ListingStats product={product} />
+                          </div>
+                          <Badge className={product.isActive ? "bg-green-100 text-green-700 border-green-200" : "bg-[var(--bg-secondary)] text-[var(--text-secondary)]"}>
+                            {product.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                          <button type="button" onClick={() => handleToggleFeatured(product.id, !!product.featured)} className="rounded-full p-1 hover:bg-[var(--bg-secondary)]">
+                            <Star className={`h-4 w-4 ${product.featured ? "fill-amber-400 text-amber-400" : "text-[var(--text-secondary)]"}`} />
+                          </button>
+                          <GearMenu product={product} />
+                        </div>
+                      );
+                    })}
+                  </Card>
+                )}
+              </SafeRender>
             </div>
           )}
 
-        </Card>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Button variant="outline" size="sm" className="rounded-full" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm text-[var(--text-secondary)]">Page {currentPage} of {totalPages}</span>
+              <Button variant="outline" size="sm" className="rounded-full" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
 
-      )}
+        {/* Sidebar */}
+        <aside className="grid w-full flex-shrink-0 grid-cols-2 gap-4 lg:block lg:w-60 lg:space-y-5">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              title="Grid view"
+              onClick={() => setViewMode("grid")}
+              className={`rounded-full border p-2 ${viewMode === "grid" ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg-card)]" : "border-[var(--border-color)] text-[var(--text-primary)]"}`}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              title="List view"
+              onClick={() => setViewMode("list")}
+              className={`rounded-full border p-2 ${viewMode === "list" ? "border-[var(--text-primary)] bg-[var(--text-primary)] text-[var(--bg-card)]" : "border-[var(--border-color)] text-[var(--text-primary)]"}`}
+            >
+              <ListIcon className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-semibold">Sort</Label>
+            <select
+              className="w-full rounded-md border border-[var(--border-color)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
+              value={sortKey}
+              onChange={(e) => {
+                setSortKey(e.target.value);
+                setCurrentPage(1);
+              }}
+            >
+              <option value="createdAt:desc">Newest first</option>
+              <option value="createdAt:asc">Oldest first</option>
+              <option value="updatedAt:desc">Recently updated</option>
+              <option value="name:asc">Title: A–Z</option>
+              <option value="name:desc">Title: Z–A</option>
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold">Listing status</Label>
+            {statusOptions.map((opt) => (
+              <label key={opt.key} className="flex cursor-pointer items-center gap-2 text-sm text-[var(--text-primary)]">
+                <input
+                  type="radio"
+                  name="listing-status"
+                  checked={status === opt.key}
+                  onChange={() => {
+                    setStatus(opt.key);
+                    setCurrentPage(1);
+                  }}
+                  className="h-4 w-4 accent-[var(--text-primary)]"
+                />
+                {opt.label} <span className="text-[var(--text-secondary)]">{opt.count}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-semibold">Category</Label>
+            <select
+              className="w-full rounded-md border border-[var(--border-color)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]"
+              value={selectedCategory}
+              onChange={(e) => {
+                setSelectedCategory(e.target.value);
+                setCurrentPage(1);
+              }}
+            >
+              <option value="">All</option>
+              {hierarchicalCategories.map((c) => renderCategoryOption(c))}
+            </select>
+          </div>
+
+          {(selectedCategory || searchQuery || status !== "all") && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs"
+              onClick={() => {
+                setSelectedCategory("");
+                setSearchQuery("");
+                setStatus("all");
+                setCurrentPage(1);
+              }}
+            >
+              <X className="mr-1 h-3 w-3" /> Clear filters
+            </Button>
+          )}
+        </aside>
+      </div>
     </div>
   );
 }

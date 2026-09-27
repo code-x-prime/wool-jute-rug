@@ -47,12 +47,15 @@ import adminMenuRoutes from "./routes/admin.menu.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import easyshipRoutes from "./routes/easyship.routes.js";
 import adminAddonRoutes from "./routes/admin.addon.routes.js";
+import adminListingRoutes from "./routes/admin.listing.routes.js";
+import adminShipmentRoutes from "./routes/admin.shipment.routes.js";
 
 const app = express();
 
 /* -------------------- BASIC MIDDLEWARE -------------------- */
 
-app.use(express.json());
+// rawBody is needed to verify payment webhook signatures
+app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
@@ -173,6 +176,8 @@ app.use("/api/admin", adminShoppableCarouselRoutes);
 app.use("/api/admin", adminOAuthRoutes);
 app.use("/api/admin", adminMenuRoutes);
 app.use("/api/admin", adminAddonRoutes);
+app.use("/api/admin", adminListingRoutes);
+app.use("/api/admin", adminShipmentRoutes);
 
 // Shiprocket webhook (public endpoint)
 app.use("/api/webhooks/shiprocket", adminShiprocketRoutes);

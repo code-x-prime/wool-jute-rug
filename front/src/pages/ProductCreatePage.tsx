@@ -4,8 +4,7 @@ import { Resource, Action } from "@/types/admin";
 
 import { useLanguage } from "@/context/LanguageContext";
 
-// Import the ProductForm component from ProductsPage
-import { ProductForm } from "./ProductsPage";
+import ListingEditor from "./ListingEditor";
 
 export default function ProductCreatePage() {
   const { admin } = useAuth();
@@ -31,9 +30,5 @@ export default function ProductCreatePage() {
     );
   }
 
-  return (
-    <div className="space-y-6">
-      <ProductForm mode="create" />
-    </div>
-  );
+  return <ListingEditor mode="create" />;
 }

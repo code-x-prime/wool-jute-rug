@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { fetchApi, formatCurrency, stripInlineStyles } from "@/lib/utils";
@@ -85,6 +85,25 @@ export default function ProductContent({ slug }) {
 
   const [addonServices, setAddonServices] = useState([]);
   const [selectedAddonIds, setSelectedAddonIds] = useState([]);
+  const [selectionError, setSelectionError] = useState("");
+
+  const hasOptions = !!product?.attributeOptions?.length;
+
+  // Returns the variant to purchase, or null after flagging the first unselected option.
+  const requireVariant = () => {
+    if (!hasOptions) return product?.variants?.[0] || null;
+    const missing = product.attributeOptions.find((a) => !selectedAttributes[a.id]);
+    if (missing) {
+      setSelectionError(missing.id);
+      document.getElementById(`option-${missing.id}`)?.focus();
+      return null;
+    }
+    if (!selectedVariant) {
+      toast.error("This combination is not available");
+      return null;
+    }
+    return selectedVariant;
+  };
 
   const { addVariantToCart } = useAddVariantToCart();
 
@@ -154,16 +173,10 @@ export default function ProductContent({ slug }) {
           if (productData.attributeOptions && productData.attributeOptions.length > 0) {
             const defaultSelections = {};
 
+            // Etsy-style: nothing pre-selected unless the URL names a variant
             if (initialVariant && initialVariant.attributes) {
               initialVariant.attributes.forEach((attr) => {
                 defaultSelections[attr.attributeId] = attr.attributeValueId;
-              });
-            } else {
-              // Select first value for each attribute
-              productData.attributeOptions.forEach((attr) => {
-                if (attr.values && attr.values.length > 0) {
-                  defaultSelections[attr.id] = attr.values[0].id;
-                }
               });
             }
 
@@ -175,28 +188,7 @@ export default function ProductContent({ slug }) {
               setQuantity(moq);
               const priceInfo = getEffectivePrice(initialVariant, moq);
               setEffectivePriceInfo(priceInfo);
-            } else {
-              // Find matching variant with these attribute values
-              const matchingVariant = combinations.find((combo) => {
-                const comboIds = combo.attributeValueIds.sort().join(",");
-                const selectedIds = Object.values(defaultSelections).sort().join(",");
-                return comboIds === selectedIds;
-              });
-
-              if (matchingVariant) {
-                setSelectedVariant(matchingVariant.variant);
-                const moq = matchingVariant.variant.moq || 1;
-                setQuantity(moq);
-                const priceInfo = getEffectivePrice(matchingVariant.variant, moq);
-                setEffectivePriceInfo(priceInfo);
-              } else if (productData.variants.length > 0) {
-                // Fallback: just pick the first variant
-                setSelectedVariant(productData.variants[0]);
-                const moq = productData.variants[0].moq || 1;
-                setQuantity(moq);
-                const priceInfo = getEffectivePrice(productData.variants[0], moq);
-                setEffectivePriceInfo(priceInfo);
-              }
+              if (initialVariant.images?.length) setMainImage(initialVariant.images[0]);
             }
           } else if (productData.variants.length > 0) {
             // Fallback: just pick the first variant
@@ -263,8 +255,20 @@ export default function ProductContent({ slug }) {
 
   // Handle attribute value change
   const handleAttributeChange = (attributeId, attributeValueId) => {
-    const newSelections = { ...selectedAttributes, [attributeId]: attributeValueId };
+    const newSelections = { ...selectedAttributes };
+    if (attributeValueId) newSelections[attributeId] = attributeValueId;
+    else delete newSelections[attributeId];
     setSelectedAttributes(newSelections);
+    setSelectionError("");
+
+    // Jump the gallery to a photo linked to the chosen option (gallery itself stays complete)
+    if (attributeValueId) {
+      const chosenIds = Object.values(newSelections);
+      const withPhoto =
+        availableCombinations.find((c) => chosenIds.every((id) => c.attributeValueIds.includes(id)) && c.variant.images?.length) ||
+        availableCombinations.find((c) => c.attributeValueIds.includes(attributeValueId) && c.variant.images?.length);
+      if (withPhoto) setMainImage(withPhoto.variant.images[0]);
+    }
 
     // Find matching variant with all selected attribute values
     const selectedValueIds = Object.values(newSelections).sort();
@@ -371,40 +375,15 @@ export default function ProductContent({ slug }) {
 
   // Handle add to cart
   const handleAddToCart = async () => {
-    if (!selectedVariant) {
-      // If no variant is selected but product has variants, use the first one
-      if (product?.variants && product.variants.length > 0) {
-        setIsAddingToCart(true);
-        setCartSuccess(false);
-
-        try {
-          const result = await addVariantToCart(
-            product.variants[0],
-            quantity,
-            product.name
-          );
-          if (result.success) {
-            setCartSuccess(true);
-            // Clear success message after 3 seconds
-            setTimeout(() => {
-              setCartSuccess(false);
-            }, 3000);
-          }
-        } catch (err) {
-          console.error("Error adding to cart:", err);
-        } finally {
-          setIsAddingToCart(false);
-        }
-      }
-      return;
-    }
+    const variant = requireVariant();
+    if (!variant) return;
 
     setIsAddingToCart(true);
     setCartSuccess(false);
 
     try {
       const result = await addVariantToCart(
-        selectedVariant,
+        variant,
         quantity,
         product.name,
         selectedAddonIds
@@ -422,11 +401,8 @@ export default function ProductContent({ slug }) {
 
   // Handle buy now - add to cart and redirect to checkout
   const handleBuyNow = async () => {
-    const variantToUse = selectedVariant || (product?.variants && product.variants.length > 0 ? product.variants[0] : null);
-
-    if (!variantToUse) {
-      return;
-    }
+    const variantToUse = requireVariant();
+    if (!variantToUse) return;
 
     setIsAddingToCart(true);
 
@@ -434,7 +410,8 @@ export default function ProductContent({ slug }) {
       const result = await addVariantToCart(
         variantToUse,
         quantity,
-        product.name
+        product.name,
+        selectedAddonIds
       );
       if (result.success) {
         // Redirect to checkout
@@ -448,29 +425,58 @@ export default function ProductContent({ slug }) {
   };
 
   // Collect images and video to show based on variant priority
+  // Full gallery like Etsy: every listing photo + any variant-only photo, then videos.
   const getMediaToShow = useCallback(() => {
-    const images = selectedVariant?.images?.length > 0
-      ? selectedVariant.images
-      : product?.images?.length > 0
-        ? product.images
-        : [];
-    
-    // Format images to have isVideo: false
-    const media = images.map(img => ({ ...img, isVideo: false }));
+    const seen = new Set();
+    const media = [];
+    const push = (img) => {
+      if (!img?.url || seen.has(img.url)) return;
+      seen.add(img.url);
+      media.push({ ...img, isVideo: false });
+    };
+    (product?.images || []).forEach(push);
+    (product?.variants || []).forEach((v) => (v.images || []).forEach(push));
 
-    // Get video
-    const videoUrl = selectedVariant?.videoUrl || product?.videoUrl;
-    if (videoUrl) {
-      media.push({
-        url: videoUrl,
-        isVideo: true,
-        isPrimary: false,
-        id: "product-video-item"
-      });
-    }
-
+    [product?.videoUrl, product?.videoUrl2, selectedVariant?.videoUrl].forEach((url, i) => {
+      if (url && !seen.has(url)) {
+        seen.add(url);
+        media.push({ url, isVideo: true, isPrimary: false, id: `product-video-${i}` });
+      }
+    });
     return media;
   }, [selectedVariant, product]);
+
+  // Photo URL -> the single option it depicts (e.g. Colour: Silver), for the lightbox "Select this option".
+  const photoOptionMap = useMemo(() => {
+    const map = new Map();
+    if (!product?.attributeOptions?.length) return map;
+    const byUrl = new Map();
+    (product.variants || []).forEach((v) => {
+      const url = v.images?.[0]?.url;
+      if (!url) return;
+      if (!byUrl.has(url)) byUrl.set(url, []);
+      byUrl.get(url).push(v);
+    });
+    byUrl.forEach((variants, url) => {
+      for (const attr of product.attributeOptions) {
+        const ids = new Set(variants.map((v) => v.attributes?.find((a) => a.attributeId === attr.id)?.attributeValueId));
+        if (ids.size !== 1) continue;
+        const valueId = [...ids][0];
+        // linked = every variant with this option shows this photo first
+        const linked = product.variants
+          .filter((v) => v.attributes?.some((a) => a.attributeValueId === valueId))
+          .every((v) => v.images?.[0]?.url === url);
+        if (linked) {
+          const value = attr.values.find((x) => x.id === valueId);
+          if (value) {
+            map.set(url, { attributeId: attr.id, attributeName: attr.name, valueId, value: value.value, hexCode: value.hexCode, image: value.image });
+            break;
+          }
+        }
+      }
+    });
+    return map;
+  }, [product]);
 
   const openLightbox = useCallback((index) => {
     setLightboxIndex(index);
@@ -634,6 +640,34 @@ export default function ProductContent({ slug }) {
             <div className="absolute top-5 left-1/2 -translate-x-1/2 text-white/60 text-sm font-medium">
               {lightboxIndex + 1} / {mediaToShow.length}
             </div>
+
+            {(() => {
+              const linked = photoOptionMap.get(mediaToShow[lightboxIndex]?.url);
+              if (!linked) return null;
+              const isChosen = selectedAttributes[linked.attributeId] === linked.valueId;
+              return (
+                <div
+                  className="absolute left-4 top-14 z-10 flex flex-wrap items-center gap-3 rounded-full bg-black/60 px-4 py-2 text-sm text-white sm:left-6 sm:top-auto sm:bottom-6"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <span>
+                    Item in the photo is in <b>{linked.attributeName}: {linked.value}</b>
+                  </span>
+                  {linked.hexCode && <span className="h-5 w-5 rounded-full border border-white/60" style={{ backgroundColor: linked.hexCode }} />}
+                  <button
+                    type="button"
+                    disabled={isChosen}
+                    onClick={() => {
+                      handleAttributeChange(linked.attributeId, linked.valueId);
+                      closeLightbox();
+                    }}
+                    className="rounded-full border border-white px-4 py-1.5 font-semibold hover:bg-white hover:text-black disabled:opacity-60"
+                  >
+                    {isChosen ? "Selected" : "Select this option"}
+                  </button>
+                </div>
+              );
+            })()}
 
             {/* Zoom controls */}
             {!mediaToShow[lightboxIndex]?.isVideo && (
@@ -866,6 +900,27 @@ export default function ProductContent({ slug }) {
             </p>
           )}
           <p className="text-xs text-gray-500">Inclusive of all taxes</p>
+        </div>
+      );
+    }
+
+    // Options not fully chosen yet: show the starting price like Etsy ("₹21,200+")
+    if (product && hasOptions && product.priceRange) {
+      if (priceVisibilitySettings?.hidePricesForGuests && !isAuthenticated) {
+        return (
+          <div className="space-y-2">
+            <span className="text-3xl md:text-4xl font-bold text-gray-400">Login to view price</span>
+          </div>
+        );
+      }
+      const { min, max } = product.priceRange;
+      return (
+        <div className="space-y-1">
+          <span className="text-3xl md:text-4xl font-bold text-primary">
+            {formatCurrency(min)}
+            {max > min ? "+" : ""}
+          </span>
+          <p className="text-xs text-gray-500">Local taxes included (where applicable)</p>
         </div>
       );
     }
@@ -1145,89 +1200,90 @@ export default function ProductContent({ slug }) {
             </div>
           )}
 
-          {/* Dynamic Attribute Selection */}
-          {product.attributeOptions && product.attributeOptions.length > 0 && (
-            <div className="space-y-0 mb-8">
+          {/* Highlights (real listing data) */}
+          {(product.deliveryProfile || product.returnPolicy || product.processingMinDays != null || product.materials?.length > 0) && (
+            <ul className="mb-6 space-y-1.5 text-sm text-gray-800">
+              {product.deliveryProfile && (
+                <li className="flex items-center gap-2">
+                  <IconTruckDelivery size={18} className="text-[#3D1C02]" />
+                  {product.deliveryProfile.pricingType === "FREE" ? "Free delivery" : `Delivery ${formatCurrency(product.deliveryProfile.domesticCost)}`}
+                  {product.deliveryProfile.originPincode ? ` · Dispatched from ${product.deliveryProfile.originPincode}` : ""}
+                </li>
+              )}
+              {product.processingMinDays != null && product.processingMaxDays != null && (
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-[#3D1C02]" />
+                  Ready to dispatch in {product.processingMinDays}–{product.processingMaxDays} business days
+                </li>
+              )}
+              {product.returnPolicy && (
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-[#3D1C02]" />
+                  {product.returnPolicy.acceptReturns && product.returnPolicy.acceptExchanges
+                    ? "Returns & exchanges accepted"
+                    : product.returnPolicy.acceptReturns
+                      ? "Returns accepted"
+                      : product.returnPolicy.acceptExchanges
+                        ? "Exchanges accepted"
+                        : "Returns & exchanges not accepted"}
+                  {(product.returnPolicy.acceptReturns || product.returnPolicy.acceptExchanges) && ` · ${product.returnPolicy.windowDays} days`}
+                </li>
+              )}
+              {product.materials?.length > 0 && (
+                <li className="flex items-center gap-2">
+                  <IconPalette size={18} className="text-[#3D1C02]" />
+                  Materials: {product.materials.join(", ")}
+                </li>
+              )}
+              {product.whoMade && (
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-[#3D1C02]" />
+                  {product.whoMade === "I did" ? "Handmade by the seller" : product.whoMade === "A member of my shop" ? "Made by our workshop" : "Made by a production partner"}
+                  {product.whenMade ? ` · ${product.whenMade}` : ""}
+                </li>
+              )}
+            </ul>
+          )}
+
+          {/* Variation dropdowns (Etsy-style) */}
+          {hasOptions && (
+            <div className="mb-6 space-y-5">
               {product.attributeOptions.map((attribute) => {
-                const availableValues = getAvailableValuesForAttribute(attribute.id);
-                const selectedValueId = selectedAttributes[attribute.id];
-
+                const availableIds = new Set(getAvailableValuesForAttribute(attribute.id).map((v) => v.id));
+                const selectedValueId = selectedAttributes[attribute.id] || "";
+                const showError = selectionError === attribute.id;
                 return (
-                  <div key={attribute.id} className="py-6 border-t border-gray-200">
-                    <h3 className="text-xs font-semibold mb-4 text-gray-900 uppercase tracking-widest">
+                  <div key={attribute.id}>
+                    <label htmlFor={`option-${attribute.id}`} className="mb-2 block text-sm font-semibold uppercase tracking-wide text-gray-900">
                       {attribute.name}
-                    </h3>
-                    <div className="flex flex-wrap gap-3">
-                      {availableValues.length > 0 ? (
-                        availableValues.map((value) => {
-                          const isSelected = selectedValueId === value.id;
-                          const isAvailable = true; // Values are already filtered
-
-                          // Image swatch
-                          if (value.image) {
-                            return (
-                              <button
-                                key={value.id}
-                                onClick={() => isAvailable && handleAttributeChange(attribute.id, value.id)}
-                                disabled={!isAvailable}
-                                title={value.value}
-                                className={`relative flex flex-col items-center gap-1.5 group/swatch transition-all ${!isAvailable ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
-                              >
-                                <div className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${isSelected ? "border-[#3D1C02] ring-2 ring-[#3D1C02] ring-offset-1" : "border-gray-200 hover:border-[#3D1C02]"}`}>
-                                  <img src={value.image} alt={value.value} className="w-full h-full object-cover" />
-                                </div>
-                                <span className={`text-[10px] font-medium text-center leading-tight max-w-[64px] truncate ${isSelected ? "text-[#3D1C02]" : "text-gray-500"}`}>
-                                  {value.value}
-                                </span>
-                                {isSelected && <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#3D1C02] rounded-full flex items-center justify-center"><svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg></span>}
-                              </button>
-                            );
-                          }
-
-                          // HexCode color swatch
-                          if (value.hexCode) {
-                            return (
-                              <button
-                                key={value.id}
-                                onClick={() => isAvailable && handleAttributeChange(attribute.id, value.id)}
-                                disabled={!isAvailable}
-                                title={value.value}
-                                className={`relative flex flex-col items-center gap-1.5 transition-all ${!isAvailable ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
-                              >
-                                <div className={`w-10 h-10 rounded-full border-2 transition-all ${isSelected ? "border-[#3D1C02] ring-2 ring-[#3D1C02] ring-offset-1" : "border-gray-300 hover:border-[#3D1C02]"}`}
-                                  style={{ backgroundColor: value.hexCode }} />
-                                <span className={`text-[10px] font-medium text-center leading-tight max-w-[48px] truncate ${isSelected ? "text-[#3D1C02]" : "text-gray-500"}`}>
-                                  {value.value}
-                                </span>
-                                {isSelected && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-[#3D1C02] rounded-full flex items-center justify-center"><svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg></span>}
-                              </button>
-                            );
-                          }
-
-                          // Default text pill
+                    </label>
+                    <div className="relative">
+                      <select
+                        id={`option-${attribute.id}`}
+                        value={selectedValueId}
+                        onChange={(e) => handleAttributeChange(attribute.id, e.target.value)}
+                        className={`w-full appearance-none rounded-lg border bg-white px-4 py-3.5 pr-10 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#3D1C02] ${showError ? "border-red-600" : "border-gray-400"}`}
+                      >
+                        <option value="">Select an option</option>
+                        {attribute.values.map((value) => {
+                          const available = availableIds.has(value.id);
+                          const onlyThis = availableCombinations.filter((c) => c.attributeValueIds.includes(value.id));
+                          const prices = onlyThis.map((c) => parseFloat(c.variant.flashSalePrice ?? c.variant.salePrice ?? c.variant.price)).filter((n) => n > 0);
+                          const pMin = prices.length ? Math.min(...prices) : null;
+                          const pMax = prices.length ? Math.max(...prices) : null;
+                          const priceHint = product.attributeOptions.length === 1 && pMin != null
+                            ? ` (${formatCurrency(pMin)})`
+                            : pMin != null && pMin === pMax ? ` (${formatCurrency(pMin)})` : "";
                           return (
-                            <button
-                              key={value.id}
-                              className={`px-6 py-3 border text-sm font-medium transition-all ${isSelected
-                                ? "border-[#3D1C02] bg-[#3D1C02] text-white"
-                                : isAvailable
-                                  ? "border-gray-300 hover:border-[#3D1C02] text-gray-700 bg-white"
-                                  : "border-gray-200 text-gray-400 cursor-not-allowed"
-                                }`}
-                              onClick={() => isAvailable && handleAttributeChange(attribute.id, value.id)}
-                              disabled={!isAvailable}
-                              title={value.value}
-                            >
-                              {value.value}
-                            </button>
+                            <option key={value.id} value={value.id} disabled={!available}>
+                              {value.value}{available ? priceHint : " [Sold out]"}
+                            </option>
                           );
-                        })
-                      ) : (
-                        <p className="text-sm text-gray-500">
-                          No {attribute.name.toLowerCase()} options available
-                        </p>
-                      )}
+                        })}
+                      </select>
+                      <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-gray-700" />
                     </div>
+                    {showError && <p className="mt-1.5 text-sm font-medium text-red-600">Please select a {attribute.name.toLowerCase()}</p>}
                   </div>
                 );
               })}
@@ -1389,11 +1445,9 @@ export default function ProductContent({ slug }) {
               onClick={handleAddToCart}
               disabled={
                 isAddingToCart ||
+                !product?.variants?.length ||
                 (selectedVariant && selectedVariant.quantity < 1) ||
-                (!selectedVariant &&
-                  (!product?.variants ||
-                    product.variants.length === 0 ||
-                    product.variants[0].quantity < 1))
+                (!hasOptions && product.variants[0].quantity < 1)
               }
             >
               {isAddingToCart ? (

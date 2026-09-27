@@ -64,6 +64,9 @@ export default function CheckoutPage() {
   const [successAnimation, setSuccessAnimation] = useState(false);
   const [redirectCountdown, setRedirectCountdown] = useState(2); // Reduced from 3 to 2 seconds
   const [confettiCannon, setConfettiCannon] = useState(false);
+  const [intlQuote, setIntlQuote] = useState(null);
+  const [intlQuoteError, setIntlQuoteError] = useState("");
+  const isIntlMethod = paymentMethod === "PAYPAL" || paymentMethod === "PAYONEER";
 
   const rawTotals = getCartTotals();
   const totals = rawTotals;
@@ -230,6 +233,42 @@ export default function CheckoutPage() {
   // Load and render PayPal buttons when PayPal is selected
   // (No-op: PayPal now uses redirect flow. Buttons are rendered server-side via hosted checkout.)
 
+  // Returning from a cancelled PayPal / Payoneer payment
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("payment") === "cancelled") {
+      toast.info("Payment was cancelled. You have not been charged.");
+      params.delete("payment");
+      const qs = params.toString();
+      window.history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : ""));
+    }
+  }, []);
+
+  // Server-priced USD amount for PayPal / Payoneer (the exact amount the customer will pay)
+  useEffect(() => {
+    if (!isIntlMethod || !selectedAddressId || !isAuthenticated) {
+      setIntlQuote(null);
+      setIntlQuoteError("");
+      return;
+    }
+    let cancelled = false;
+    setIntlQuote(null);
+    setIntlQuoteError("");
+    fetchApi("/payment/intl/quote", {
+      method: "POST",
+      credentials: "include",
+      body: JSON.stringify({ shippingAddressId: selectedAddressId, couponCode: coupon?.code || null }),
+    })
+      .then((res) => {
+        if (cancelled) return;
+        if (res?.success) setIntlQuote(res.data);
+        else setIntlQuoteError(res?.message || "Could not calculate the USD amount");
+      })
+      .catch((err) => !cancelled && setIntlQuoteError(err?.message || "Could not calculate the USD amount"));
+    return () => { cancelled = true; };
+  }, [isIntlMethod, selectedAddressId, isAuthenticated, coupon?.code, cart.subtotal, cart.totalQuantity]);
+
   // Handle address selection
   const handleAddressSelect = (id) => {
     setSelectedAddressId(id);
@@ -364,8 +403,6 @@ export default function CheckoutPage() {
             shippingAddressId: selectedAddressId,
             billingAddressSameAsShipping: true,
             couponCode: coupon?.code || null,
-            couponId: coupon?.id || null,
-            discountAmount: totals.discount || 0,
             selectedCourierId: null,
             selectedShippingCharge: undefined,
           }),
@@ -395,18 +432,13 @@ export default function CheckoutPage() {
           return;
         }
         try {
-          const paypalAmount = Math.max(
-            parseFloat(((totals.subtotal - totals.discount) / paymentSettings.usdExchangeRate).toFixed(2)),
-            0.01
-          );
           toast.loading("Redirecting to PayPal...", { id: "paypal-redirect" });
           const createRes = await fetchApi("/payment/paypal/create-order", {
             method: "POST",
             credentials: "include",
             body: JSON.stringify({
-              amount: paypalAmount.toFixed(2),
-              currency: "USD",
               shippingAddressId: selectedAddressId,
+              couponCode: coupon?.code || null,
             }),
           });
           toast.dismiss("paypal-redirect");
@@ -418,6 +450,7 @@ export default function CheckoutPage() {
           // Redirect user to PayPal hosted checkout (works in all countries, including India live mode)
           window.location.href = approveLink;
         } catch (err) {
+          toast.dismiss("paypal-redirect");
           toast.error(err?.message || "PayPal redirect failed. Please try again.");
           setProcessing(false);
         }
@@ -425,30 +458,22 @@ export default function CheckoutPage() {
       } else if (paymentMethod === "PAYONEER") {
         // Payoneer — create payment session → redirect to Payoneer hosted page
         try {
-          const payoneerAmount = Math.max(
-            parseFloat(((totals.subtotal - totals.discount) / paymentSettings.usdExchangeRate).toFixed(2)),
-            0.01
-          );
-          toast.loading("Creating Payoneer payment...", { id: "payoneer-create" });
+          toast.loading("Redirecting to Payoneer...", { id: "payoneer-create" });
           const createRes = await fetchApi("/payment/payoneer/create-payment", {
             method: "POST",
             credentials: "include",
             body: JSON.stringify({
-              amount: payoneerAmount.toFixed(2),
-              currency: "USD",
               shippingAddressId: selectedAddressId,
+              couponCode: coupon?.code || null,
             }),
           });
           toast.dismiss("payoneer-create");
-          if (!createRes?.success) throw new Error(createRes?.message || "Payoneer init failed");
-          if (createRes.data.manualInstructions) {
-            // Payoneer not fully configured — show manual instructions
-            toast.info("Please transfer payment via Payoneer to Program ID: " + createRes.data.programId + ". Contact us after transfer.", { duration: 10000 });
-            setProcessing(false);
-          } else if (createRes.data.redirectUrl) {
-            window.location.href = createRes.data.redirectUrl;
+          if (!createRes?.success || !createRes.data?.redirectUrl) {
+            throw new Error(createRes?.message || "Payoneer checkout could not be started");
           }
+          window.location.href = createRes.data.redirectUrl;
         } catch (err) {
+          toast.dismiss("payoneer-create");
           toast.error(err?.message || "Payoneer payment failed");
           setProcessing(false);
         }
@@ -482,14 +507,10 @@ export default function CheckoutPage() {
         const orderResponse = await fetchApi("/payment/checkout", {
           method: "POST",
           credentials: "include",
+          // Amount is calculated on the server from the cart; only the address and coupon are sent
           body: JSON.stringify({
-            amount,
-            currency: "INR",
-            paymentGateway: "RAZORPAY",
-            // Include coupon information for proper tracking
+            shippingAddressId: selectedAddressId,
             couponCode: coupon?.code || null,
-            couponId: coupon?.id || null,
-            discountAmount: totals.discount || 0,
           }),
         });
 
@@ -572,24 +593,9 @@ export default function CheckoutPage() {
                 method: "POST",
                 credentials: "include",
                 body: JSON.stringify({
-                  // Send both formats to ensure compatibility
                   razorpay_order_id: response.razorpay_order_id,
                   razorpay_payment_id: response.razorpay_payment_id,
                   razorpay_signature: response.razorpay_signature,
-                  // Also send camelCase versions
-                  razorpayOrderId: response.razorpay_order_id,
-                  razorpayPaymentId: response.razorpay_payment_id,
-                  razorpaySignature: response.razorpay_signature,
-                  // Include shipping and coupon information
-                  shippingAddressId: selectedAddressId,
-                  billingAddressSameAsShipping: true,
-                  // Also pass coupon information again to ensure it's included
-                  couponCode: coupon?.code || null,
-                  couponId: coupon?.id || null,
-                  discountAmount: totals.discount || 0,
-                  notes: "",
-                  selectedCourierId: null,
-                  selectedShippingCharge: undefined,
                 }),
               });
 
@@ -959,7 +965,7 @@ export default function CheckoutPage() {
               Payment Method
             </h2>
 
-            {!paymentSettings.cashEnabled && !paymentSettings.razorpayEnabled ? (
+            {!paymentSettings.cashEnabled && !paymentSettings.razorpayEnabled && !(paymentSettings.paypalEnabled && paypalClientId) && !paymentSettings.payoneerEnabled ? (
               <div className="border rounded-md p-4 bg-yellow-50 border-yellow-200">
                 <p className="text-sm text-yellow-800">
                   No payment methods are currently available. Please contact support or try again later.
@@ -1289,6 +1295,27 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
+              {isIntlMethod && selectedAddressId && (
+                <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
+                  {intlQuoteError ? (
+                    <span className="text-red-600">{intlQuoteError}</span>
+                  ) : intlQuote ? (
+                    <>
+                      <div className="flex justify-between font-semibold">
+                        <span>You pay</span>
+                        <span>USD {Number(intlQuote.amountUsd).toFixed(2)}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-blue-700">
+                        {formatCurrency(intlQuote.total)} at 1 USD = ₹{intlQuote.exchangeRate}
+                        {intlQuote.total !== Math.round(totals.total) && " (updated to current prices)"}
+                      </p>
+                    </>
+                  ) : (
+                    <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Calculating USD amount…</span>
+                  )}
+                </div>
+              )}
+
               {paymentMethod === "PAYPAL" ? (
                 <div className="mt-6">
                   {!selectedAddressId ? (
@@ -1298,7 +1325,7 @@ export default function CheckoutPage() {
                   ) : (
                     <button
                       onClick={handleCheckout}
-                      disabled={processing}
+                      disabled={processing || !intlQuote}
                       className="w-full bg-[#0070BA] hover:bg-[#003087] text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
                     >
                       {processing ? (
@@ -1314,7 +1341,7 @@ export default function CheckoutPage() {
                           <svg viewBox="0 0 24 24" className="h-5 w-5 fill-white" xmlns="http://www.w3.org/2000/svg">
                             <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a3.35 3.35 0 0 0-.607-.541c-.013.076-.026.175-.041.254-.93 4.778-4.005 7.201-9.138 7.201h-2.19a.563.563 0 0 0-.556.479l-1.187 7.527h-.506l-.24 1.516a.56.56 0 0 0 .554.647h3.882c.46 0 .85-.334.922-.788.06-.26.76-4.852.816-5.09a.932.932 0 0 1 .923-.788h.58c3.76 0 6.705-1.528 7.565-5.946.36-1.847.174-3.388-.777-4.471z"/>
                           </svg>
-                          <span>Pay with PayPal • USD ${Math.max(parseFloat(((totals.subtotal - totals.discount) / paymentSettings.usdExchangeRate).toFixed(2)), 0.01).toFixed(2)}</span>
+                          <span>Pay with PayPal{intlQuote ? ` • USD ${Number(intlQuote.amountUsd).toFixed(2)}` : ""}</span>
                         </>
                       )}
                     </button>
@@ -1329,6 +1356,7 @@ export default function CheckoutPage() {
                   onClick={handleCheckout}
                   disabled={
                     processing ||
+                    (paymentMethod === "PAYONEER" && !intlQuote) ||
                     !selectedAddressId ||
                     !paymentMethod ||
                     addresses.length === 0
@@ -1341,10 +1369,16 @@ export default function CheckoutPage() {
                     </span>
                   ) : (
                     <span className="flex items-center justify-center">
-                      <IndianRupee className="mr-2 h-4 w-4" />
-                      Place Order •{" "}
-                      {formatCurrency(
-                        totals.total + (paymentMethod === "CASH" ? (paymentSettings.codCharge || 0) : 0)
+                      {paymentMethod === "PAYONEER" ? (
+                        <>Pay with Payoneer{intlQuote ? ` • USD ${Number(intlQuote.amountUsd).toFixed(2)}` : ""}</>
+                      ) : (
+                        <>
+                          <IndianRupee className="mr-2 h-4 w-4" />
+                          Place Order •{" "}
+                          {formatCurrency(
+                            totals.total + (paymentMethod === "CASH" ? (paymentSettings.codCharge || 0) : 0)
+                          )}
+                        </>
                       )}
                     </span>
                   )}

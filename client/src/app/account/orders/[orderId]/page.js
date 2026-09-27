@@ -728,7 +728,13 @@ export default function OrderDetailsPage({ params }) {
                         {order.paymentStatus || (order.paypalCaptureId ? "PAID" : order.status)}
                       </span>
                     </div>
-                    {order.paymentId && (
+                    {order.paidAmount != null && order.paymentCurrency && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Amount paid</span>
+                        <span className="font-medium text-gray-900">{order.paymentCurrency} {Number(order.paidAmount).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {order.paymentId && order.paymentId !== order.paypalCaptureId && (
                       <div>
                         <span className="text-gray-400 text-xs">Payment ID</span>
                         <p className="font-mono text-xs text-gray-600 break-all mt-0.5">{order.paymentId}</p>

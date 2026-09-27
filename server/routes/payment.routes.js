@@ -10,11 +10,13 @@ import {
   cancelOrder,
   createCashOrder,
   phonePeCallback,
+  razorpayWebhook,
 } from "../controllers/payment.controller.js";
 import {
   getPayPalClientId,
   createPayPalOrder,
   capturePayPalPayment,
+  getIntlQuote,
 } from "../controllers/paypal.controller.js";
 import {
   getPayoneerSettings,
@@ -31,18 +33,25 @@ router.get("/settings", getPaymentSettings);
 // PhonePe callback (public route - called by PhonePe)
 router.post("/phonepe-callback", phonePeCallback);
 
+// Razorpay webhook (public, signature-verified)
+router.post("/razorpay/webhook", razorpayWebhook);
+
 // PayPal client ID (public — needed to init PayPal JS SDK on frontend)
 router.get("/paypal/client-id", getPayPalClientId);
 
 // Payoneer public endpoints
 router.get("/payoneer/settings", getPayoneerSettings);
 router.post("/payoneer/webhook", payoneerWebhook);
+router.get("/payoneer/webhook", payoneerWebhook);
 
 // All other payment routes require authentication
 router.use(verifyJWTToken);
 
 // Get Razorpay key
 router.get("/razorpay-key", getRazorpayKey);
+
+// International checkout (server-priced USD amount)
+router.post("/intl/quote", getIntlQuote);
 
 // PayPal
 router.post("/paypal/create-order", createPayPalOrder);

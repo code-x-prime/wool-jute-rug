@@ -9,12 +9,12 @@ import { getOrderConfirmationTemplate } from "../email/temp/EmailTemplate.js";
 import { getFileUrl } from "../utils/deleteFromS3.js";
 import { processReferralReward } from "./referral.controller.js";
 import { decrypt } from "../utils/encryption.js";
-import { processOrderForShipping } from "../utils/shiprocket.js";
 import { getStoreConfigFromDb } from "../utils/storeConfig.js";
 import { applyFlashSalePrice } from "../utils/flashSaleHelpers.js";
+import { buildIntlQuote, createOrderFromSession, findDuplicateOrder, DuplicatePaymentError } from "../utils/intlCheckout.js";
 
 
-async function getPaymentGatewayConfig(userId = null, gateway = "RAZORPAY") {
+export async function getPaymentGatewayConfig(userId = null, gateway = "RAZORPAY") {
 
   let paymentSettings;
 
@@ -225,674 +225,202 @@ export const getRazorpayKey = asyncHandler(async (req, res) => {
     );
 });
 
-// Create Razorpay order
-export const checkout = asyncHandler(async (req, res) => {
-  const {
-    amount,
-    currency = "INR",
-    couponCode,
-    couponId,
-    discountAmount,
-    paymentGateway = "RAZORPAY", // Default to RAZORPAY
-  } = req.body;
-  const userId = req.user.id;
+// ─── Razorpay ─────────────────────────────────────────────────────────────────
+// 1. checkout: server prices the cart, stores a payment session, creates a Razorpay order for exactly that amount.
+// 2. verify (browser) and webhook (Razorpay) both call settleRazorpaySession — the first one creates the order,
+//    the other finds it. Amount, currency and order id are checked against Razorpay's own payment record.
 
-  if (!amount || amount < 1) {
-    throw new ApiError(400, "Valid amount is required");
+const razorpayMode = (config) =>
+  String(config.paymentSettings.razorpayKeyId || "").startsWith("rzp_test") ? "sandbox" : "live";
+
+export async function settleRazorpaySession(session, config, { paymentId, signature } = {}) {
+  const rz = config.razorpayInstance;
+  let payment;
+  if (paymentId) {
+    payment = await rz.payments.fetch(paymentId);
+  } else {
+    const list = await rz.orders.fetchPayments(session.providerRef);
+    payment = list.items?.find((p) => p.status === "captured") || list.items?.find((p) => p.status === "authorized");
+  }
+  if (!payment) throw new ApiError(402, "Razorpay has no successful payment for this order yet");
+  if (payment.order_id !== session.providerRef) throw new ApiError(400, "Payment does not belong to this checkout");
+
+  const expected = Math.round(parseFloat(session.amountInr) * 100);
+  if (payment.currency !== "INR" || payment.amount !== expected) {
+    await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { status: "FAILED", providerStatus: "AMOUNT_MISMATCH" } });
+    console.error(`Razorpay mismatch: session ${session.id} paid ${payment.amount} ${payment.currency}, expected ${expected} INR (payment ${payment.id})`);
+    throw new ApiError(400, "Payment amount did not match your order. Please contact support.");
+  }
+
+  // Same payment already turned into an order (verify + webhook race, page refresh)
+  const existing = await prisma.razorpayPayment.findUnique({ where: { razorpayPaymentId: payment.id }, include: { order: true } });
+  if (existing) return existing.order;
+
+  if (payment.status === "authorized") {
+    // Don't capture money for items that were already ordered elsewhere; Razorpay voids uncaptured payments.
+    const duplicate = await findDuplicateOrder(session);
+    if (duplicate) {
+      await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { status: "FAILED", providerStatus: "DUPLICATE_NOT_CAPTURED" } });
+      throw new ApiError(409, `You already placed order #${duplicate.orderNumber} for these items, so this payment was not captured and will be released by your bank.`);
+    }
+    payment = await rz.payments.capture(payment.id, expected, "INR");
+  }
+  if (payment.status !== "captured") {
+    await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { providerStatus: payment.status } });
+    throw new ApiError(402, `Payment is ${payment.status}. You have not been charged.`);
   }
 
   try {
-    // Get payment gateway config from DB (use order owner's keys)
-    // For now, using the user's own keys. Later can be extended for multi-merchant
-    const paymentConfig = await getPaymentGatewayConfig(userId, paymentGateway);
-
-    // Support RAZORPAY only (PhonePe temporarily disabled)
-    if (paymentGateway.toUpperCase() !== "RAZORPAY") {
-      throw new ApiError(400, "Only RAZORPAY is currently supported for checkout");
-    }
-
-    // Check if user has any previous canceled orders that might cause issues
-    const existingCanceledOrders = await prisma.order.findMany({
-      where: {
-        userId,
-        status: "CANCELLED",
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-      take: 1,
+    const { order } = await createOrderFromSession(session.id, {
+      status: "PAID",
+      paymentMethod: "RAZORPAY",
+      reference: session.providerRef,
+      paidAmount: payment.amount / 100,
+      afterCreate: (tx, order) =>
+        tx.razorpayPayment.create({
+          data: {
+            orderId: order.id,
+            amount: (payment.amount / 100).toString(),
+            razorpayOrderId: session.providerRef,
+            razorpayPaymentId: payment.id,
+            razorpaySignature: signature || null,
+            status: "CAPTURED",
+            paymentMethod: mapRazorpayMethod(payment.method),
+            notes: payment,
+          },
+        }),
     });
-
-    if (existingCanceledOrders.length > 0) {
-      // Log information about canceled orders
-      console.log("User has canceled orders, proceeding with clean checkout");
+    return order;
+  } catch (err) {
+    if (err?.code === "P2002") {
+      const again = await prisma.razorpayPayment.findUnique({ where: { razorpayPaymentId: payment.id }, include: { order: true } });
+      if (again) return again.order;
     }
-
-    // Generate a short receipt ID (must be ≤ 40 chars for Razorpay)
-    // Use a short timestamp and last 4 chars of userId
-    const shortUserId = userId.slice(-4);
-    const timestamp = Date.now().toString().slice(-10);
-    const receipt = `rcpt_${timestamp}_${shortUserId}`;
-
-    // Store coupon information in the receipt notes
-    const notes = {};
-    if (couponCode) {
-      notes.couponCode = couponCode;
+    if (!(err instanceof DuplicatePaymentError)) throw err;
+    // Captured money for items that were already ordered — refund it in full.
+    try {
+      const refund = await rz.payments.refund(payment.id, { amount: payment.amount, notes: { reason: "Duplicate payment", session: session.id } });
+      await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { status: "FAILED", providerStatus: `DUPLICATE_REFUNDED:${refund.id}` } });
+      throw new ApiError(409, `You already placed order #${err.duplicateOf.orderNumber} for these items. This duplicate payment has been refunded.`);
+    } catch (refundErr) {
+      if (refundErr instanceof ApiError) throw refundErr;
+      await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { status: "FAILED", providerStatus: "DUPLICATE_REFUND_FAILED" } });
+      console.error(`MANUAL REFUND NEEDED: Razorpay payment ${payment.id} duplicates order ${err.duplicateOf.orderNumber}`, refundErr);
+      throw new ApiError(409, `You already placed order #${err.duplicateOf.orderNumber} for these items. Please contact support to refund this duplicate payment (${payment.id}).`);
     }
-    if (couponId) {
-      notes.couponId = couponId;
-    }
-    if (discountAmount && discountAmount > 0) {
-      notes.discountAmount = discountAmount;
-    }
-    // Store payment gateway info in notes
-    notes.paymentGateway = paymentConfig.paymentSettings.gateway;
-    notes.paymentMode = paymentConfig.paymentSettings.mode;
-    notes.paymentOwnerId = paymentConfig.paymentSettings.userId;
-
-    // Ensure amount has 2 decimal places for precise calculation
-    // Then convert to paise (multiply by 100) and ensure it's an integer
-    const decimalAmount = parseFloat(parseFloat(amount).toFixed(2));
-    const amountInPaise = Math.round(decimalAmount * 100);
-
-    const options = {
-      amount: amountInPaise, // Razorpay takes amount in paise as integer
-      currency,
-      receipt: receipt,
-      notes: Object.keys(notes).length > 0 ? notes : undefined,
-    };
-
-    const order = await paymentConfig.razorpayInstance.orders.create(options);
-
-    if (!order) {
-      throw new ApiError(500, "Error creating Razorpay order");
-    }
-
-    // Store the coupon information in the response
-    const responseData = {
-      ...order,
-      couponData: Object.keys(notes).length > 0 ? notes : null,
-    };
-
-    res
-      .status(200)
-      .json(new ApiResponsive(200, responseData, "Order created successfully"));
-  } catch (error) {
-    console.error("Razorpay order creation error:", error);
-
-    // Format error response properly
-    let errorMessage = "Error creating Razorpay order";
-    let errorDetails = [];
-
-    if (error.error && error.error.description) {
-      errorMessage = error.error.description;
-    } else if (error.message) {
-      errorMessage = error.message;
-    }
-
-    throw new ApiError(500, errorMessage, errorDetails);
   }
+}
+
+// Create Razorpay order for the server-priced cart
+export const checkout = asyncHandler(async (req, res) => {
+  const { shippingAddressId, couponCode } = req.body;
+  const userId = req.user.id;
+  if (!shippingAddressId) throw new ApiError(400, "Shipping address is required");
+
+  const paymentSettings = await prisma.paymentSettings.findFirst();
+  if (!paymentSettings?.razorpayEnabled) throw new ApiError(400, "Online payment is not enabled");
+
+  const config = await getPaymentGatewayConfig(userId, "RAZORPAY");
+  const { quote } = await buildIntlQuote(userId, shippingAddressId, couponCode, { currency: "INR" });
+
+  const session = await prisma.intlPaymentSession.create({
+    data: {
+      provider: "RAZORPAY",
+      mode: razorpayMode(config),
+      userId,
+      shippingAddressId,
+      quote,
+      amountInr: quote.total,
+      amountUsd: quote.amountUsd,
+      currency: "INR",
+    },
+  });
+
+  let rzOrder;
+  try {
+    rzOrder = await config.razorpayInstance.orders.create({
+      amount: Math.round(quote.total * 100),
+      currency: "INR",
+      receipt: session.id.slice(0, 40),
+      notes: { sessionId: session.id, userId },
+    });
+  } catch (error) {
+    await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { status: "FAILED", providerStatus: "CREATE_FAILED" } });
+    throw new ApiError(502, error?.error?.description || error?.message || "Could not start Razorpay payment");
+  }
+
+  await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { providerRef: rzOrder.id, providerStatus: rzOrder.status } });
+
+  res.status(200).json(new ApiResponsive(200, {
+    id: rzOrder.id,
+    amount: rzOrder.amount,
+    currency: rzOrder.currency,
+    total: quote.total,
+  }, "Order created successfully"));
 });
 
-// Verify payment and create order
+// Verify payment signature and create the order
 export const paymentVerification = asyncHandler(async (req, res) => {
-  // Extract parameters with fallbacks for both snake_case and camelCase formats
-  const razorpay_order_id =
-    req.body.razorpay_order_id || req.body.razorpayOrderId;
-  const razorpay_payment_id =
-    req.body.razorpay_payment_id || req.body.razorpayPaymentId;
-  const razorpay_signature =
-    req.body.razorpay_signature || req.body.razorpaySignature;
-  const {
-    shippingAddressId,
-    billingAddressSameAsShipping = true,
-    billingAddress,
-    couponCode: requestCouponCode,
-    couponId: requestCouponId,
-    discountAmount: requestDiscount,
-    notes,
-    selectedCourierId,
-    selectedShippingCharge,
-  } = req.body;
+  const razorpay_order_id = req.body.razorpay_order_id || req.body.razorpayOrderId;
+  const razorpay_payment_id = req.body.razorpay_payment_id || req.body.razorpayPaymentId;
+  const razorpay_signature = req.body.razorpay_signature || req.body.razorpaySignature;
+  const userId = req.user.id;
 
-  // Validation
   if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
     throw new ApiError(400, "Missing payment details");
   }
 
-  if (!shippingAddressId) {
-    throw new ApiError(400, "Shipping address is required");
+  const session = await prisma.intlPaymentSession.findUnique({ where: { providerRef: razorpay_order_id } });
+  if (!session || session.userId !== userId || session.provider !== "RAZORPAY") {
+    throw new ApiError(404, "Payment not found");
   }
 
-
-  const userId = req.user.id;
-  let paymentConfig;
-  let paymentGateway = "RAZORPAY";
-  let paymentMode = "TEST";
-  let paymentOwnerId = userId;
-
-  try {
-    // Try to get payment gateway from request body or default to RAZORPAY
-    paymentGateway = req.body.paymentGateway || "RAZORPAY";
-    paymentConfig = await getPaymentGatewayConfig(userId, paymentGateway);
-    paymentMode = paymentConfig.paymentSettings.mode;
-    paymentOwnerId = paymentConfig.paymentSettings.userId;
-  } catch (error) {
-    throw new ApiError(400, error.message || "Payment gateway not configured");
-  }
-
-  // Verify signature using DB key
-  const body = razorpay_order_id + "|" + razorpay_payment_id;
+  const config = await getPaymentGatewayConfig(userId, "RAZORPAY");
   const expectedSignature = crypto
-    .createHmac("sha256", paymentConfig.paymentSettings.razorpayKeySecret)
-    .update(body.toString())
+    .createHmac("sha256", config.paymentSettings.razorpayKeySecret)
+    .update(`${razorpay_order_id}|${razorpay_payment_id}`)
     .digest("hex");
-
-  if (expectedSignature !== razorpay_signature) {
+  const given = Buffer.from(String(razorpay_signature));
+  const wanted = Buffer.from(expectedSignature);
+  if (given.length !== wanted.length || !crypto.timingSafeEqual(given, wanted)) {
     throw new ApiError(400, "Invalid payment signature");
   }
 
+  if (session.orderId) {
+    const order = await prisma.order.findUnique({ where: { id: session.orderId } });
+    return res.status(200).json(new ApiResponsive(200, { orderId: order.id, orderNumber: order.orderNumber, alreadyProcessed: true }, "Payment already verified"));
+  }
+
+  const order = await settleRazorpaySession(session, config, { paymentId: razorpay_payment_id, signature: razorpay_signature });
+  res.status(200).json(new ApiResponsive(200, { orderId: order.id, orderNumber: order.orderNumber }, "Payment verified and order created successfully"));
+});
+
+// Razorpay webhook — creates the order even if the customer closed the browser after paying.
+export const razorpayWebhook = asyncHandler(async (req, res) => {
+  const settings = await prisma.siteSettings.findFirst({ select: { razorpayWebhookSecret: true } });
+  if (!settings?.razorpayWebhookSecret) return res.status(200).json({ ignored: "webhook secret not configured" });
+
+  const secret = settings.razorpayWebhookSecret.startsWith("enc:")
+    ? decrypt(settings.razorpayWebhookSecret.slice(4))
+    : settings.razorpayWebhookSecret;
+  const signature = String(req.headers["x-razorpay-signature"] || "");
+  const expected = crypto.createHmac("sha256", secret).update(req.rawBody || Buffer.from("")).digest("hex");
+  if (!signature || signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
+    return res.status(400).json({ error: "invalid signature" });
+  }
+
+  const event = req.body?.event;
+  const entity = req.body?.payload?.payment?.entity;
+  res.status(200).json({ received: true });
+
+  if (!["payment.captured", "payment.authorized", "order.paid"].includes(event) || !entity?.order_id) return;
   try {
-    // Check if payment already processed
-    const existingPayment = await prisma.razorpayPayment.findUnique({
-      where: { razorpayPaymentId: razorpay_payment_id },
-    });
-
-    if (existingPayment) {
-      throw new ApiError(400, "Payment already processed");
-    }
-
-    // Check for cancelled orders with this Razorpay order ID
-    const cancelledOrder = await prisma.razorpayPayment.findFirst({
-      where: {
-        razorpayOrderId: razorpay_order_id,
-        order: {
-          status: "CANCELLED",
-        },
-      },
-      include: {
-        order: true,
-      },
-    });
-
-    if (cancelledOrder) {
-      console.log(
-        `Detected payment for previously cancelled order: ${cancelledOrder.order.orderNumber}`
-      );
-      throw new ApiError(
-        400,
-        "This order was previously cancelled. Please start a new checkout process."
-      );
-    }
-
-    if (!razorpay_signature) {
-      throw new ApiError(400, "Razorpay signature is missing");
-    }
-
-    // Get user's cart items
-    const userId = req.user.id;
-    const cartItems = await prisma.cartItem.findMany({
-      where: { userId },
-      include: {
-        addons: { include: { addonService: true } },
-        productVariant: {
-          include: {
-            product: {
-              include: {
-                images: {
-                  where: { isPrimary: true },
-                  take: 1,
-                },
-                pricingSlabs: {
-                  orderBy: { minQty: 'desc' }
-                }
-              },
-            },
-            attributes: {
-              include: {
-                attributeValue: {
-                  include: {
-                    attribute: true,
-                  },
-                },
-              },
-            },
-            pricingSlabs: {
-              orderBy: { minQty: 'desc' }
-            }
-          },
-        },
-      },
-    });
-
-    if (!cartItems.length) {
-      throw new ApiError(400, "No items in cart");
-    }
-
-    // Check if user has an active coupon
-    const userCoupon = await prisma.userCoupon.findFirst({
-      where: {
-        userId,
-        isActive: true,
-      },
-      include: {
-        coupon: true,
-      },
-    });
-
-    // Verify shipping address
-    const shippingAddress = await prisma.address.findFirst({
-      where: {
-        id: shippingAddressId,
-        userId,
-      },
-    });
-
-    if (!shippingAddress) {
-      throw new ApiError(404, "Shipping address not found");
-    }
-
-    // Calculate order totals
-    let subTotal = 0;
-    let tax = 0; // Tax is now set to 0
-    let shippingCost = 0;
-    let discount = 0;
-    let couponCode = null;
-    let couponId = null;
-
-    const calculateEffectivePriceRazorpay = async (variant, quantity) => {
-      const qty = parseInt(quantity);
-      let basePrice = parseFloat(variant.salePrice || variant.price);
-      const flashSale = await applyFlashSalePrice(basePrice, variant.productId);
-      if (flashSale.hasFlashSale) basePrice = flashSale.price;
-      if (variant.pricingSlabs && variant.pricingSlabs.length > 0) {
-        const match = variant.pricingSlabs.find(slab =>
-          qty >= slab.minQty && (slab.maxQty === null || qty <= slab.maxQty)
-        );
-        if (match) return parseFloat(match.price);
-      }
-      if (variant.product.pricingSlabs && variant.product.pricingSlabs.length > 0) {
-        const match = variant.product.pricingSlabs.find(slab =>
-          qty >= slab.minQty && (slab.maxQty === null || qty <= slab.maxQty)
-        );
-        if (match) return parseFloat(match.price);
-      }
-      return basePrice;
-    };
-
-      for (const item of cartItems) {
-        const variant = item.productVariant;
-        const price = Math.round(await calculateEffectivePriceRazorpay(variant, item.quantity));
-        const itemTotal = Math.round(price * item.quantity);
-        subTotal += itemTotal;
-
-      if (variant.quantity < item.quantity) {
-        throw new ApiError(400, `Not enough stock for ${variant.product.name}`);
-      }
-    }
-
-    const shiprocketSettings = await prisma.shiprocketSettings.findFirst();
-    if (shiprocketSettings) {
-      const threshold = parseFloat(shiprocketSettings.freeShippingThreshold || 0);
-      const charge = parseFloat(shiprocketSettings.shippingCharge || 0);
-
-      if (threshold > 0 && subTotal >= threshold) {
-        shippingCost = 0;
-      } else if (selectedShippingCharge !== undefined && selectedShippingCharge !== null) {
-        const clientCharge = parseFloat(selectedShippingCharge);
-        shippingCost = !isNaN(clientCharge) && clientCharge >= 0 && clientCharge <= 10000 ? clientCharge : charge;
-      } else {
-        shippingCost = charge;
-      }
-    }
-
-    if (userCoupon && userCoupon.coupon) {
-      couponCode = userCoupon.coupon.code;
-      couponId = userCoupon.coupon.id;
-
-      // Calculate discount based on coupon type
-      if (userCoupon.coupon.discountType === "PERCENTAGE") {
-        // Calculate percentage discount with cap if needed
-        let discountPercentage = parseFloat(userCoupon.coupon.discountValue);
-
-        if (discountPercentage > 90 || userCoupon.coupon.isDiscountCapped) {
-          discountPercentage = Math.min(discountPercentage, 90);
-        }
-
-        discount = (subTotal * discountPercentage) / 100;
-      } else {
-        // Fixed amount discount, not exceeding subtotal
-        discount = Math.min(
-          parseFloat(userCoupon.coupon.discountValue),
-          subTotal
-        );
-      }
-
-      // After successful order, deactivate the coupon for this user
-      // We'll do this in the transaction to ensure it only happens if order is created
-    }
-    // If no userCoupon but we have coupon info stored in the Razorpay order, use that
-    else {
-      try {
-        // First check if direct coupon info was provided in the request
-        if (requestCouponCode || requestCouponId || requestDiscount) {
-          if (requestCouponCode) couponCode = requestCouponCode;
-          if (requestCouponId) couponId = requestCouponId;
-          if (requestDiscount) discount = parseFloat(requestDiscount);
-        }
-        // Fallback to Razorpay order notes
-        else {
-          // Fetch the Razorpay order to get notes using DB keys
-          const razorpayOrderDetails = await paymentConfig.razorpayInstance.orders.fetch(
-            razorpay_order_id
-          );
-
-          if (razorpayOrderDetails.notes) {
-            // Get coupon information from notes
-            if (razorpayOrderDetails.notes.couponCode) {
-              couponCode = razorpayOrderDetails.notes.couponCode;
-            }
-
-            if (razorpayOrderDetails.notes.couponId) {
-              couponId = razorpayOrderDetails.notes.couponId;
-            }
-
-            if (razorpayOrderDetails.notes.discountAmount) {
-              discount = parseFloat(razorpayOrderDetails.notes.discountAmount);
-            }
-
-            // Get payment gateway info from notes
-            if (razorpayOrderDetails.notes.paymentGateway) {
-              paymentGateway = razorpayOrderDetails.notes.paymentGateway;
-            }
-            if (razorpayOrderDetails.notes.paymentMode) {
-              paymentMode = razorpayOrderDetails.notes.paymentMode;
-            }
-            if (razorpayOrderDetails.notes.paymentOwnerId) {
-              paymentOwnerId = razorpayOrderDetails.notes.paymentOwnerId;
-            }
-          }
-        }
-
-        // If we have couponId but no couponCode or vice versa, try to get the missing information
-        if (couponId && !couponCode) {
-          const coupon = await prisma.coupon.findUnique({
-            where: { id: couponId },
-          });
-          if (coupon) {
-            couponCode = coupon.code;
-          }
-        } else if (couponCode && !couponId) {
-          const coupon = await prisma.coupon.findUnique({
-            where: { code: couponCode },
-          });
-          if (coupon) {
-            couponId = coupon.id;
-          }
-        }
-      } catch (err) {
-        console.log("Error processing coupon information:", err);
-        // Continue with the process, just without coupon info
-      }
-    }
-
-    // Tax is 0% now
-    tax = 0;
-
-    // Generate order number (use SiteSettings.orderPrefix when available)
-    const siteSettingsOrderNum = await prisma.siteSettings.findFirst();
-    const orderPrefix = siteSettingsOrderNum?.orderPrefix || "ORD";
-    const orderNumber = `${orderPrefix}-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
-
-    // Get Razorpay payment details using DB keys
-    const razorpayPaymentDetails = await paymentConfig.razorpayInstance.payments.fetch(
-      razorpay_payment_id
-    );
-    const paymentMethod = mapRazorpayMethod(razorpayPaymentDetails.method);
-
-    // Create order and process payment in a transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. Create the order (whole numbers only - no decimals)
-      const roundedSubTotal = Math.round(subTotal);
-      const roundedShipping = Math.round(shippingCost);
-      const roundedDiscount = Math.round(discount);
-      const roundedTotal = Math.round(roundedSubTotal + roundedShipping - roundedDiscount);
-      const order = await tx.order.create({
-        data: {
-          orderNumber,
-          userId,
-          subTotal: roundedSubTotal.toString(),
-          tax: Math.round(tax).toString(),
-          shippingCost: roundedShipping.toString(),
-          discount: roundedDiscount,
-          paymentGateway,
-          paymentMode,
-          paymentOwnerId,
-          total: roundedTotal.toString(),
-          shippingAddressId,
-          billingAddressSameAsShipping,
-          billingAddress: !billingAddressSameAsShipping
-            ? billingAddress
-            : undefined,
-          notes,
-          status: "PAID",
-          paymentMethod: paymentGateway === "PHONEPE" ? "PHONEPE" : "RAZORPAY",
-          couponCode,
-          couponId: couponId,
-        },
-      });
-
-      // If a coupon was used, mark it as inactive for this user
-      if (userCoupon && userCoupon.coupon) {
-        await tx.userCoupon.update({
-          where: {
-            id: userCoupon.id,
-          },
-          data: {
-            isActive: false,
-          },
-        });
-
-        // Update the coupon's used count
-        await tx.coupon.update({
-          where: {
-            id: userCoupon.coupon.id,
-          },
-          data: {
-            usedCount: {
-              increment: 1,
-            },
-          },
-        });
-      }
-
-      // 2. Create the Razorpay payment record
-      const payment = await tx.razorpayPayment.create({
-        data: {
-          orderId: order.id,
-          amount: Math.round(roundedSubTotal + tax + roundedShipping - roundedDiscount).toString(),
-          razorpayOrderId: razorpay_order_id,
-          razorpayPaymentId: razorpay_payment_id,
-          razorpaySignature: razorpay_signature,
-          status: "CAPTURED",
-          paymentMethod,
-          notes: razorpayPaymentDetails,
-        },
-      });
-
-      // Note: Partner commissions will be created automatically when order status is updated to DELIVERED
-      // This ensures partners only get paid after successful delivery, not just on payment
-
-      // 3. Create order items and update inventory
-      const orderItems = [];
-      for (const item of cartItems) {
-        const variant = item.productVariant;
-        const price = Math.round(await calculateEffectivePriceRazorpay(variant, item.quantity));
-        const subtotal = Math.round(price * item.quantity);
-
-        // Create order item
-        const orderItem = await tx.orderItem.create({
-          data: {
-            orderId: order.id,
-            productId: variant.product.id,
-            variantId: variant.id,
-            price,
-            quantity: item.quantity,
-            subtotal,
-          },
-        });
-        orderItems.push(orderItem);
-
-        // Save selected addons as OrderItemAddon (price snapshot)
-        if (item.addons && item.addons.length > 0) {
-          for (const cartAddon of item.addons) {
-            await tx.orderItemAddon.create({
-              data: {
-                orderItemId: orderItem.id,
-                addonServiceId: cartAddon.addonService.id,
-                name: cartAddon.addonService.name,
-                price: cartAddon.price,
-              },
-            });
-          }
-        }
-
-        // Update inventory
-        await tx.productVariant.update({
-          where: { id: variant.id },
-          data: {
-            quantity: {
-              decrement: item.quantity,
-            },
-          },
-        });
-
-        // Log inventory change
-        await tx.inventoryLog.create({
-          data: {
-            variantId: variant.id,
-            quantityChange: -item.quantity,
-            reason: "sale",
-            referenceId: order.id,
-            previousQuantity: variant.quantity,
-            newQuantity: variant.quantity - item.quantity,
-            createdBy: userId,
-          },
-        });
-      }
-
-      // 4. Clear the user's cart
-      await tx.cartItem.deleteMany({
-        where: { userId },
-      });
-
-      return { order, payment, orderItems };
-    });
-
-    // Process referral reward (outside transaction to avoid blocking)
-    processReferralReward(result.order.id, userId).catch((err) => {
-      console.error("Referral reward processing error:", err);
-    });
-
-    // Process Shiprocket shipping (outside transaction, non-blocking)
-    // This creates the order in Shiprocket and assigns AWB if enabled
-    processOrderForShipping(result.order.id, selectedCourierId || null).catch((err) => {
-      console.error("Shiprocket order processing error:", err);
-      // Non-critical - admin can manually sync later
-    });
-
-    // Send order confirmation email
-    try {
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-      });
-
-      if (user && user.email) {
-        const orderItems = await prisma.orderItem.findMany({
-          where: { orderId: result.order.id },
-          include: {
-            product: true,
-            variant: {
-              include: {
-                attributes: {
-                  include: {
-                    attributeValue: {
-                      include: {
-                        attribute: true
-                      }
-                    }
-                  }
-                },
-                images: true
-              },
-            },
-          },
-        });
-
-        // Format items for email
-        const emailItems = orderItems.map((item) => ({
-          name: item.product.name,
-          variant: item.variant.attributes.map(attr =>
-            `${attr.attributeValue.attribute.name}: ${attr.attributeValue.value}`
-          ).join(", "),
-          quantity: item.quantity,
-          price: parseFloat(item.price).toFixed(2),
-        }));
-
-        // Send email (use SiteSettings for company info)
-        const storeConfig = await getStoreConfigFromDb();
-        await sendEmail({
-          email: user.email,
-          subject: `Order Confirmation - #${result.order.orderNumber}`,
-          html: getOrderConfirmationTemplate({
-            userName: user.name || "Valued Customer",
-            orderNumber: result.order.orderNumber,
-            orderDate: result.order.createdAt,
-            paymentMethod: result.payment.paymentMethod || "Online",
-            items: emailItems,
-            subtotal: parseFloat(result.order.subTotal).toFixed(2),
-            shipping: "0.00", // Set shipping to 0
-            tax: "0.00", // Set tax to 0
-            total: (
-              parseFloat(result.order.subTotal) -
-              parseFloat(result.order.discount || 0)
-            ).toFixed(2), // Calculate total without tax/shipping
-            shippingAddress: shippingAddress,
-          }, storeConfig),
-        });
-      }
-    } catch (emailError) {
-      console.error("Order confirmation email error:", emailError);
-      // Don't throw error, continue with response
-    }
-
-    // Return success response
-    return res.status(200).json(
-      new ApiResponsive(
-        200,
-        {
-          orderId: result.order.id,
-          orderNumber: result.order.orderNumber,
-          paymentId: result.payment.id,
-        },
-        "Payment verified and order created successfully"
-      )
-    );
-  } catch (error) {
-    console.error("Payment Verification Error:", error);
-
-    if (error.code === "P2002") {
-      throw new ApiError(400, "Duplicate payment record");
-    }
-
-    if (error.code === "P2025") {
-      throw new ApiError(404, "Related record not found");
-    }
-
-    throw new ApiError(
-      error.statusCode || 500,
-      error.message || "Payment verification failed"
-    );
+    const session = await prisma.intlPaymentSession.findUnique({ where: { providerRef: entity.order_id } });
+    if (!session || session.provider !== "RAZORPAY" || session.orderId) return;
+    const config = await getPaymentGatewayConfig(session.userId, "RAZORPAY");
+    await settleRazorpaySession(session, config, { paymentId: entity.id });
+  } catch (err) {
+    console.error(`Razorpay webhook (${event}) could not settle order ${entity.order_id}:`, err?.message || err);
   }
 });
 
@@ -1178,7 +706,11 @@ export const getOrderDetails = asyncHandler(async (req, res) => {
     // Use the original total stored in the database to preserve historical pricing
     total: parseFloat(order.total),
     paymentMethod: order.paymentMethod || order.razorpayPayment?.paymentMethod || "ONLINE",
-    paymentId: order.razorpayPayment?.razorpayPaymentId,
+    paymentId: order.razorpayPayment?.razorpayPaymentId || order.paypalCaptureId || order.paymentReference || undefined,
+    paymentGateway: order.paymentGateway,
+    paypalCaptureId: order.paypalCaptureId,
+    paymentCurrency: order.paymentCurrency,
+    paidAmount: order.paidAmount != null ? parseFloat(order.paidAmount) : null,
     codCharge: parseFloat(order.codCharge) || 0,
     trackingUrl: order.trackingUrl,
     awbCode: order.awbCode,
@@ -1279,6 +811,8 @@ export const cancelOrder = asyncHandler(async (req, res) => {
           variant: true,
         },
       },
+      razorpayPayment: true,
+      shipments: { where: { status: { in: ["CREATING", "CREATED"] } }, select: { id: true } },
     },
   });
 
@@ -1291,6 +825,12 @@ export const cancelOrder = asyncHandler(async (req, res) => {
   if (!allowedStatuses.includes(order.status)) {
     throw new ApiError(400, "This order cannot be cancelled");
   }
+  // Once a courier label exists the parcel may already be packed — the store has to handle it
+  if (order.shipments.length || order.awbCode) {
+    throw new ApiError(400, "This order has already been handed to the courier. Please contact support to cancel it.");
+  }
+  const { wasPaidOnline } = await import("./admin.order.controller.js");
+  const refundOwed = wasPaidOnline(order);
 
   // Process cancellation in transaction
   await prisma.$transaction(async (tx) => {
@@ -1302,6 +842,7 @@ export const cancelOrder = asyncHandler(async (req, res) => {
         cancelReason: reason,
         cancelledAt: new Date(),
         cancelledBy: userId,
+        refundPending: refundOwed,
       },
     });
 
@@ -1331,22 +872,7 @@ export const cancelOrder = asyncHandler(async (req, res) => {
       });
     }
 
-    // 3. Handle payment marking
-    if (order.razorpayPayment) {
-      await tx.razorpayPayment.update({
-        where: { orderId },
-        data: { status: "REFUNDED" },
-      });
-    }
-    // PayPal: mark order note so admin knows to issue refund manually via PayPal dashboard
-    if (order.paymentMethod === "PAYPAL" && order.paypalCaptureId) {
-      await tx.order.update({
-        where: { id: orderId },
-        data: {
-          notes: `${order.notes || ""} [PAYPAL_REFUND_PENDING:${order.paypalCaptureId}]`.trim(),
-        },
-      });
-    }
+    // 3. Online payments are refunded by the admin ("Refund" on the order page), which sends the money back
   });
 
   // Cancel Shiprocket order if it exists (outside transaction, non-blocking)
@@ -1383,7 +909,9 @@ export const cancelOrder = asyncHandler(async (req, res) => {
   res
     .status(200)
     .json(
-      new ApiResponsive(200, { success: true }, "Order cancelled successfully")
+      new ApiResponsive(200, { success: true, refundPending: refundOwed }, refundOwed
+        ? "Order cancelled. Your refund will be processed by our team."
+        : "Order cancelled successfully")
     );
 });
 
@@ -1606,6 +1134,25 @@ export const createCashOrder = asyncHandler(async (req, res) => {
       throw new ApiError(400, "No items in cart");
     }
 
+    // Double-click / retry guard: return the COD order placed moments ago for the same items
+    const recentCod = await prisma.order.findFirst({
+      where: {
+        userId,
+        paymentMethod: "CASH",
+        createdAt: { gt: new Date(Date.now() - 60 * 1000) },
+        items: { some: { variantId: { in: cartItems.map((c) => c.productVariantId) } } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (recentCod) {
+      return res.status(200).json(new ApiResponsive(200, {
+        orderId: recentCod.id,
+        orderNumber: recentCod.orderNumber,
+        paymentMethod: "CASH",
+        alreadyPlaced: true,
+      }, "Order already placed"));
+    }
+
     // Check if user has an active coupon
     const userCoupon = await prisma.userCoupon.findFirst({
       where: {
@@ -1700,10 +1247,14 @@ export const createCashOrder = asyncHandler(async (req, res) => {
           subTotal
         );
       }
-    } else if (requestCouponCode || requestCouponId || requestDiscount) {
-      if (requestCouponCode) couponCode = requestCouponCode;
-      if (requestCouponId) couponId = requestCouponId;
-      if (requestDiscount) discount = parseFloat(requestDiscount);
+    } else if (requestCouponCode) {
+      // Discount is recalculated on the server — never taken from the browser
+      const { quote } = await buildIntlQuote(userId, shippingAddressId, requestCouponCode, { currency: "INR" });
+      if (quote.coupon) {
+        couponCode = quote.coupon.code;
+        couponId = quote.coupon.id;
+        discount = quote.discount;
+      }
     }
 
     tax = 0;
@@ -1723,6 +1274,11 @@ export const createCashOrder = asyncHandler(async (req, res) => {
     const roundedCodCharge = Math.round(codCharge);
     const roundedTotalCOD = Math.round(roundedSubTotalCOD + roundedShippingCOD + roundedCodCharge - roundedDiscountCOD);
     const result = await prisma.$transaction(async (tx) => {
+      // Serialise order creation per user so two simultaneous clicks cannot both succeed
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"order:" + userId}))`;
+      const stillInCart = await tx.cartItem.count({ where: { userId } });
+      if (!stillInCart) throw new ApiError(409, "This order was already placed");
+
       // 1. Create the order
       const order = await tx.order.create({
         data: {
@@ -1840,10 +1396,7 @@ export const createCashOrder = asyncHandler(async (req, res) => {
       console.error("Referral reward processing error:", err);
     });
 
-    // Process Shiprocket shipping (outside transaction, non-blocking)
-    processOrderForShipping(result.order.id, selectedCourierId || null).catch((err) => {
-      console.error("Shiprocket order processing error:", err);
-    });
+    // Shipping is booked manually by the admin from the order page (no automatic Shiprocket push)
 
     // Send order confirmation email
     try {

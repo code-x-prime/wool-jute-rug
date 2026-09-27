@@ -10,12 +10,16 @@ import {
   updateStorageConfig,
 } from "../controllers/admin.storage.controller.js";
 import { verifyAdminJWT } from "../middlewares/admin.middleware.js";
+import { testPayPalConnection } from "../controllers/paypal.controller.js";
+import { testPayoneerConnection } from "../controllers/payoneer.controller.js";
 
 const router = express.Router();
 
 router.get("/site-settings", verifyAdminJWT, getSiteSettings);
 router.put("/site-settings", verifyAdminJWT, updateSiteSettings);
 router.post("/site-settings/test-razorpay", verifyAdminJWT, testRazorpayConnection);
+router.post("/site-settings/test-paypal", verifyAdminJWT, testPayPalConnection);
+router.post("/site-settings/test-payoneer", verifyAdminJWT, testPayoneerConnection);
 router.post("/site-settings/connect-shiprocket", verifyAdminJWT, connectShiprocket);
 
 router.get("/site-settings/storage", verifyAdminJWT, getStorageConfig);

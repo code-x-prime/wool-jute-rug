@@ -129,23 +129,23 @@ model Account {
 }
 
 model Admin {
-  id                   String        @id @default(uuid())
-  email                String        @unique
-  password             String
-  firstName            String
-  lastName             String
-  role                 AdminRole     @default(ADMIN)
-  language             String        @default("en")
-  isActive             Boolean       @default(true)
-  lastLogin            DateTime?
-  failedLoginAttempts  Int           @default(0)
-  lockedUntil          DateTime?
-  emailVerified        Boolean       @default(true)
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
-  BlogPost             BlogPost[]
-  PageContent          PageContent[]
-  permissions          Permission[]
+  id                  String        @id @default(uuid())
+  email               String        @unique
+  password            String
+  firstName           String
+  lastName            String
+  role                AdminRole     @default(ADMIN)
+  language            String        @default("en")
+  isActive            Boolean       @default(true)
+  lastLogin           DateTime?
+  failedLoginAttempts Int           @default(0)
+  lockedUntil         DateTime?
+  emailVerified       Boolean       @default(true)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  BlogPost            BlogPost[]
+  PageContent         PageContent[]
+  permissions         Permission[]
 }
 
 model Permission {
@@ -220,19 +220,19 @@ enum MegaMenuLayout {
 }
 
 model NavbarItem {
-  id             String          @id @default(uuid())
-  label          String          @unique
+  id             String         @id @default(uuid())
+  label          String         @unique
   slug           String?
-  order          Int             @default(0)
-  isActive       Boolean         @default(true)
-  layout         MegaMenuLayout  @default(SIMPLE)
+  order          Int            @default(0)
+  isActive       Boolean        @default(true)
+  layout         MegaMenuLayout @default(SIMPLE)
   bannerImage    String?
   bannerTitle    String?
   bannerSubtitle String?
   bannerLink     String?
   columns        NavbarColumn[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 }
 
 model NavbarColumn {
@@ -240,7 +240,7 @@ model NavbarColumn {
   navbarItemId String
   title        String
   order        Int          @default(0)
-  categoryId   String?      // Optional: link to a Category (for SHOP_TABS layout)
+  categoryId   String? // Optional: link to a Category (for SHOP_TABS layout)
   category     Category?    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   navbarItem   NavbarItem   @relation(fields: [navbarItemId], references: [id], onDelete: Cascade)
   links        NavbarLink[]
@@ -256,8 +256,8 @@ model NavbarLink {
   columnId  String
   label     String
   url       String
-  image     String?      // Optional image (e.g. for IMAGE_GRID cards or thumbnails)
-  badge     String?      // Optional badge like "NEW" or "HOT"
+  image     String? // Optional image (e.g. for IMAGE_GRID cards or thumbnails)
+  badge     String? // Optional badge like "NEW" or "HOT"
   order     Int          @default(0)
   column    NavbarColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
   createdAt DateTime     @default(now())
@@ -265,7 +265,6 @@ model NavbarLink {
 
   @@index([columnId])
 }
-
 
 // -----------------------
 // Universal Attribute System
@@ -305,50 +304,65 @@ model VariantAttributeValue {
 // Product & Variant (using universal attributes)
 // -----------------------
 model Product {
-  id                String               @id @default(uuid())
-  name              String
-  description       String?
-  slug              String               @unique
-  featured          Boolean              @default(false)
-  productType       Json? // e.g. { "type": "mobile" }
-  isActive          Boolean              @default(true)
-  videoUrl          String?              // Optional product video (max 10MB)
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-  hasVariants       Boolean              @default(false)
-  primaryCategoryId String?
-  metaTitle         String?
-  metaDescription   String?
-  keywords          String?
-  tags              String[]             @default([])
-  topBrandIds       String[]             @default([])
-  newBrandIds       String[]             @default([])
-  hotBrandIds       String[]             @default([])
-  ourProduct        Boolean              @default(false)
-  readyToShip       Boolean              @default(false)
-  acceptOrders      Boolean              @default(false)
-  isCustomizable    Boolean              @default(false)
-  brandId           String?
-  washingAndCare    String?              @db.Text
-  shippingAndReturns String?             @db.Text
-  aboutThisDesign   String?              @db.Text
-  designStory       String?              @db.Text
-  brand             Brand?               @relation(fields: [brandId], references: [id])
-  orderItems        OrderItem[]
-  categories        ProductCategory[]
-  subCategories     ProductSubCategory[]
-  images            ProductImage[]
-  variants          ProductVariant[]
-  reviews           Review[]
-  wishlistItems     WishlistItem[]
-  ProductView       ProductView[]
-  coupons           CouponProduct[]
-  productSections   ProductSectionItem[]
-  flashSaleProducts FlashSaleProduct[]
-  moqSettings       MOQSetting[]
-  pricingSlabs      PricingSlab[]
+  id                          String                       @id @default(uuid())
+  name                        String
+  description                 String?
+  slug                        String                       @unique
+  featured                    Boolean                      @default(false)
+  productType                 Json? // e.g. { "type": "mobile" }
+  isActive                    Boolean                      @default(true)
+  videoUrl                    String? // Optional product video (max 10MB)
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
+  hasVariants                 Boolean                      @default(false)
+  primaryCategoryId           String?
+  metaTitle                   String?
+  metaDescription             String?
+  keywords                    String?
+  tags                        String[]                     @default([])
+  topBrandIds                 String[]                     @default([])
+  newBrandIds                 String[]                     @default([])
+  hotBrandIds                 String[]                     @default([])
+  ourProduct                  Boolean                      @default(false)
+  readyToShip                 Boolean                      @default(false)
+  acceptOrders                Boolean                      @default(false)
+  isCustomizable              Boolean                      @default(false)
+  brandId                     String?
+  washingAndCare              String?                      @db.Text
+  shippingAndReturns          String?                      @db.Text
+  aboutThisDesign             String?                      @db.Text
+  designStory                 String?                      @db.Text
+  brand                       Brand?                       @relation(fields: [brandId], references: [id])
+  orderItems                  OrderItem[]
+  categories                  ProductCategory[]
+  subCategories               ProductSubCategory[]
+  images                      ProductImage[]
+  variants                    ProductVariant[]
+  reviews                     Review[]
+  wishlistItems               WishlistItem[]
+  ProductView                 ProductView[]
+  coupons                     CouponProduct[]
+  productSections             ProductSectionItem[]
+  flashSaleProducts           FlashSaleProduct[]
+  moqSettings                 MOQSetting[]
+  pricingSlabs                PricingSlab[]
   shoppableVideoCarouselItems ShoppableVideoCarouselItem[]
   addons                      ProductAddon[]
+  materials                   String[]                     @default([])
+  allowRestockRequests        Boolean                      @default(false)
+  globalPricing               Boolean                      @default(false)
+  processingMinDays           Int?
+  processingMaxDays           Int?
+  videoUrl2                   String?
+  whoMade                     String?
+  whatIsIt                    String?
+  whenMade                    String?
+  deliveryProfileId           String?
+  deliveryProfile             DeliveryProfile?             @relation(fields: [deliveryProfileId], references: [id], onDelete: SetNull)
+  returnPolicyId              String?
+  returnPolicy                ReturnPolicy?                @relation(fields: [returnPolicyId], references: [id], onDelete: SetNull)
+  customFields                ProductCustomField[]
+  restockRequests             RestockRequest[]
 }
 
 model ProductImage {
@@ -366,28 +380,33 @@ model ProductImage {
 }
 
 model ProductVariant {
-  id              String                  @id @default(uuid())
-  productId       String
-  sku             String                  @unique
-  price           Decimal                 @db.Decimal(10, 2)
-  salePrice       Decimal?                @db.Decimal(10, 2)
-  quantity        Int                     @default(0)
-  isActive        Boolean                 @default(true)
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
+  id                String                  @id @default(uuid())
+  productId         String
+  sku               String                  @unique
+  price             Decimal                 @db.Decimal(10, 2)
+  salePrice         Decimal?                @db.Decimal(10, 2)
+  quantity          Int                     @default(0)
+  isActive          Boolean                 @default(true)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
   // Shipping dimensions for Shiprocket
-  shippingLength  Float? // Length in cm
-  shippingBreadth Float? // Breadth in cm
-  shippingHeight  Float? // Height in cm
-  shippingWeight  Float? // Weight in kg
-  attributes      VariantAttributeValue[]
-  product         Product                 @relation(fields: [productId], references: [id], onDelete: Cascade)
-  images          ProductVariantImage[]
-  videoUrl        String?                 // Optional variant video (max 10MB)
-  cartItems       CartItem[]
-  orderItems      OrderItem[]
-  moqSettings     MOQSetting[]
-  pricingSlabs    PricingSlab[]
+  shippingLength    Float? // Length in cm
+  shippingBreadth   Float? // Breadth in cm
+  shippingHeight    Float? // Height in cm
+  shippingWeight    Float? // Weight in kg
+  attributes        VariantAttributeValue[]
+  product           Product                 @relation(fields: [productId], references: [id], onDelete: Cascade)
+  images            ProductVariantImage[]
+  videoUrl          String? // Optional variant video (max 10MB)
+  cartItems         CartItem[]
+  orderItems        OrderItem[]
+  moqSettings       MOQSetting[]
+  pricingSlabs      PricingSlab[]
+  priceUS           Decimal?                @db.Decimal(10, 2)
+  priceIntl         Decimal?                @db.Decimal(10, 2)
+  processingMinDays Int?
+  processingMaxDays Int?
+  restockRequests   RestockRequest[]
 
   @@index([productId])
 }
@@ -407,14 +426,14 @@ model ProductVariantImage {
 }
 
 model CartItem {
-  id               String         @id @default(uuid())
+  id               String          @id @default(uuid())
   userId           String
   productVariantId String
   quantity         Int
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
-  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  productVariant   ProductVariant  @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   addons           CartItemAddon[]
 
   @@unique([userId, productVariantId])
@@ -478,7 +497,7 @@ model Order {
   // Shiprocket Integration Fields (Domestic)
   shiprocketOrderId            Int?
   shiprocketShipmentId         Int?
-  shiprocketReturnId           Int?    // Return order ID when return created in Shiprocket
+  shiprocketReturnId           Int? // Return order ID when return created in Shiprocket
   awbCode                      String?
   courierName                  String?
   shiprocketStatus             String? // CANCELLED, RETURN_INITIATED, etc.
@@ -487,9 +506,13 @@ model Order {
   easyshipShipmentId           String?
   easyshipTrackingNumber       String?
   easyshipLabelUrl             String?
-  shippingProvider             String? @default("SHIPROCKET") // "SHIPROCKET" | "EASYSHIP"
+  shippingProvider             String?              @default("SHIPROCKET") // "SHIPROCKET" | "EASYSHIP"
   // PayPal capture ID
   paypalCaptureId              String?
+  paymentCurrency              String?
+  paidAmount                   Decimal?             @db.Decimal(10, 2)
+  exchangeRate                 Float?
+  paymentReference             String?
   shippingAddress              Address?             @relation(fields: [shippingAddressId], references: [id])
   user                         User                 @relation(fields: [userId], references: [id])
   items                        OrderItem[]
@@ -499,6 +522,9 @@ model Order {
   partnerEarnings              PartnerEarning[]
   referral                     Referral?
   returnRequests               ReturnRequest[]
+  shipments                    Shipment[]
+  refundPending                Boolean              @default(false)
+  reopenedAt                   DateTime?
   paymentGateway               PaymentGatewayType?
   paymentMode                  PaymentMode?
   paymentOwnerId               String? // User ID whose payment keys were used
@@ -506,16 +532,16 @@ model Order {
 }
 
 model OrderItem {
-  id             String          @id @default(uuid())
+  id             String           @id @default(uuid())
   orderId        String
   productId      String
   variantId      String
-  price          Decimal         @db.Decimal(10, 2)
+  price          Decimal          @db.Decimal(10, 2)
   quantity       Int
-  subtotal       Decimal         @db.Decimal(10, 2)
-  order          Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product        Product         @relation(fields: [productId], references: [id])
-  variant        ProductVariant  @relation(fields: [variantId], references: [id])
+  subtotal       Decimal          @db.Decimal(10, 2)
+  order          Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product        Product          @relation(fields: [productId], references: [id])
+  variant        ProductVariant   @relation(fields: [variantId], references: [id])
   returnRequests ReturnRequest[]
   addons         OrderItemAddon[]
 }
@@ -803,20 +829,20 @@ model FAQ {
 }
 
 model CustomRugRequest {
-  id           String   @id @default(uuid())
-  name         String
-  email        String
-  phone        String?
-  pincode      String?
-  dimensions   String?
-  material     String?
-  colors       String?
-  designNotes  String?
-  type         String   @default("CUSTOM_RUG") // CUSTOM_RUG, RUG_SERVICE, CONTACT_ENQUIRY
-  status       String   @default("NEW")
-  adminNotes   String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String   @id @default(uuid())
+  name        String
+  email       String
+  phone       String?
+  pincode     String?
+  dimensions  String?
+  material    String?
+  colors      String?
+  designNotes String?
+  type        String   @default("CUSTOM_RUG") // CUSTOM_RUG, RUG_SERVICE, CONTACT_ENQUIRY
+  status      String   @default("NEW")
+  adminNotes  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 // Analytics model for page views
@@ -833,6 +859,61 @@ model PageView {
 }
 
 // Analytics model for product views
+model DeliveryProfile {
+  id                String    @id @default(uuid())
+  name              String
+  pricingType       String    @default("FIXED") // FIXED | FREE
+  originPincode     String?
+  domesticCost      Decimal   @default(0) @db.Decimal(10, 2)
+  internationalCost Decimal?  @db.Decimal(10, 2)
+  minDeliveryDays   Int?
+  maxDeliveryDays   Int?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  products          Product[]
+}
+
+model ReturnPolicy {
+  id                      String    @id @default(uuid())
+  name                    String
+  acceptReturns           Boolean   @default(true)
+  acceptExchanges         Boolean   @default(true)
+  windowDays              Int       @default(7)
+  buyerPaysReturnShipping Boolean   @default(true)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  products                Product[]
+}
+
+model ProductCustomField {
+  id        String   @id @default(uuid())
+  productId String
+  label     String
+  fieldType String   @default("TEXT") // TEXT | IMAGE
+  required  Boolean  @default(false)
+  maxLength Int?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model RestockRequest {
+  id         String          @id @default(uuid())
+  productId  String
+  variantId  String?
+  email      String
+  userId     String?
+  notifiedAt DateTime?
+  createdAt  DateTime        @default(now())
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant    ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, variantId, email])
+  @@index([productId])
+}
+
 model ProductView {
   id        String   @id @default(uuid())
   productId String
@@ -986,31 +1067,31 @@ model Banner {
 
 // Shoppable Video Carousel - horizontal carousel with product-linked media
 model ShoppableVideoCarousel {
-  id          String                        @id @default(uuid())
-  name        String                        @default("Shoppable Video")
-  autoScroll  Boolean                       @default(true)
-  isActive    Boolean                       @default(true)
-  createdAt   DateTime                     @default(now())
-  updatedAt   DateTime                     @updatedAt
-  items       ShoppableVideoCarouselItem[]
+  id         String                       @id @default(uuid())
+  name       String                       @default("Shoppable Video")
+  autoScroll Boolean                      @default(true)
+  isActive   Boolean                      @default(true)
+  createdAt  DateTime                     @default(now())
+  updatedAt  DateTime                     @updatedAt
+  items      ShoppableVideoCarouselItem[]
 
   @@index([isActive])
 }
 
 model ShoppableVideoCarouselItem {
-  id              String                  @id @default(uuid())
-  carouselId      String
-  mediaType       String                  // UPLOAD | YOUTUBE | INSTAGRAM
-  mediaUrl        String?                 // For UPLOAD: S3 URL; for YOUTUBE/INSTAGRAM: embed URL
-  thumbnailUrl    String?                 // Product thumbnail for bottom bar
-  textOverlay     String?                 // Optional text overlay (e.g. "Let's unbox it")
-  viewCount       Int                     @default(0)
-  productId       String?
-  displayOrder    Int                     @default(0)
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
-  carousel        ShoppableVideoCarousel  @relation(fields: [carouselId], references: [id], onDelete: Cascade)
-  product         Product?                @relation(fields: [productId], references: [id], onDelete: SetNull)
+  id           String                 @id @default(uuid())
+  carouselId   String
+  mediaType    String // UPLOAD | YOUTUBE | INSTAGRAM
+  mediaUrl     String? // For UPLOAD: S3 URL; for YOUTUBE/INSTAGRAM: embed URL
+  thumbnailUrl String? // Product thumbnail for bottom bar
+  textOverlay  String? // Optional text overlay (e.g. "Let's unbox it")
+  viewCount    Int                    @default(0)
+  productId    String?
+  displayOrder Int                    @default(0)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  carousel     ShoppableVideoCarousel @relation(fields: [carouselId], references: [id], onDelete: Cascade)
+  product      Product?               @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([carouselId, displayOrder])
   @@index([productId])
@@ -1386,8 +1467,8 @@ model OAuthProviderSetting {
   id           String   @id @default(uuid())
   provider     String   @unique // "google" | "facebook" | "twitter"
   isEnabled    Boolean  @default(false)
-  clientId     String?  // Public - no encryption needed
-  clientSecret String?  // Encrypted in DB
+  clientId     String? // Public - no encryption needed
+  clientSecret String? // Encrypted in DB
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -1396,90 +1477,109 @@ model OAuthProviderSetting {
 // Site Settings (Company Details + Razorpay + Shiprocket)
 // -----------------------
 model SiteSettings {
-  id                  String    @id @default(cuid())
-  siteName            String    @default("My Store")
-  siteDescription     String?
-  siteEmail           String?
-  sitePhone           String?
-  siteAddress         String?
-  siteCity            String?
-  siteState           String?
-  sitePincode         String?
-  siteCountry         String    @default("India")
-  siteGSTIN           String?
-  sitePAN             String?
-  siteLogo            String?
-  siteFavicon         String?
-  orderPrefix         String    @default("ORD")
-  orderEmailFooter    String?
-  razorpayKeyId       String?
-  razorpayKeySecret   String?
-  razorpayEnabled     Boolean   @default(false)
+  id                     String    @id @default(cuid())
+  siteName               String    @default("My Store")
+  siteDescription        String?
+  siteEmail              String?
+  sitePhone              String?
+  siteAddress            String?
+  siteCity               String?
+  siteState              String?
+  sitePincode            String?
+  siteCountry            String    @default("India")
+  siteGSTIN              String?
+  sitePAN                String?
+  siteLogo               String?
+  siteFavicon            String?
+  orderPrefix            String    @default("ORD")
+  orderEmailFooter       String?
+  razorpayKeyId          String?
+  razorpayKeySecret      String?
+  razorpayEnabled        Boolean   @default(false)
+  razorpayWebhookSecret  String?
   // PayPal
-  paypalClientId      String?
-  paypalClientSecret  String?
-  paypalEnabled       Boolean   @default(false)
-  paypalMode          String    @default("sandbox")  // "sandbox" | "live"
+  paypalClientId         String?
+  paypalClientSecret     String?
+  paypalEnabled          Boolean   @default(false)
+  paypalMode             String    @default("sandbox") // "sandbox" | "live"
   // Payoneer
-  payoneerApiKey      String?
-  payoneerProgramId   String?
-  payoneerEnabled     Boolean   @default(false)
+  payoneerApiKey         String?
+  payoneerProgramId      String?
+  payoneerEnabled        Boolean   @default(false)
+  payoneerMode           String    @default("sandbox") // "sandbox" | "live"
   // Easyship (international shipping)
-  easyshipApiKey      String?
-  easyshipEnabled     Boolean   @default(false)
-  easyshipAccountId   String?
+  easyshipApiKey         String?
+  easyshipEnabled        Boolean   @default(false)
+  easyshipAccountId      String?
+  // FedEx (REST API)
+  fedexEnabled           Boolean   @default(false)
+  fedexMode              String    @default("sandbox") // "sandbox" | "live"
+  fedexClientId          String?
+  fedexClientSecret      String? // Encrypted
+  fedexAccountNumber     String?
+  // DHL Express (MyDHL API)
+  dhlEnabled             Boolean   @default(false)
+  dhlMode                String    @default("sandbox") // "sandbox" | "live"
+  dhlApiKey              String?
+  dhlApiSecret           String? // Encrypted
+  dhlAccountNumber       String?
+  // Customs defaults for international shipments
+  exporterIec            String?
+  shiprocketWebhookToken String?
+  intlHsCode             String    @default("570242")
+  intlCustomsDescription String    @default("Hand-tufted wool rug")
   // Shiprocket (domestic shipping)
-  shiprocketEmail     String?
-  shiprocketPassword  String?
-  shiprocketEnabled   Boolean   @default(false)
-  shiprocketToken     String?
-  shiprocketTokenExpiry DateTime?
-  usdExchangeRate     Float     @default(90)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  shiprocketEmail        String?
+  shiprocketPassword     String?
+  shiprocketEnabled      Boolean   @default(false)
+  shiprocketToken        String?
+  shiprocketTokenExpiry  DateTime?
+  usdExchangeRate        Float     @default(90)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 }
 
 // Media storage: Digital Ocean, Cloudflare R2, or AWS S3 - only one active at a time
 model StorageConfig {
-  id                    String   @id @default(cuid())
-  activeProvider        String?  // "DIGITAL_OCEAN" | "CLOUDFLARE_R2" | "AWS_S3" - only one active
-  uploadFolder          String   @default("ecom-uploads")
+  id                String   @id @default(cuid())
+  activeProvider    String? // "DIGITAL_OCEAN" | "CLOUDFLARE_R2" | "AWS_S3" - only one active
+  uploadFolder      String   @default("ecom-uploads")
   // Digital Ocean Spaces
-  spacesAccessKey       String?
-  spacesSecretKey       String?  // Encrypted
-  spacesBucket          String?
-  spacesRegion          String?
-  spacesEndpoint        String?
-  spacesCdnUrl          String?
+  spacesAccessKey   String?
+  spacesSecretKey   String? // Encrypted
+  spacesBucket      String?
+  spacesRegion      String?
+  spacesEndpoint    String?
+  spacesCdnUrl      String?
   // Cloudflare R2
-  r2AccountId           String?
-  r2AccessKeyId         String?
-  r2SecretAccessKey     String?  // Encrypted
-  r2BucketName          String?
-  r2PublicUrl           String?
+  r2AccountId       String?
+  r2AccessKeyId     String?
+  r2SecretAccessKey String? // Encrypted
+  r2BucketName      String?
+  r2PublicUrl       String?
   // AWS S3
-  s3AccessKeyId         String?
-  s3SecretAccessKey     String?  // Encrypted
-  s3BucketName          String?
-  s3Region              String?
-  s3Endpoint            String?  // Optional custom endpoint
-  s3PublicUrl           String?  // Optional custom public URL
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  s3AccessKeyId     String?
+  s3SecretAccessKey String? // Encrypted
+  s3BucketName      String?
+  s3Region          String?
+  s3Endpoint        String? // Optional custom endpoint
+  s3PublicUrl       String? // Optional custom public URL
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 // -----------------------
 // Add-on Services
 // -----------------------
 model AddonService {
-  id          String         @id @default(uuid())
+  id          String           @id @default(uuid())
   name        String
   description String?
-  price       Decimal        @db.Decimal(10, 2)
+  price       Decimal          @db.Decimal(10, 2)
   icon        String?
-  isActive    Boolean        @default(true)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   products    ProductAddon[]
   cartAddons  CartItemAddon[]
   orderAddons OrderItemAddon[]
@@ -1517,4 +1617,60 @@ model OrderItemAddon {
   createdAt      DateTime     @default(now())
   orderItem      OrderItem    @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
   addonService   AddonService @relation(fields: [addonServiceId], references: [id], onDelete: Cascade)
+}
+
+// Server-side snapshot of an international (PayPal / Payoneer) checkout.
+// The order is created only from this snapshot after the provider confirms payment.
+model IntlPaymentSession {
+  id                String             @id @default(uuid())
+  provider          PaymentGatewayType
+  mode              String
+  userId            String
+  shippingAddressId String
+  providerRef       String?            @unique
+  quote             Json
+  amountInr         Decimal            @db.Decimal(10, 2)
+  amountUsd         Decimal            @db.Decimal(10, 2)
+  currency          String             @default("USD")
+  status            String             @default("CREATED") // CREATED | PROCESSING | COMPLETED | FAILED
+  providerStatus    String?
+  orderId           String?            @unique
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([userId])
+}
+
+// One physical shipment booked for an order (any carrier). Only one non-cancelled shipment per order.
+model Shipment {
+  id                 String    @id @default(uuid())
+  orderId            String
+  carrier            String // SHIPROCKET | EASYSHIP | FEDEX | DHL | MANUAL
+  serviceCode        String?
+  serviceName        String?
+  status             String    @default("CREATED") // CREATED | CANCELLED
+  trackingNumber     String?
+  trackingUrl        String?
+  externalId         String?
+  labelUrl           String?
+  labelData          Bytes?
+  invoiceUrl         String?
+  invoiceData        Bytes?
+  cost               Decimal?  @db.Decimal(10, 2)
+  costCurrency       String?
+  costInr            Decimal?  @db.Decimal(10, 2)
+  weightKg           Float?
+  lastTrackingStatus String?
+  trackingEvents     Json?
+  trackedAt          DateTime?
+  customerNotifiedAt DateTime?
+  cancelledAt        DateTime?
+  cancelNote         String?
+  createdBy          String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  order              Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([trackingNumber])
 }

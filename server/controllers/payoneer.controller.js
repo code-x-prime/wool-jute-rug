@@ -1,323 +1,238 @@
-/**
- * Payoneer Checkout Integration
- * Docs: https://developer.payoneer.com/docs/checkout
- *
- * Flow:
- * 1. Admin saves Payoneer Program ID + API Key in Site Settings
- * 2. Client calls GET /payment/payoneer/settings to check if enabled
- * 3. Client calls POST /payment/payoneer/create-payment to get redirect URL
- * 4. Customer redirected to Payoneer hosted page, pays
- * 5. Payoneer redirects back to success_url with payment_id
- * 6. Client calls POST /payment/payoneer/verify to verify + create order
- */
-
+// Payoneer Checkout (hosted payment page).
+// Credentials: merchant code + payment API token from the Payoneer Checkout merchant portal.
+// 1. create-payment: server prices the cart, stores an IntlPaymentSession, opens a LIST session -> redirect link.
+// 2. Buyer pays on Payoneer and returns to /checkout/payoneer-success?longId=...&transactionId=...
+// 3. verify + webhook: the LIST status is re-read from Payoneer (never trusted from the URL) before any order is created.
 import { prisma } from "../config/db.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponsive } from "../utils/ApiResponsive.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { decrypt } from "../utils/encryption.js";
-import sendEmail from "../utils/sendEmail.js";
-import { getOrderConfirmationTemplate } from "../email/temp/EmailTemplate.js";
-import { applyFlashSalePrice } from "../utils/flashSaleHelpers.js";
+import { buildIntlQuote, createOrderFromSession as createOrder, toCountryCode, DuplicatePaymentError } from "../utils/intlCheckout.js";
 
-const PAYONEER_BASE = "https://api.payoneer.com/v4";
+// Payoneer charges on its own page, so a duplicate can only be flagged for a manual refund.
+async function createOrderFromSession(sessionId, payment) {
+  try {
+    return await createOrder(sessionId, payment);
+  } catch (err) {
+    if (!(err instanceof DuplicatePaymentError)) throw err;
+    await prisma.intlPaymentSession.update({ where: { id: sessionId }, data: { status: "FAILED", providerStatus: "DUPLICATE_REFUND_NEEDED" } });
+    console.error(`MANUAL REFUND NEEDED: Payoneer session ${sessionId} duplicates order ${err.duplicateOf.orderNumber}`);
+    throw new ApiError(409, `You already placed order #${err.duplicateOf.orderNumber} for these items. Our team has been notified and will refund this duplicate Payoneer payment.`);
+  }
+}
 
-async function getPayoneerConfig() {
-  const settings = await prisma.siteSettings.findFirst({
-    select: {
-      payoneerEnabled: true,
-      payoneerApiKey: true,
-      payoneerProgramId: true,
-      siteName: true,
-    },
+const MEDIA_TYPE = "application/vnd.optile.payment.enterprise-v1-extensible+json";
+const PAID_CODES = new Set(["charged", "paid_out"]);
+const PENDING_CODES = new Set(["pending", "listed", "preordered", "registered"]);
+
+export async function getPayoneerConfig({ requireEnabled = true } = {}) {
+  const s = await prisma.siteSettings.findFirst({
+    select: { payoneerEnabled: true, payoneerApiKey: true, payoneerProgramId: true, payoneerMode: true, siteName: true },
   });
-
-  if (!settings?.payoneerEnabled || !settings?.payoneerApiKey || !settings?.payoneerProgramId) {
+  if ((requireEnabled && !s?.payoneerEnabled) || !s?.payoneerApiKey || !s?.payoneerProgramId) {
     throw new ApiError(400, "Payoneer is not configured or not enabled");
   }
-
-  const apiKey = settings.payoneerApiKey.startsWith("enc:")
-    ? decrypt(settings.payoneerApiKey.replace("enc:", ""))
-    : settings.payoneerApiKey;
-
+  const token = s.payoneerApiKey.startsWith("enc:") ? decrypt(s.payoneerApiKey.slice(4)) : s.payoneerApiKey;
+  const mode = s.payoneerMode === "live" ? "live" : "sandbox";
   return {
-    apiKey,
-    programId: settings.payoneerProgramId,
-    siteName: settings.siteName || "Store",
-    // Basic auth: programId:apiKey
-    authHeader: `Basic ${Buffer.from(`${settings.payoneerProgramId}:${apiKey}`).toString("base64")}`,
+    mode,
+    merchantCode: s.payoneerProgramId.trim(),
+    siteName: s.siteName || "Store",
+    baseUrl: mode === "live" ? "https://api.live.oscato.com/api" : "https://api.sandbox.oscato.com/api",
+    authHeader: `Basic ${Buffer.from(`${s.payoneerProgramId.trim()}:${token.trim()}`).toString("base64")}`,
   };
+}
+
+async function payoneerRequest(config, path, { method = "GET", body } = {}) {
+  const res = await fetch(`${config.baseUrl}${path}`, {
+    method,
+    headers: { Authorization: config.authHeader, "Content-Type": MEDIA_TYPE, Accept: MEDIA_TYPE },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+const frontendUrl = () => (process.env.FRONTEND_URL || "").replace(/\/+$/, "");
+const backendUrl = () => (process.env.BASE_URL || "").replace(/\/+$/, "");
+
+// Read the authoritative payment state for a session from Payoneer.
+async function fetchListStatus(config, longId) {
+  const { ok, status, data } = await payoneerRequest(config, `/lists/${encodeURIComponent(longId)}`);
+  if (!ok) throw new ApiError(502, `Could not read Payoneer payment status (${status})`);
+  const code = String(data?.status?.code || "").toLowerCase();
+  const amount = parseFloat(data?.payment?.amount ?? "NaN");
+  const currency = data?.payment?.currency;
+  return { code, reason: data?.status?.reason, amount, currency, transactionId: data?.transactionId };
+}
+
+// Create the order (PAID or PENDING) or report failure, based on Payoneer's own status.
+async function settleSession(session, config) {
+  const st = await fetchListStatus(config, session.providerRef);
+  await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { providerStatus: `${st.code}${st.reason ? `:${st.reason}` : ""}` } });
+
+  if (st.transactionId && st.transactionId !== session.id) {
+    throw new ApiError(400, "Payoneer payment does not belong to this checkout");
+  }
+  if (Number.isFinite(st.amount) && (st.currency !== session.currency || Math.abs(st.amount - parseFloat(session.amountUsd)) > 0.009)) {
+    await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { status: "FAILED" } });
+    throw new ApiError(400, "Payment amount did not match your order. Please contact support.");
+  }
+
+  if (PAID_CODES.has(st.code)) {
+    const existing = session.orderId ? await prisma.order.findUnique({ where: { id: session.orderId } }) : null;
+    if (existing && existing.status === "PENDING") {
+      // Webhook upgrade: payment that was pending is now confirmed
+      await prisma.order.update({ where: { id: existing.id }, data: { status: "PAID", paidAmount: st.amount || existing.paidAmount } });
+      return { order: { ...existing, status: "PAID" }, state: "PAID" };
+    }
+    const { order } = await createOrderFromSession(session.id, {
+      status: "PAID",
+      paymentMethod: "PAYONEER",
+      reference: session.providerRef,
+      paidAmount: Number.isFinite(st.amount) ? st.amount : parseFloat(session.amountUsd),
+    });
+    return { order, state: "PAID" };
+  }
+
+  if (PENDING_CODES.has(st.code) && st.code !== "listed") {
+    // Money is on its way (e.g. bank transfer) — create a PENDING order the admin can see; the webhook upgrades it.
+    const { order } = await createOrderFromSession(session.id, {
+      status: "PENDING",
+      paymentMethod: "PAYONEER",
+      reference: session.providerRef,
+      paidAmount: null,
+      note: `Payoneer payment pending (${st.code}${st.reason ? `: ${st.reason}` : ""}) — do not ship until it is confirmed as PAID.`,
+    });
+    return { order, state: "PENDING" };
+  }
+
+  return { order: null, state: st.code || "unknown" };
 }
 
 // ─── GET /payment/payoneer/settings (public) ──────────────────────────────────
 export const getPayoneerSettings = asyncHandler(async (req, res) => {
-  const settings = await prisma.siteSettings.findFirst({
-    select: { payoneerEnabled: true, payoneerApiKey: true, payoneerProgramId: true },
-  });
-
-  res.status(200).json(new ApiResponsive(200, {
-    enabled: !!(settings?.payoneerEnabled && settings?.payoneerApiKey && settings?.payoneerProgramId),
-  }, "OK"));
+  const s = await prisma.siteSettings.findFirst({ select: { payoneerEnabled: true, payoneerApiKey: true, payoneerProgramId: true } });
+  res.status(200).json(new ApiResponsive(200, { enabled: !!(s?.payoneerEnabled && s?.payoneerApiKey && s?.payoneerProgramId) }, "OK"));
 });
 
 // ─── POST /payment/payoneer/create-payment ────────────────────────────────────
-// Creates a Payoneer checkout session and returns redirect URL
 export const createPayoneerPayment = asyncHandler(async (req, res) => {
-  const { amount, currency = "USD", shippingAddressId } = req.body;
-  const userId = req.user?.id;
-
-  if (!userId) throw new ApiError(401, "Authentication required");
-  if (!amount || parseFloat(amount) <= 0) throw new ApiError(400, "Invalid amount");
+  const { shippingAddressId, couponCode } = req.body;
+  const userId = req.user.id;
   if (!shippingAddressId) throw new ApiError(400, "Shipping address required");
 
-  const addr = await prisma.address.findFirst({ where: { id: shippingAddressId, userId } });
-  if (!addr) throw new ApiError(400, "Shipping address not found");
-
   const config = await getPayoneerConfig();
+  if (!frontendUrl() || !backendUrl()) throw new ApiError(500, "FRONTEND_URL / BASE_URL are not configured on the server");
+  const { quote, address } = await buildIntlQuote(userId, shippingAddressId, couponCode);
+  const country = toCountryCode(address.country);
+  if (!country) throw new ApiError(400, `Unrecognised country "${address.country}" on your address. Please edit the address.`);
+
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true } });
+  const session = await prisma.intlPaymentSession.create({
+    data: { provider: "PAYONEER", mode: config.mode, userId, shippingAddressId, quote, amountInr: quote.total, amountUsd: quote.amountUsd, currency: quote.currency },
+  });
 
-  // Unique reference for this payment attempt
-  const paymentRef = `ORDER-${userId.slice(-6)}-${Date.now()}`;
-
-  const payload = {
-    programId: config.programId,
-    amount: parseFloat(amount).toFixed(2),
-    currency,
-    description: `Order from ${config.siteName}`,
-    payerEmail: user?.email || "",
-    payerName: user?.name || "",
-    referenceId: paymentRef,
-    successUrl: `${process.env.FRONTEND_URL}/checkout/payoneer-success?ref=${paymentRef}&addr=${shippingAddressId}`,
-    cancelUrl: `${process.env.FRONTEND_URL}/checkout`,
-    notifyUrl: `${process.env.BASE_URL}/api/payment/payoneer/webhook`,
-  };
-
-  // Payoneer Checkout API
-  const response = await fetch(`${PAYONEER_BASE}/payments/checkout`, {
+  const [firstName, ...rest] = (address.name || user?.name || "Customer").trim().split(/\s+/);
+  const { ok, status, data } = await payoneerRequest(config, "/lists", {
     method: "POST",
-    headers: {
-      Authorization: config.authHeader,
-      "Content-Type": "application/json",
+    body: {
+      transactionId: session.id,
+      country,
+      integration: "HOSTED",
+      customer: {
+        number: userId,
+        email: user?.email,
+        name: { firstName, lastName: rest.join(" ") || firstName },
+        addresses: {
+          shipping: { street: address.street, zip: address.postalCode, city: address.city, state: address.state, country },
+          billing: { street: address.street, zip: address.postalCode, city: address.city, state: address.state, country },
+        },
+      },
+      payment: {
+        amount: quote.amountUsd,
+        currency: quote.currency,
+        reference: `Order from ${config.siteName}`.slice(0, 128),
+        invoiceId: session.id,
+      },
+      products: quote.items.map((i) => ({ code: i.sku || i.variantId, name: i.name.slice(0, 128), quantity: i.quantity })),
+      callback: {
+        returnUrl: `${frontendUrl()}/checkout/payoneer-success`,
+        cancelUrl: `${frontendUrl()}/checkout?payment=cancelled`,
+        notificationUrl: `${backendUrl()}/api/payment/payoneer/webhook`,
+      },
+      style: { language: "en_US" },
     },
-    body: JSON.stringify(payload),
-  }).catch(() => null);
+  });
 
-  // If Payoneer API call fails (not yet live, sandbox, etc.) — return a mock/sandbox message
-  if (!response || !response.ok) {
-    const errText = response ? await response.text().catch(() => "") : "Network error";
-    // For now: return instructions to use manual Payoneer transfer
-    return res.status(200).json(new ApiResponsive(200, {
-      redirectUrl: null,
-      paymentRef,
-      manualInstructions: true,
-      message: "Payoneer direct checkout requires an approved program. Please use bank transfer or contact support.",
-      programId: config.programId,
-    }, "Payoneer manual payment required"));
+  const redirectUrl = data?.links?.redirect;
+  const longId = data?.identification?.longId;
+  if (!ok || !redirectUrl || !longId) {
+    await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { status: "FAILED", providerStatus: `CREATE_FAILED:${status}` } });
+    console.error("Payoneer LIST failed:", status, JSON.stringify(data).slice(0, 500));
+    throw new ApiError(502, `Payoneer checkout could not be started: ${data?.resultInfo || data?.interaction?.reason || status}`);
   }
 
-  const data = await response.json();
-  const redirectUrl = data.checkoutUrl || data.redirect_url || data.url;
-
-  if (!redirectUrl) {
-    throw new ApiError(502, `Payoneer did not return a checkout URL: ${JSON.stringify(data)}`);
-  }
-
-  res.status(200).json(new ApiResponsive(200, {
-    redirectUrl,
-    paymentRef,
-    manualInstructions: false,
-  }, "Payoneer checkout created"));
+  await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { providerRef: longId, providerStatus: data?.status?.code || "listed" } });
+  res.status(200).json(new ApiResponsive(200, { redirectUrl, amountUsd: quote.amountUsd, total: quote.total }, "Payoneer checkout created"));
 });
 
 // ─── POST /payment/payoneer/verify ────────────────────────────────────────────
-// Called after customer returns from Payoneer with payment_id
 export const verifyPayoneerPayment = asyncHandler(async (req, res) => {
-  const { paymentRef, payoneerPaymentId, shippingAddressId, couponCode, notes = "" } = req.body;
-  const userId = req.user?.id;
+  const { longId, transactionId } = req.body;
+  const userId = req.user.id;
+  if (!longId && !transactionId) throw new ApiError(400, "Payment reference required");
 
-  if (!userId) throw new ApiError(401, "Authentication required");
-  if (!shippingAddressId) throw new ApiError(400, "Shipping address required");
-
-  // Idempotency check
-  const existing = await prisma.order.findFirst({
-    where: { userId, notes: { contains: paymentRef } },
+  const session = await prisma.intlPaymentSession.findFirst({
+    where: { provider: "PAYONEER", userId, ...(longId ? { providerRef: longId } : { id: transactionId }) },
   });
-  if (existing) {
-    return res.status(200).json(new ApiResponsive(200, {
-      orderId: existing.id,
-      orderNumber: existing.orderNumber,
-      alreadyCreated: true,
-    }, "Already created"));
+  if (!session || !session.providerRef) throw new ApiError(404, "Payment not found");
+
+  if (session.orderId) {
+    const order = await prisma.order.findUnique({ where: { id: session.orderId } });
+    return res.status(200).json(new ApiResponsive(200, { orderId: order.id, orderNumber: order.orderNumber, state: order.status }, "Already processed"));
   }
 
-  // Verify payment with Payoneer (optional — can also trust the redirect)
-  let verified = true;
-  if (payoneerPaymentId) {
-    try {
-      const config = await getPayoneerConfig();
-      const verifyRes = await fetch(`${PAYONEER_BASE}/payments/${payoneerPaymentId}`, {
-        headers: { Authorization: config.authHeader },
-      });
-      if (verifyRes.ok) {
-        const verifyData = await verifyRes.json();
-        verified = verifyData.status === "PAID" || verifyData.status === "SUCCESS" || verifyData.status === "COMPLETED";
-      }
-    } catch {
-      // If verify fails (sandbox/network), proceed — admin can verify manually
-      verified = true;
-    }
+  const config = await getPayoneerConfig({ requireEnabled: false });
+  const { order, state } = await settleSession(session, config);
+  if (!order) {
+    const msg = ["declined", "failed", "aborted", "rejected", "canceled", "cancelled"].includes(state)
+      ? "Your Payoneer payment was not completed. You have not been charged."
+      : `Payoneer has not confirmed the payment yet (status: ${state}). Please wait a minute and refresh.`;
+    throw new ApiError(402, msg);
   }
-
-  if (!verified) throw new ApiError(402, "Payoneer payment not confirmed");
-
-  // Load address
-  const shippingAddr = await prisma.address.findFirst({ where: { id: shippingAddressId, userId } });
-  if (!shippingAddr) throw new ApiError(400, "Shipping address not found");
-
-  // ── Load cart items (CartItem model, not Cart) ─────────────────────────────
-  const cartItems = await prisma.cartItem.findMany({
-    where: { userId },
-    include: {
-      addons: { include: { addonService: true } },
-      productVariant: {
-        include: {
-          product: { include: { flashSales: { include: { flashSale: true } } } },
-          pricingSlabs: true,
-        },
-      },
-    },
-  });
-  if (!cartItems?.length) throw new ApiError(400, "Cart is empty");
-
-  let couponRecord = null;
-  if (couponCode) {
-    couponRecord = await prisma.coupon.findFirst({ where: { code: couponCode, isActive: true } });
-  }
-
-  const orderItems = [];
-  let subtotal = 0;
-  for (const cartItem of cartItems) {
-    const variant = cartItem.productVariant;
-    if (!variant?.isActive) continue;
-    const flashSaleDiscount = variant.product?.flashSales?.[0]?.flashSale?.discountPercentage ?? null;
-    const priceInfo = applyFlashSalePrice(variant, cartItem.quantity, flashSaleDiscount);
-    const lineTotal = priceInfo.price * cartItem.quantity;
-
-    // Add addon prices
-    const addonsTotal = (cartItem.addons || []).reduce((sum, a) => {
-      return sum + parseFloat(a.addonService?.price || a.price || 0);
-    }, 0);
-
-    subtotal += lineTotal + addonsTotal;
-
-    orderItems.push({
-      variantId: variant.id,
-      productId: variant.productId,
-      quantity: cartItem.quantity,
-      price: priceInfo.price,
-      subtotal: lineTotal + addonsTotal,
-      addons: (cartItem.addons || []).map((a) => ({
-        addonServiceId: a.addonServiceId,
-        name: a.addonService?.name || "",
-        price: parseFloat(a.addonService?.price || a.price || 0),
-      })),
-    });
-  }
-  if (!orderItems.length) throw new ApiError(400, "No active items in cart");
-
-  let discount = 0;
-  if (couponRecord) {
-    discount = couponRecord.discountType === "PERCENTAGE"
-      ? Math.min((subtotal * couponRecord.discountValue) / 100, subtotal * 0.9)
-      : Math.min(couponRecord.discountValue, subtotal * 0.9);
-  }
-  const total = Math.max(Math.round((subtotal - discount) * 100) / 100, 0);
-
-  // Create order in transaction
-  const dbOrder = await prisma.$transaction(async (tx) => {
-    const settings = await tx.siteSettings.findFirst({ select: { orderPrefix: true } });
-    const count = await tx.order.count();
-    const orderNumber = `${settings?.orderPrefix || "ORD"}${String(count + 1).padStart(6, "0")}`;
-
-    const order = await tx.order.create({
-      data: {
-        orderNumber, userId, status: "PAID",
-        paymentMethod: "PAYONEER", paymentGateway: "PAYONEER",
-        paymentMode: "LIVE",
-        subTotal: subtotal, shippingCost: 0, discount, tax: 0, total,
-        shippingProvider: "EASYSHIP",
-        shippingAddressId: shippingAddr.id,
-        couponId: couponRecord?.id || null,
-        couponCode: couponRecord?.code || null,
-        notes: `${notes} [payoneer:${paymentRef}${payoneerPaymentId ? `:${payoneerPaymentId}` : ""}]`.trim(),
-        items: {
-          create: orderItems.map((i) => ({
-            variantId: i.variantId,
-            productId: i.productId,
-            quantity: i.quantity,
-            price: i.price,
-            subtotal: i.subtotal,
-          })),
-        },
-      },
-      include: { items: true, shippingAddress: true, user: true },
-    });
-
-    // Save OrderItemAddon records
-    for (let i = 0; i < order.items.length; i++) {
-      const orderItem = order.items[i];
-      const sourceItem = orderItems[i];
-      if (sourceItem?.addons?.length) {
-        await tx.orderItemAddon.createMany({
-          data: sourceItem.addons.map((a) => ({
-            orderItemId: orderItem.id,
-            addonServiceId: a.addonServiceId,
-            name: a.name,
-            price: a.price,
-          })),
-        });
-      }
-    }
-
-    for (const item of orderItems) {
-      await tx.productVariant.update({
-        where: { id: item.variantId },
-        data: { quantity: { decrement: item.quantity } },
-      });
-    }
-
-    // Clear cart items for this user
-    await tx.cartItem.deleteMany({ where: { userId } });
-
-    if (couponRecord) {
-      await tx.coupon.update({
-        where: { id: couponRecord.id },
-        data: { usageCount: { increment: 1 } },
-      }).catch(() => {});
-    }
-    return order;
-  });
-
-  // Email (non-blocking)
-  prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true } })
-    .then((u) => {
-      if (u?.email) {
-        const html = getOrderConfirmationTemplate({ ...dbOrder, user: u });
-        sendEmail({ to: u.email, subject: `Order Confirmed #${dbOrder.orderNumber}`, html }).catch(() => {});
-      }
-    })
-    .catch(() => {});
-
-  res.status(200).json(new ApiResponsive(200, {
-    orderId: dbOrder.id, orderNumber: dbOrder.orderNumber, total,
-  }, "Payoneer order created"));
+  res.status(200).json(new ApiResponsive(200, { orderId: order.id, orderNumber: order.orderNumber, state }, "Payoneer payment processed"));
 });
 
-// ─── POST /payment/payoneer/webhook ──────────────────────────────────────────
-// Payoneer IPN webhook (public)
+// ─── POST|GET /payment/payoneer/webhook (public) ──────────────────────────────
+// Notification parameters are not trusted: they only tell us which session to re-check with Payoneer.
 export const payoneerWebhook = asyncHandler(async (req, res) => {
-  // Acknowledge immediately
+  const params = { ...(req.query || {}), ...(typeof req.body === "object" ? req.body : {}) };
+  const longId = params.longId || params.listLongId;
+  const transactionId = params.transactionId;
   res.status(200).json({ received: true });
-  // Payoneer IPN processing would go here
-  // For now, order is created at verify step — webhook is for reconciliation only
+
+  try {
+    const session = await prisma.intlPaymentSession.findFirst({
+      where: { provider: "PAYONEER", OR: [longId ? { providerRef: String(longId) } : undefined, transactionId ? { id: String(transactionId) } : undefined].filter(Boolean) },
+    });
+    if (!session?.providerRef) return;
+    const config = await getPayoneerConfig({ requireEnabled: false });
+    await settleSession(session, config);
+  } catch (err) {
+    console.error("Payoneer webhook processing failed:", err?.message || err);
+  }
+});
+
+// ─── POST /admin/site-settings/test-payoneer ──────────────────────────────────
+export const testPayoneerConnection = asyncHandler(async (req, res) => {
+  const config = await getPayoneerConfig({ requireEnabled: false });
+  // An unknown LIST id returns 404 when credentials are valid and 401/403 when they are not.
+  const { status } = await payoneerRequest(config, "/lists/connection-test-000000");
+  if (status === 401 || status === 403) {
+    throw new ApiError(400, `Payoneer rejected the merchant code / API token (${config.mode})`);
+  }
+  if (status >= 500 || status === 0) throw new ApiError(502, `Payoneer ${config.mode} API is unreachable (${status})`);
+  res.status(200).json(new ApiResponsive(200, { connected: true, mode: config.mode }, `Payoneer credentials accepted (${config.mode})`));
 });
