@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { toast, Toaster } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -54,7 +55,7 @@ function VerifyOtpForm() {
     try {
       await verifyOtp(email, otpString);
       toast.success("Email verified and logged in successfully!");
-      
+
       // Auto-redirect to checkout or target destination
       const returnUrl = searchParams.get("returnUrl") || searchParams.get("redirect");
       setTimeout(() => {
@@ -91,7 +92,7 @@ function VerifyOtpForm() {
         {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/">
-            <img src="/logo.jpeg" alt="Wool Jute Rug Co" className="h-16 mx-auto object-contain" />
+            <Image src="/logo.jpeg" alt="Wool Jute Rug Co" width={180} height={64} className="h-16 w-auto mx-auto object-contain" />
           </Link>
         </div>
 

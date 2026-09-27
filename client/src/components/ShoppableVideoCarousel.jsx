@@ -193,9 +193,10 @@ export default function ShoppableVideoCarousel() {
                           playsInline
                         />
                       ) : (
-                        <img
+                        <Image
                           src={item.mediaUrl}
                           alt={item.product?.name || "Product"}
+                          fill
                           className="w-full h-full object-cover"
                         />
                       )

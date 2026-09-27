@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Image from "next/image";
 import {
   Phone,
   Mail,
@@ -205,9 +206,10 @@ export default function RugServicesPage() {
           ].map((item, idx) => (
             <div key={idx} className="bg-white border border-[#e8e0d5] flex flex-col h-full group">
               <div className="relative aspect-[4/3] w-full overflow-hidden bg-neutral-100 shrink-0">
-                <img
+                <Image
                   src={item.image}
                   alt={item.title}
+                  fill
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
               </div>
@@ -548,9 +550,10 @@ export default function RugServicesPage() {
           >
             {/* Unwashed / Dirty Side (Background) */}
             <div className="absolute inset-0 w-full h-full">
-              <img
+              <Image
                 src="https://images.unsplash.com/photo-1600121848594-d8644e57abab?auto=format&fit=crop&w=1200&q=80"
                 alt="Dirty Rug"
+                fill
                 className="w-full h-full object-cover filter saturate-[0.5] brightness-[0.75] contrast-[1.15] blur-[1px]"
                 draggable="false"
               />
@@ -566,9 +569,10 @@ export default function RugServicesPage() {
                 clipPath: `polygon(0 0, ${sliderPosition}% 0, ${sliderPosition}% 100%, 0 100%)`,
               }}
             >
-              <img
+              <Image
                 src="https://images.unsplash.com/photo-1600121848594-d8644e57abab?auto=format&fit=crop&w=1200&q=80"
                 alt="Clean Rug"
+                fill
                 className="w-full h-full object-cover"
                 draggable="false"
               />

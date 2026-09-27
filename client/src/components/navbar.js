@@ -196,9 +196,10 @@ export function Navbar() {
                 >
                   <div className="relative h-12 w-12 rounded border border-gray-100 overflow-hidden bg-gray-50 shrink-0">
                     {product.image ? (
-                      <img
+                      <Image
                         src={product.image}
                         alt={product.name}
+                        fill
                         className="h-full w-full object-cover group-hover:scale-105 transition-transform"
                       />
                     ) : (
@@ -306,9 +307,11 @@ export function Navbar() {
             {/* Logo */}
             <div className="flex-1 flex justify-start">
               <Link href="/" className="shrink-0 flex items-center h-14 md:h-16">
-                <img
+                <Image
                   src="/logo.jpeg"
                   alt="Wool Jute Rug Co"
+                  width={180}
+                  height={64}
                   className="h-full w-auto object-contain transition-all duration-300"
 
                 />
@@ -486,9 +489,11 @@ export function Navbar() {
             </button>
 
             <Link href="/" className="flex-1 flex justify-center items-center h-10 sm:h-12">
-              <img
+              <Image
                 src="/logo.jpeg"
                 alt="Wool Jute Rug Co"
+                width={180}
+                height={64}
                 className="h-full w-auto object-contain transition-all duration-300"
 
               />
@@ -731,9 +736,10 @@ export function Navbar() {
                             <div className="bg-[#F8F4EE] border border-[#e8e0d5] p-5 rounded flex flex-col justify-between items-center text-center shadow-inner relative overflow-hidden group min-h-[300px]">
                               {item.bannerImage ? (
                                 <>
-                                  <img
+                                  <Image
                                     src={item.bannerImage}
                                     alt={item.bannerTitle || "Banner"}
+                                    fill
                                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                                   />
                                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
@@ -779,9 +785,10 @@ export function Navbar() {
                                   onClick={() => setActiveMenu(null)}
                                 >
                                   {lnk.image ? (
-                                    <img
+                                    <Image
                                       src={lnk.image}
                                       alt={lnk.label}
+                                      fill
                                       className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                                     />
                                   ) : (

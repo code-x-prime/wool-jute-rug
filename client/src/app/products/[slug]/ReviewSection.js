@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import Image from "next/image";
 import { Star, AlertCircle, X, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
@@ -237,7 +238,7 @@ export default function ReviewSection({ product }) {
                   <div className="flex flex-wrap gap-4 mb-3">
                     {images.map((img, idx) => (
                       <div key={idx} className="relative w-24 h-24 border rounded-md overflow-hidden bg-gray-100 group">
-                        <img src={URL.createObjectURL(img)} alt={`Upload ${idx}`} className="w-full h-full object-cover" />
+                        <Image src={URL.createObjectURL(img)} alt={`Upload ${idx}`} width={96} height={96} unoptimized className="w-full h-full object-cover" />
                         <button
                           type="button"
                           onClick={() => removeImage(idx)}
@@ -313,7 +314,7 @@ export default function ReviewSection({ product }) {
               <div className="flex gap-2 overflow-x-auto pb-4 custom-scrollbar">
                 {allReviewImages.map((img, idx) => (
                   <div key={idx} className="w-32 h-32 flex-shrink-0 border border-gray-200 rounded-md overflow-hidden bg-gray-100 group relative">
-                    <img src={img.url} alt={`Review photo by ${img.user}`} className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity" />
+                    <Image src={img.url} alt={`Review photo by ${img.user}`} fill className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity" />
                   </div>
                 ))}
               </div>
@@ -330,7 +331,7 @@ export default function ReviewSection({ product }) {
                   <div key={review.id} className="mb-6">
                     <div className="flex items-center gap-2 mb-2">
                       <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 overflow-hidden">
-                        <img src={`https://ui-avatars.com/api/?name=${review.user.name}&background=random`} alt={review.user.name} />
+                        <Image src={`https://ui-avatars.com/api/?name=${review.user.name}&background=random`} alt={review.user.name} width={32} height={32} />
                       </div>
                       <span className="font-medium text-[15px]">{review.user.name}</span>
                     </div>
@@ -361,8 +362,8 @@ export default function ReviewSection({ product }) {
                     {review.images && review.images.length > 0 && (
                       <div className="flex gap-2 mb-3 overflow-x-auto">
                         {review.images.map((img, idx) => (
-                          <div key={idx} className="w-24 h-24 flex-shrink-0 border rounded-md overflow-hidden bg-gray-100">
-                            <img src={img} alt="Review attachment" className="w-full h-full object-cover" />
+                          <div key={idx} className="relative w-24 h-24 flex-shrink-0 border rounded-md overflow-hidden bg-gray-100">
+                            <Image src={img} alt="Review attachment" fill className="w-full h-full object-cover" />
                           </div>
                         ))}
                       </div>

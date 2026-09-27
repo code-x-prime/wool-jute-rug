@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import {
@@ -307,9 +308,11 @@ export function Footer() {
                       className="px-3 py-2 rounded flex items-center justify-center bg-white border border-[#e5e0da] h-10 min-w-[56px]"
                       title={p.name}
                     >
-                      <img
+                      <Image
                         src={p.src}
                         alt={p.name}
+                        width={96}
+                        height={32}
                         className={`${p.height} w-auto object-contain opacity-80 hover:opacity-100 transition-opacity duration-200`}
                       />
                     </div>

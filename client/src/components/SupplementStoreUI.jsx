@@ -1,4 +1,5 @@
 import React from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 const SupplementStoreUI = () => {
@@ -12,15 +13,19 @@ const SupplementStoreUI = () => {
           onClick={() => router.push("/products")}
         >
           {/* Mobile image */}
-          <img
+          <Image
             src="/auth.jpg"
             alt="Collection Banner"
+            width={1400}
+            height={933}
             className="block md:hidden w-full object-cover aspect-[9/14]"
           />
           {/* Desktop image */}
-          <img
+          <Image
             src="/h2.jpg"
             alt="Collection Banner"
+            width={1400}
+            height={525}
             className="hidden md:block w-full object-cover aspect-[16/6] transition-transform duration-700 group-hover:scale-105"
           />
 

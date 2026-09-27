@@ -122,13 +122,14 @@ function ProductsContent() {
       { threshold: 0.1 }
     );
 
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current);
+    const target = observerTarget.current;
+    if (target) {
+      observer.observe(target);
     }
 
     return () => {
-      if (observerTarget.current) {
-        observer.unobserve(observerTarget.current);
+      if (target) {
+        observer.unobserve(target);
       }
     };
   }, [loading, pagination.page, pagination.pages]);
@@ -626,9 +627,9 @@ function ProductsContent() {
           <h1 className="text-3xl md:text-4xl text-gray-900 mb-4 font-normal tracking-wide">
             {filters.subcategory
               ? (categories
-                  .flatMap((c) => c.children || [])
-                  .find((s) => s.slug === filters.subcategory)?.name
-                  || filters.subcategory)
+                .flatMap((c) => c.children || [])
+                .find((s) => s.slug === filters.subcategory)?.name
+                || filters.subcategory)
               : (categories.find((c) => c.slug === filters.category)?.name || "New Arrivals")}
           </h1>
           {!filters.category && !filters.subcategory && (

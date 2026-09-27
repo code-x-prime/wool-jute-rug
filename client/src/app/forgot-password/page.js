@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { toast, Toaster } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { Mail, ArrowLeft, Loader2 } from "lucide-react";
@@ -41,7 +42,7 @@ export default function ForgotPasswordPage() {
         {/* Logo / Brand */}
         <div className="text-center mb-8">
           <Link href="/">
-            <img src="/logo.jpeg" alt="Wool Jute Rug Co" className="h-16 mx-auto object-contain" />
+            <Image src="/logo.jpeg" alt="Wool Jute Rug Co" width={180} height={64} className="h-16 w-auto mx-auto object-contain" />
           </Link>
         </div>
 

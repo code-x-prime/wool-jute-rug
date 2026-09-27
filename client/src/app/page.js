@@ -750,9 +750,10 @@ export default function Home() {
               href={room.href}
               className="group relative overflow-hidden rounded-sm block aspect-[3/4]"
             >
-              <img
+              <Image
                 src={room.img}
                 alt={room.label}
+                fill
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />

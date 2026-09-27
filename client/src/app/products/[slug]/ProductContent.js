@@ -131,7 +131,7 @@ export default function ProductContent({ slug }) {
             .then((r) => {
               const addons = r.data?.addons || [];
               setAddonServices(addons);
-              
+
               // Pre-select addons from query parameter
               const urlParams = new URLSearchParams(window.location.search);
               const addonsParam = urlParams.get("addons");
@@ -140,7 +140,7 @@ export default function ProductContent({ slug }) {
                 setSelectedAddonIds(preselectedIds);
               }
             })
-            .catch(() => {});
+            .catch(() => { });
         }
 
         // Set main image
@@ -218,7 +218,7 @@ export default function ProductContent({ slug }) {
     if (typeof window === "undefined") return;
 
     const url = new URL(window.location.href);
-    
+
     if (selectedVariant?.id) {
       url.searchParams.set("variant", selectedVariant.id);
     } else {
@@ -736,9 +736,10 @@ export default function ProductContent({ slug }) {
                   autoPlay
                 />
               ) : (
-                <img
+                <Image
                   src={getImageUrl(mediaToShow[lightboxIndex]?.url)}
                   alt={`${product?.name} - ${lightboxIndex + 1}`}
+                  fill
                   style={{
                     transform: `scale(${zoomLevel})`,
                     transformOrigin: "center center",
@@ -768,7 +769,7 @@ export default function ProductContent({ slug }) {
                         <Play className="absolute h-4 w-4 text-white" />
                       </div>
                     ) : (
-                      <img src={getImageUrl(media.url)} alt="" className="w-full h-full object-cover" />
+                      <Image src={getImageUrl(media.url)} alt="" fill className="w-full h-full object-cover" />
                     )}
                   </button>
                 ))}
@@ -1525,7 +1526,7 @@ export default function ProductContent({ slug }) {
               onClick={async () => {
                 const url = window.location.href;
                 if (navigator.share) {
-                  try { await navigator.share({ title: product.name, url }); } catch (_) {}
+                  try { await navigator.share({ title: product.name, url }); } catch (_) { }
                 } else {
                   await navigator.clipboard.writeText(url);
                   toast.success("Link copied to clipboard!");

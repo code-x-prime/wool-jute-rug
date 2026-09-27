@@ -114,7 +114,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
           if (productData.id) {
             fetchApi(`/public/products/${productData.id}/addons`)
               .then((r) => setAddonServices(r?.data?.data?.addons || []))
-              .catch(() => {});
+              .catch(() => { });
           }
 
           // Set initial image
@@ -711,7 +711,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                               className={`relative flex flex-col items-center gap-1 transition-all ${!isAvailable ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
                             >
                               <div className={`w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${isSelected ? "border-[#3D1C02] ring-2 ring-[#3D1C02] ring-offset-1" : "border-gray-200 hover:border-[#3D1C02]"}`}>
-                                <img src={val.image} alt={val.value} className="w-full h-full object-cover" />
+                                <Image src={val.image} alt={val.value} width={56} height={56} className="w-full h-full object-cover" />
                               </div>
                               <span className={`text-[10px] font-medium leading-none max-w-[56px] truncate text-center ${isSelected ? "text-[#3D1C02]" : "text-gray-500"}`}>{val.value}</span>
                               {isSelected && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-[#3D1C02] rounded-full flex items-center justify-center"><svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg></span>}
@@ -929,7 +929,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                   onClick={async () => {
                     const url = `${window.location.origin}/products/${displayProduct.slug}`;
                     if (navigator.share) {
-                      try { await navigator.share({ title: displayProduct.name, url }); } catch (_) {}
+                      try { await navigator.share({ title: displayProduct.name, url }); } catch (_) { }
                     } else {
                       await navigator.clipboard.writeText(url);
                       toast.success("Link copied!");
