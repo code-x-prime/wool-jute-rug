@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
 import { fetchApi, formatCurrency, stripInlineStyles } from "@/lib/utils";
@@ -20,6 +21,7 @@ import {
   X,
   Share2,
   Play,
+  ShoppingBasket,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
@@ -90,6 +92,44 @@ export default function ProductContent({ slug }) {
   const hasOptions = !!product?.attributeOptions?.length;
   const processingMinDays = selectedVariant?.processingMinDays ?? product?.processingMinDays;
   const processingMaxDays = selectedVariant?.processingMaxDays ?? product?.processingMaxDays;
+
+  // Pincode delivery estimate — no login required, approximate (nearest warehouse by region)
+  const [pincodeInput, setPincodeInput] = useState("");
+  const [deliveryEstimate, setDeliveryEstimate] = useState(null);
+  const [checkingPincode, setCheckingPincode] = useState(false);
+  const [pincodeError, setPincodeError] = useState("");
+
+  const handleCheckPincode = async () => {
+    const digits = pincodeInput.replace(/\D/g, "");
+    if (digits.length !== 6) {
+      setPincodeError("Enter a valid 6-digit pincode");
+      setDeliveryEstimate(null);
+      return;
+    }
+    setCheckingPincode(true);
+    setPincodeError("");
+    try {
+      const res = await fetchApi("/public/delivery-estimate", {
+        method: "POST",
+        body: JSON.stringify({
+          pincode: digits,
+          productId: product?.id,
+          variantId: selectedVariant?.id,
+        }),
+      });
+      if (res.success) {
+        setDeliveryEstimate(res.data);
+      } else {
+        setPincodeError(res.message || "Could not check delivery for this pincode");
+        setDeliveryEstimate(null);
+      }
+    } catch (err) {
+      setPincodeError(err.message || "Could not check delivery for this pincode");
+      setDeliveryEstimate(null);
+    } finally {
+      setCheckingPincode(false);
+    }
+  };
   const shippingAndReturnsHtml = product?.shippingAndReturns?.trim() || "";
   const hasShippingAndReturns = Boolean(
     shippingAndReturnsHtml
@@ -518,6 +558,16 @@ export default function ProductContent({ slug }) {
     setZoomLevel(1);
   }, []);
 
+  // Lock page scroll while the lightbox is open so it always fills the real viewport
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [lightboxOpen]);
+
   // Keyboard navigation for lightbox — defined after getMediaToShow
   useEffect(() => {
     if (!lightboxOpen) return;
@@ -549,7 +599,6 @@ export default function ProductContent({ slug }) {
     const currentIndex = mediaToShow.findIndex((img) => img.url === currentMainImage?.url);
 
     return (
-      <>
         <div className="flex flex-col-reverse lg:flex-row gap-4 h-full">
           {/* Thumbnails */}
           {mediaToShow.length > 1 && (
@@ -630,7 +679,7 @@ export default function ProductContent({ slug }) {
             )}
             {/* Zoom hint */}
             {!currentMainImage?.isVideo && (
-              <div className="absolute bottom-3 right-3 bg-white/80 backdrop-blur-sm rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity shadow">
+              <div className="absolute bottom-3 right-3 bg-white/80 backdrop-blur-sm rounded-full p-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow">
                 <ZoomIn className="h-4 w-4 text-gray-700" />
               </div>
             )}
@@ -638,13 +687,13 @@ export default function ProductContent({ slug }) {
             {mediaToShow.length > 1 && (
               <>
                 <button
-                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 backdrop-blur-sm rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity shadow z-10"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 backdrop-blur-sm rounded-full p-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow z-10"
                   onClick={(e) => { e.stopPropagation(); const prev = (currentIndex - 1 + mediaToShow.length) % mediaToShow.length; setMainImage(mediaToShow[prev]); }}
                 >
                   <ChevronLeft className="h-4 w-4 text-gray-700" />
                 </button>
                 <button
-                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 backdrop-blur-sm rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity shadow z-10"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 backdrop-blur-sm rounded-full p-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shadow z-10"
                   onClick={(e) => { e.stopPropagation(); const next = (currentIndex + 1) % mediaToShow.length; setMainImage(mediaToShow[next]); }}
                 >
                   <ChevronRight className="h-4 w-4 text-gray-700" />
@@ -653,140 +702,146 @@ export default function ProductContent({ slug }) {
             )}
           </div>
         </div>
+    );
+  };
 
-        {/* Lightbox */}
-        {lightboxOpen && (
-          <div
-            className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center"
-            onClick={closeLightbox}
-          >
-            {/* Close */}
-            <button className="absolute top-4 right-4 text-white/80 hover:text-white p-2 z-10" onClick={closeLightbox}>
-              <X className="h-7 w-7" />
-            </button>
+  const renderLightbox = () => {
+    if (!lightboxOpen) return null;
+    const mediaToShow = getMediaToShow();
+    return createPortal(
+      <div
+        className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center"
+        onClick={closeLightbox}
+      >
+        {/* Close */}
+        <button className="absolute top-4 right-4 text-white/80 hover:text-white p-2 z-10" onClick={closeLightbox}>
+          <X className="h-7 w-7" />
+        </button>
 
-            {/* Counter */}
-            <div className="absolute top-5 left-1/2 -translate-x-1/2 text-white/60 text-sm font-medium">
-              {lightboxIndex + 1} / {mediaToShow.length}
-            </div>
+        {/* Counter */}
+        <div className="absolute top-5 left-1/2 -translate-x-1/2 text-white/60 text-sm font-medium">
+          {lightboxIndex + 1} / {mediaToShow.length}
+        </div>
 
-            {(() => {
-              const linked = photoOptionMap.get(mediaToShow[lightboxIndex]?.url);
-              if (!linked) return null;
-              const isChosen = selectedAttributes[linked.attributeId] === linked.valueId;
-              return (
-                <div
-                  className="absolute left-4 top-14 z-10 flex flex-wrap items-center gap-3 rounded-full bg-black/60 px-4 py-2 text-sm text-white sm:left-6 sm:top-auto sm:bottom-6"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <span>
-                    Item in the photo is in <b>{linked.attributeName}: {linked.value}</b>
-                  </span>
-                  {linked.hexCode && <span className="h-5 w-5 rounded-full border border-white/60" style={{ backgroundColor: linked.hexCode }} />}
-                  <button
-                    type="button"
-                    disabled={isChosen}
-                    onClick={() => {
-                      handleAttributeChange(linked.attributeId, linked.valueId);
-                      closeLightbox();
-                    }}
-                    className="rounded-full border border-white px-4 py-1.5 font-semibold hover:bg-white hover:text-black disabled:opacity-60"
-                  >
-                    {isChosen ? "Selected" : "Select this option"}
-                  </button>
-                </div>
-              );
-            })()}
-
-            {/* Zoom controls */}
-            {!mediaToShow[lightboxIndex]?.isVideo && (
-              <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-white/10 backdrop-blur-sm rounded-full px-4 py-2">
-                <button onClick={(e) => { e.stopPropagation(); setZoomLevel((z) => Math.max(1, z - 0.5)); }} className="text-white/80 hover:text-white">
-                  <ZoomOut className="h-5 w-5" />
-                </button>
-                <span className="text-white/60 text-xs w-10 text-center">{Math.round(zoomLevel * 100)}%</span>
-                <button onClick={(e) => { e.stopPropagation(); setZoomLevel((z) => Math.min(4, z + 0.5)); }} className="text-white/80 hover:text-white">
-                  <ZoomIn className="h-5 w-5" />
-                </button>
-              </div>
-            )}
-
-            {/* Prev arrow */}
-            {mediaToShow.length > 1 && (
-              <button
-                className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all z-10"
-                onClick={(e) => { e.stopPropagation(); setLightboxIndex((i) => (i - 1 + mediaToShow.length) % mediaToShow.length); setZoomLevel(1); }}
-              >
-                <ChevronLeft className="h-7 w-7" />
-              </button>
-            )}
-
-            {/* Next arrow */}
-            {mediaToShow.length > 1 && (
-              <button
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all z-10"
-                onClick={(e) => { e.stopPropagation(); setLightboxIndex((i) => (i + 1) % mediaToShow.length); setZoomLevel(1); }}
-              >
-                <ChevronRight className="h-7 w-7" />
-              </button>
-            )}
-
-            {/* Main lightbox content */}
+        {(() => {
+          const linked = photoOptionMap.get(mediaToShow[lightboxIndex]?.url);
+          if (!linked) return null;
+          const isChosen = selectedAttributes[linked.attributeId] === linked.valueId;
+          return (
             <div
-              className="relative overflow-auto flex items-center justify-center"
-              style={{ width: "min(90vw, 900px)", height: "min(90vh, 900px)" }}
+              className="absolute left-4 top-14 z-10 flex flex-wrap items-center gap-3 rounded-full bg-black/60 px-4 py-2 text-sm text-white sm:left-6 sm:top-auto sm:bottom-6"
               onClick={(e) => e.stopPropagation()}
             >
-              {mediaToShow[lightboxIndex]?.isVideo ? (
-                <video
-                  src={mediaToShow[lightboxIndex].url}
-                  controls
-                  className="max-w-full max-h-[80vh] object-contain z-20"
-                  autoPlay
-                />
-              ) : (
-                <Image
-                  src={getImageUrl(mediaToShow[lightboxIndex]?.url)}
-                  alt={`${product?.name} - ${lightboxIndex + 1}`}
-                  fill
-                  style={{
-                    transform: `scale(${zoomLevel})`,
-                    transformOrigin: "center center",
-                    transition: "transform 0.2s ease",
-                    maxWidth: "100%",
-                    maxHeight: "100%",
-                    objectFit: "contain",
-                    cursor: zoomLevel > 1 ? "move" : "zoom-in",
-                  }}
-                  onClick={() => setZoomLevel((z) => z >= 3 ? 1 : z + 0.5)}
-                />
-              )}
+              <span>
+                Item in the photo is in <b>{linked.attributeName}: {linked.value}</b>
+              </span>
+              {linked.hexCode && <span className="h-5 w-5 rounded-full border border-white/60" style={{ backgroundColor: linked.hexCode }} />}
+              <button
+                type="button"
+                disabled={isChosen}
+                onClick={() => {
+                  handleAttributeChange(linked.attributeId, linked.valueId);
+                  closeLightbox();
+                }}
+                className="rounded-full border border-white px-4 py-1.5 font-semibold hover:bg-white hover:text-black disabled:opacity-60"
+              >
+                {isChosen ? "Selected" : "Select this option"}
+              </button>
             </div>
+          );
+        })()}
 
-            {/* Thumbnail strip */}
-            {mediaToShow.length > 1 && (
-              <div className="absolute bottom-16 left-1/2 -translate-x-1/2 flex gap-2 overflow-x-auto max-w-[80vw] pb-1">
-                {mediaToShow.map((media, i) => (
-                  <button
-                    key={i}
-                    onClick={(e) => { e.stopPropagation(); setLightboxIndex(i); setZoomLevel(1); }}
-                    className={`relative w-12 h-12 shrink-0 overflow-hidden transition-all ${i === lightboxIndex ? "ring-2 ring-white opacity-100" : "opacity-40 hover:opacity-80"}`}
-                  >
-                    {media.isVideo ? (
-                      <div className="w-full h-full bg-black/40 flex items-center justify-center relative">
-                        <video src={media.url} className="w-full h-full object-cover opacity-60" muted />
-                        <Play className="absolute h-4 w-4 text-white" />
-                      </div>
-                    ) : (
-                      <Image src={getImageUrl(media.url)} alt="" fill className="w-full h-full object-cover" />
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+        {/* Prev arrow */}
+        {mediaToShow.length > 1 && (
+          <button
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all z-10"
+            onClick={(e) => { e.stopPropagation(); setLightboxIndex((i) => (i - 1 + mediaToShow.length) % mediaToShow.length); setZoomLevel(1); }}
+          >
+            <ChevronLeft className="h-7 w-7" />
+          </button>
         )}
-      </>
+
+        {/* Next arrow */}
+        {mediaToShow.length > 1 && (
+          <button
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all z-10"
+            onClick={(e) => { e.stopPropagation(); setLightboxIndex((i) => (i + 1) % mediaToShow.length); setZoomLevel(1); }}
+          >
+            <ChevronRight className="h-7 w-7" />
+          </button>
+        )}
+
+        {/* Main lightbox content */}
+        <div
+          className="relative overflow-auto flex items-center justify-center"
+          style={{ width: "min(90vw, 900px)", height: "min(75vh, 900px)" }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {mediaToShow[lightboxIndex]?.isVideo ? (
+            <video
+              src={mediaToShow[lightboxIndex].url}
+              controls
+              className="max-w-full max-h-[80vh] object-contain z-20"
+              autoPlay
+            />
+          ) : (
+            <Image
+              src={getImageUrl(mediaToShow[lightboxIndex]?.url)}
+              alt={`${product?.name} - ${lightboxIndex + 1}`}
+              fill
+              style={{
+                transform: `scale(${zoomLevel})`,
+                transformOrigin: "center center",
+                transition: "transform 0.2s ease",
+                maxWidth: "100%",
+                maxHeight: "100%",
+                objectFit: "contain",
+                cursor: zoomLevel > 1 ? "move" : "zoom-in",
+              }}
+              onClick={() => setZoomLevel((z) => z >= 3 ? 1 : z + 0.5)}
+            />
+          )}
+        </div>
+
+        {/* Bottom bar: thumbnail strip + zoom controls, stacked so both always stay on screen */}
+        <div
+          className="absolute bottom-0 left-0 right-0 flex flex-col items-center gap-2 bg-gradient-to-t from-black/80 to-transparent pb-4 pt-8"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {mediaToShow.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto max-w-[90vw] px-2 pb-1">
+              {mediaToShow.map((media, i) => (
+                <button
+                  key={i}
+                  onClick={() => { setLightboxIndex(i); setZoomLevel(1); }}
+                  className={`relative h-12 w-12 shrink-0 overflow-hidden rounded transition-all ${i === lightboxIndex ? "ring-2 ring-white opacity-100" : "opacity-40 hover:opacity-80"}`}
+                >
+                  {media.isVideo ? (
+                    <div className="w-full h-full bg-black/40 flex items-center justify-center relative">
+                      <video src={media.url} className="w-full h-full object-cover opacity-60" muted />
+                      <Play className="absolute h-4 w-4 text-white" />
+                    </div>
+                  ) : (
+                    <Image src={getImageUrl(media.url)} alt="" fill className="w-full h-full object-cover" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+          {!mediaToShow[lightboxIndex]?.isVideo && (
+            <div className="flex items-center gap-3 rounded-full bg-white/10 px-4 py-2 backdrop-blur-sm">
+              <button onClick={() => setZoomLevel((z) => Math.max(1, z - 0.5))} className="text-white/80 hover:text-white">
+                <ZoomOut className="h-5 w-5" />
+              </button>
+              <span className="w-10 text-center text-xs text-white/60">{Math.round(zoomLevel * 100)}%</span>
+              <button onClick={() => setZoomLevel((z) => Math.min(4, z + 0.5))} className="text-white/80 hover:text-white">
+                <ZoomIn className="h-5 w-5" />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>,
+      document.body
     );
   };
 
@@ -1199,6 +1254,7 @@ export default function ProductContent({ slug }) {
           ) : (
             renderImages()
           )}
+          {renderLightbox()}
         </div>
 
         {/* Right Column - Product Details */}
@@ -1258,34 +1314,8 @@ export default function ProductContent({ slug }) {
           )}
 
           {/* Highlights (real listing data) */}
-          {(product.deliveryProfile || product.returnPolicy || processingMinDays != null || processingMaxDays != null || product.materials?.length > 0 || product.whoMade || product.whatIsIt || product.whenMade) && (
+          {(product.materials?.length > 0 || product.whoMade || product.whatIsIt || product.whenMade) && (
             <ul className="mb-6 space-y-1.5 text-sm text-gray-800">
-              {product.deliveryProfile && (
-                <li className="flex items-center gap-2">
-                  <IconTruckDelivery size={18} className="text-[#3D1C02]" />
-                  {product.deliveryProfile.pricingType === "FREE" ? "Free delivery" : `Delivery ${formatCurrency(product.deliveryProfile.domesticCost)}`}
-                  {product.deliveryProfile.originPincode ? ` · Dispatched from ${product.deliveryProfile.originPincode}` : ""}
-                </li>
-              )}
-              {processingMinDays != null && processingMaxDays != null && (
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-[#3D1C02]" />
-                  Ready to dispatch in {processingMinDays}–{processingMaxDays} business days
-                </li>
-              )}
-              {product.returnPolicy && (
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-[#3D1C02]" />
-                  {product.returnPolicy.acceptReturns && product.returnPolicy.acceptExchanges
-                    ? "Returns & exchanges accepted"
-                    : product.returnPolicy.acceptReturns
-                      ? "Returns accepted"
-                      : product.returnPolicy.acceptExchanges
-                        ? "Exchanges accepted"
-                        : "Returns & exchanges not accepted"}
-                  {(product.returnPolicy.acceptReturns || product.returnPolicy.acceptExchanges) && ` · ${product.returnPolicy.windowDays} days`}
-                </li>
-              )}
               {product.materials?.length > 0 && (
                 <li className="flex items-center gap-2">
                   <IconPalette size={18} className="text-[#3D1C02]" />
@@ -1317,15 +1347,15 @@ export default function ProductContent({ slug }) {
                 const showError = selectionError === attribute.id;
                 return (
                   <div key={attribute.id}>
-                    <label htmlFor={`option-${attribute.id}`} className="mb-2 block text-sm font-semibold uppercase tracking-wide text-gray-900">
+                    <label htmlFor={`option-${attribute.id}`} className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-900">
                       {attribute.name}
                     </label>
-                    <div className="relative">
+                    <div className="relative max-w-xs">
                       <select
                         id={`option-${attribute.id}`}
                         value={selectedValueId}
                         onChange={(e) => handleAttributeChange(attribute.id, e.target.value)}
-                        className={`w-full appearance-none rounded-lg border bg-white px-4 py-3.5 pr-10 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#3D1C02] ${showError ? "border-red-600" : "border-gray-400"}`}
+                        className={`w-full appearance-none rounded-lg border bg-white px-3 py-2 pr-9 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#3D1C02] ${showError ? "border-red-600" : "border-gray-400"}`}
                       >
                         <option value="">Select an option</option>
                         {attribute.values.map((value) => {
@@ -1339,7 +1369,7 @@ export default function ProductContent({ slug }) {
                           );
                         })}
                       </select>
-                      <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-gray-700" />
+                      <ChevronRight className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-gray-700" />
                     </div>
                     {showError && <p className="mt-1.5 text-sm font-medium text-red-600">Please select a {attribute.name.toLowerCase()}</p>}
                   </div>
@@ -1402,21 +1432,15 @@ export default function ProductContent({ slug }) {
             </div>
           )}
 
-          {/* Stock Status */}
-          <div className="mb-4 max-w-[150px] flex px-2 py-1">
-            {selectedVariant && (selectedVariant.stock > 0 || selectedVariant.quantity > 0) && (
-              <div className="p-2 bg-green-50 border border-green-200 rounded-md text-green-700 text-sm flex items-center">
-                <CheckCircle className="h-4 w-4 mr-2 flex-shrink-0" />
-                In Stock
-              </div>
-            )}
-            {selectedVariant && (selectedVariant.stock === 0 || selectedVariant.quantity === 0) && (
+          {/* Stock Status — only shown when the item is out of stock */}
+          {selectedVariant && (selectedVariant.stock === 0 || selectedVariant.quantity === 0) && (
+            <div className="mb-4 flex max-w-[180px] px-2 py-1">
               <div className="p-2 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm flex items-center">
                 <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
                 Out of stock
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Add-on Services */}
           {addonServices.length > 0 && (
@@ -1464,63 +1488,64 @@ export default function ProductContent({ slug }) {
             </div>
           )}
 
-          {/* Quantity Selector */}
+          {/* Quantity + Add to Basket — one row so the button gets maximum width */}
           <div className="mb-8 pt-6 border-t border-gray-200">
             <h3 className="text-xs font-semibold mb-4 text-gray-900 uppercase tracking-widest">Quantity</h3>
-            <div className="flex items-center border border-gray-300 w-32 h-12">
-              <button
-                className="flex-1 h-full flex justify-center items-center hover:bg-gray-50 transition-colors disabled:opacity-50 text-gray-500"
-                onClick={() => handleQuantityChange(-1)}
+            <div className="flex items-stretch gap-3">
+              <div className="flex items-center border border-gray-300 w-28 sm:w-32 h-12 shrink-0">
+                <button
+                  className="flex-1 h-full flex justify-center items-center hover:bg-gray-50 transition-colors disabled:opacity-50 text-gray-500"
+                  onClick={() => handleQuantityChange(-1)}
+                  disabled={
+                    quantity <= (selectedVariant?.moq || 1) || isAddingToCart
+                  }
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+                <span className="flex-1 text-center font-medium text-gray-900">
+                  {quantity}
+                </span>
+                <button
+                  className="flex-1 h-full flex justify-center items-center hover:bg-gray-50 transition-colors disabled:opacity-50 text-gray-500"
+                  onClick={() => handleQuantityChange(1)}
+                  disabled={
+                    (selectedVariant &&
+                      (selectedVariant.stock > 0 || selectedVariant.quantity > 0) &&
+                      quantity >= (selectedVariant.stock || selectedVariant.quantity)) ||
+                    isAddingToCart
+                  }
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+
+              <Button
+                className="flex-1 min-w-0 h-12 flex items-center justify-center gap-2 px-2 text-xs sm:text-sm bg-black hover:bg-gray-900 text-white rounded-none font-semibold uppercase tracking-widest transition-all"
+                onClick={handleAddToCart}
                 disabled={
-                  quantity <= (selectedVariant?.moq || 1) || isAddingToCart
+                  isAddingToCart ||
+                  !product?.variants?.length ||
+                  (selectedVariant && selectedVariant.quantity < 1) ||
+                  (!hasOptions && product.variants[0].quantity < 1)
                 }
               >
-                <Minus className="h-4 w-4" />
-              </button>
-              <span className="flex-1 text-center font-medium text-gray-900">
-                {quantity}
-              </span>
-              <button
-                className="flex-1 h-full flex justify-center items-center hover:bg-gray-50 transition-colors disabled:opacity-50 text-gray-500"
-                onClick={() => handleQuantityChange(1)}
-                disabled={
-                  (selectedVariant &&
-                    (selectedVariant.stock > 0 || selectedVariant.quantity > 0) &&
-                    quantity >= (selectedVariant.stock || selectedVariant.quantity)) ||
-                  isAddingToCart
-                }
-              >
-                <Plus className="h-4 w-4" />
-              </button>
+                {isAddingToCart ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0"></div>
+                    <span className="truncate">Adding...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShoppingBasket className="h-4 w-4 shrink-0" />
+                    <span className="truncate">ADD TO BASKET</span>
+                  </>
+                )}
+              </Button>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 mb-10">
-            <Button
-              className="flex-1 flex items-center justify-center gap-2 py-7 text-sm bg-black hover:bg-gray-900 text-white rounded-none font-semibold uppercase tracking-widest transition-all"
-              size="lg"
-              onClick={handleAddToCart}
-              disabled={
-                isAddingToCart ||
-                !product?.variants?.length ||
-                (selectedVariant && selectedVariant.quantity < 1) ||
-                (!hasOptions && product.variants[0].quantity < 1)
-              }
-            >
-              {isAddingToCart ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Adding...
-                </>
-              ) : (
-                <>
-                  ADD TO CART
-                </>
-              )}
-            </Button>
-
-
+          {/* Wishlist + Share */}
+          <div className="flex gap-4 mb-10">
             <Button
               variant="outline"
               className={`rounded-none h-auto py-2 px-4 border border-gray-300 transition-all ${isInWishlist
@@ -1581,6 +1606,79 @@ export default function ProductContent({ slug }) {
                 >
                   {product.category?.name}
                 </Link>
+              </div>
+            )}
+
+            {(product.deliveryProfile || product.returnPolicy || processingMinDays != null || processingMaxDays != null) && (
+              <ul className="space-y-1.5">
+                {product.deliveryProfile && (
+                  <li className="flex items-center gap-2">
+                    <IconTruckDelivery size={18} className="text-[#3D1C02]" />
+                    {product.deliveryProfile.pricingType === "FREE" ? "Free delivery" : `Delivery ${formatCurrency(product.deliveryProfile.domesticCost)}`}
+                    {product.deliveryProfile.originPincode ? ` · Dispatched from ${product.deliveryProfile.originPincode}` : ""}
+                  </li>
+                )}
+                {processingMinDays != null && processingMaxDays != null && (
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-[#3D1C02]" />
+                    Ready to dispatch in {processingMinDays}–{processingMaxDays} business days
+                  </li>
+                )}
+                {product.returnPolicy && (
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-[#3D1C02]" />
+                    {product.returnPolicy.acceptReturns && product.returnPolicy.acceptExchanges
+                      ? "Returns & exchanges accepted"
+                      : product.returnPolicy.acceptReturns
+                        ? "Returns accepted"
+                        : product.returnPolicy.acceptExchanges
+                          ? "Exchanges accepted"
+                          : "Returns & exchanges not accepted"}
+                    {(product.returnPolicy.acceptReturns || product.returnPolicy.acceptExchanges) && ` · ${product.returnPolicy.windowDays} days`}
+                  </li>
+                )}
+              </ul>
+            )}
+
+            {/* Pincode delivery estimate — approximate, no login required; only when admin has set a delivery option */}
+            {product.deliveryProfile && (
+              <div>
+                <p className="mb-2 flex items-center gap-2 font-medium text-gray-900">
+                  <IconTruckDelivery size={18} className="text-[#3D1C02]" />
+                  Check delivery time
+                </p>
+                <div className="flex max-w-xs gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={pincodeInput}
+                    onChange={(e) => {
+                      setPincodeInput(e.target.value.replace(/\D/g, "").slice(0, 6));
+                      setPincodeError("");
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && handleCheckPincode()}
+                    placeholder="Enter pincode"
+                    className="w-full rounded-md border border-gray-400 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#3D1C02]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCheckPincode}
+                    disabled={checkingPincode || pincodeInput.length !== 6}
+                    className="shrink-0 rounded-md border border-gray-900 bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {checkingPincode ? "Checking…" : "Check"}
+                  </button>
+                </div>
+                {pincodeError && (
+                  <p className="mt-1.5 text-sm text-red-600">{pincodeError}</p>
+                )}
+                {deliveryEstimate && (
+                  <p className="mt-1.5 flex items-center gap-1.5 text-sm text-gray-700">
+                    <CheckCircle className="h-4 w-4 shrink-0 text-green-600" />
+                    Estimated delivery in {deliveryEstimate.minDays}–{deliveryEstimate.maxDays} business days to {deliveryEstimate.destinationPincode}
+                  </p>
+                )}
               </div>
             )}
 

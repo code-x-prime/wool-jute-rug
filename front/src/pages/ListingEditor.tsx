@@ -241,7 +241,7 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
   const globalPricing = false;
   const skuPrefix = useRef("");
   const [baseSkuTouched, setBaseSkuTouched] = useState(false);
-  const [base, setBase] = useState({ price: "", priceUS: "", priceIntl: "", quantity: "1", sku: "", procMin: "", procMax: "" });
+  const [base, setBase] = useState({ price: "", priceUS: "", priceIntl: "", quantity: "1", sku: "", procMin: "1", procMax: "3" });
   const [allowRestock, setAllowRestock] = useState(false);
   const [deliveryProfileId, setDeliveryProfileId] = useState("");
   const [returnPolicyId, setReturnPolicyId] = useState("");
@@ -362,7 +362,7 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
           shippingWeight: v.shippingWeight,
           pricingSlabs: v.pricingSlabs?.map((s) => ({ minQty: s.minQty, maxQty: s.maxQty, price: Number(s.price) })),
         });
-        setBase((b) => ({ ...b, procMin: p.processingMinDays?.toString() ?? "", procMax: p.processingMaxDays?.toString() ?? "" }));
+        setBase((b) => ({ ...b, procMin: p.processingMinDays?.toString() ?? b.procMin, procMax: p.processingMaxDays?.toString() ?? b.procMax }));
 
         const withAttrs = p.hasVariants ? variants.filter((v) => v.attributes.length > 0) : [];
         if (withAttrs.length === 0) {
@@ -379,7 +379,7 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
             setRows([{
               key: "default", id: v.id, valueIds: [], values: {}, sku: v.sku || "", price: String(Number(v.price)),
               priceUS: v.priceUS ? String(Number(v.priceUS)) : "", priceIntl: v.priceIntl ? String(Number(v.priceIntl)) : "",
-              quantity: String(v.quantity ?? 0), procMin: "", procMax: "", isActive: v.isActive, photoKeys: [], passthrough: passthrough(v),
+              quantity: String(v.quantity ?? 0), procMin: v.processingMinDays?.toString() ?? "1", procMax: v.processingMaxDays?.toString() ?? "3", isActive: v.isActive, photoKeys: [], passthrough: passthrough(v),
             }]);
           }
           setLoading(false);
@@ -436,8 +436,8 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
             priceUS: v.priceUS ? String(Number(v.priceUS)) : "",
             priceIntl: v.priceIntl ? String(Number(v.priceIntl)) : "",
             quantity: String(v.quantity ?? 0),
-            procMin: v.processingMinDays?.toString() ?? "",
-            procMax: v.processingMaxDays?.toString() ?? "",
+            procMin: v.processingMinDays?.toString() ?? "1",
+            procMax: v.processingMaxDays?.toString() ?? "3",
             isActive: v.isActive,
             photoKeys: linkedVar ? [] : v.images.map((img) => urlToKey.get(img.url)).filter((k): k is string => !!k),
             passthrough: passthrough(v),
@@ -704,7 +704,7 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
         setRows([{
           key: "default", id: first && !first.id.startsWith("new-") ? first.id : "new-0", valueIds: [], values: {},
           sku: base.sku, price: base.price, priceUS: base.priceUS, priceIntl: base.priceIntl, quantity: base.quantity,
-          procMin: "", procMax: "", isActive: true, photoKeys: [], passthrough: first?.passthrough || {},
+          procMin: base.procMin, procMax: base.procMax, isActive: true, photoKeys: [], passthrough: first?.passthrough || {},
         }]);
       } else {
         setRows(resolved.length ? nextRows : defaultRow ? [defaultRow] : []);
@@ -832,8 +832,8 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
       extras: {
         priceUS: effective(r, "prices", "priceUS", base.priceUS),
         priceIntl: effective(r, "prices", "priceIntl", base.priceIntl),
-        processingMinDays: effective(r, "processing", "procMin", ""),
-        processingMaxDays: effective(r, "processing", "procMax", ""),
+        processingMinDays: effective(r, "processing", "procMin", base.procMin) || "1",
+        processingMaxDays: effective(r, "processing", "procMax", base.procMax) || "3",
       },
     }));
   };
@@ -842,6 +842,8 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
     const fail = (msg: string, section: string) => { toast.error(msg); scrollTo(section); return false; };
     if (!title.trim()) return fail("Title is required", "details");
     if (!categoryId) return fail("Category is required", "details");
+    if (!deliveryProfileId) return fail("Choose a delivery option", "pricing");
+    if (!returnPolicyId) return fail("Choose a returns and exchanges policy", "pricing");
     if (!publish) return true;
     if (!photos.length) return fail("Add at least one photo", "photos");
     if (!description.trim()) return fail("Description is required", "details");
@@ -856,12 +858,21 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
       }
       if (!(num(payload.quantity as string) >= 0)) return fail("Quantity is required", hasVariations && vary.quantities.on ? "options" : "pricing");
     }
-    const pMin = num(base.procMin), pMax = num(base.procMax);
-    if (!(hasVariations && vary.processing.on) && (isNaN(pMin) || isNaN(pMax) || pMin > pMax)) {
-      return fail("Set a valid processing time", "pricing");
+    if (hasVariations && vary.processing.on) {
+      for (const r of rows) {
+        const rMin = num(r.procMin || "1");
+        const rMax = r.procMax?.trim() === "" || r.procMax == null ? rMin : num(r.procMax);
+        if (isNaN(rMin) || rMin < 0 || isNaN(rMax) || rMax < rMin) {
+          return fail("Set a valid processing time (e.g. 1–3 business days) for every variation", "options");
+        }
+      }
+    } else {
+      const pMin = num(base.procMin);
+      const pMax = base.procMax.trim() === "" ? pMin : num(base.procMax);
+      if (isNaN(pMin) || pMin < 0 || isNaN(pMax) || pMax < pMin) {
+        return fail("Set a valid processing time (e.g. 1–3 business days)", "pricing");
+      }
     }
-    if (!deliveryProfileId) return fail("Choose a delivery option", "pricing");
-    if (!returnPolicyId) return fail("Choose a returns and exchanges policy", "pricing");
     if (customFields.some((f) => !f.label.trim())) return fail("Every custom option needs a label", "options");
     return true;
   };
@@ -965,7 +976,7 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
         allowRestockRequests: allowRestock,
         globalPricing,
         processingMinDays: hasVariations && vary.processing.on ? null : base.procMin,
-        processingMaxDays: hasVariations && vary.processing.on ? null : base.procMax,
+        processingMaxDays: hasVariations && vary.processing.on ? null : (base.procMax.trim() === "" ? base.procMin : base.procMax),
         deliveryProfileId: deliveryProfileId || null,
         returnPolicyId: returnPolicyId || null,
         whoMade,

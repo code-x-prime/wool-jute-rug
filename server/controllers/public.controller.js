@@ -1,5 +1,7 @@
 import { prisma } from "../config/db.js";
+import { estimateDelivery } from "../utils/pincodeEstimate.js";
 import { ApiResponsive } from "../utils/ApiResponsive.js";
+import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { getFileUrl } from "../utils/deleteFromS3.js";
 import { applyFlashSalePrice } from "../utils/flashSaleHelpers.js";
@@ -865,3 +867,46 @@ export const getPublicMenus = asyncHandler(async (req, res) => {
   );
 });
 
+
+// POST /public/delivery-estimate — pincode-based estimate, no login required.
+// Approximate: uses postal-region distance, not a real courier lookup.
+export const getDeliveryEstimate = asyncHandler(async (req, res) => {
+  const { pincode, productId, variantId } = req.body;
+
+  const [warehouses, pickups] = await Promise.all([
+    prisma.warehouse.findMany({
+      where: { isActive: true, country: "IN" },
+      select: { id: true, name: true, city: true, postalCode: true, isDefault: true },
+    }),
+    prisma.shiprocketPickupAddress.findMany({
+      select: { id: true, nickname: true, city: true, pincode: true, isDefault: true },
+    }),
+  ]);
+
+  const origins = [
+    ...warehouses.map((w) => ({ id: w.id, label: w.name, city: w.city, pincode: w.postalCode, isDefault: w.isDefault })),
+    ...pickups.map((p) => ({ id: p.id, label: p.nickname, city: p.city, pincode: p.pincode, isDefault: p.isDefault })),
+  ];
+
+  let processingMinDays = 1;
+  let processingMaxDays = 3;
+  if (variantId) {
+    const v = await prisma.productVariant.findUnique({
+      where: { id: variantId },
+      select: { processingMinDays: true, processingMaxDays: true, product: { select: { processingMinDays: true, processingMaxDays: true } } },
+    });
+    processingMinDays = v?.processingMinDays ?? v?.product?.processingMinDays ?? processingMinDays;
+    processingMaxDays = v?.processingMaxDays ?? v?.product?.processingMaxDays ?? processingMaxDays;
+  } else if (productId) {
+    const p = await prisma.product.findUnique({ where: { id: productId }, select: { processingMinDays: true, processingMaxDays: true } });
+    processingMinDays = p?.processingMinDays ?? processingMinDays;
+    processingMaxDays = p?.processingMaxDays ?? processingMaxDays;
+  }
+
+  const result = estimateDelivery(pincode, origins, { processingMinDays, processingMaxDays });
+  if (!result.ok) {
+    throw new ApiError(400, result.reason);
+  }
+
+  res.status(200).json(new ApiResponsive(200, result, "Delivery estimate calculated"));
+});

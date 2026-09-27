@@ -22,7 +22,7 @@ import {
   getOAuthProviders,
 } from "../controllers/public.controller.js";
 import { getPublishedBanners } from "../controllers/admin.banner.controller.js";
-import { getActiveFlashSales, getActiveProductSections, getShoppableVideoCarousel, getPublicMenus } from "../controllers/public.controller.js";
+import { getActiveFlashSales, getActiveProductSections, getShoppableVideoCarousel, getPublicMenus, getDeliveryEstimate } from "../controllers/public.controller.js";
 import { getPublicTawkToConfig } from "../controllers/tawkto.controller.js";
 import {
   submitRugServiceRequest,
@@ -85,5 +85,8 @@ router.get("/products/:productId/addons", getPublicProductAddons);
 // Public submissions
 router.post("/rug-services", submitRugServiceRequest);
 router.post("/contact-enquiry", submitContactEnquiry);
+
+// Pincode-based delivery estimate (no login required, approximate distance only)
+router.post("/delivery-estimate", getDeliveryEstimate);
 
 export default router;
