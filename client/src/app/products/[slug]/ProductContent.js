@@ -88,6 +88,8 @@ export default function ProductContent({ slug }) {
   const [selectionError, setSelectionError] = useState("");
 
   const hasOptions = !!product?.attributeOptions?.length;
+  const processingMinDays = selectedVariant?.processingMinDays ?? product?.processingMinDays;
+  const processingMaxDays = selectedVariant?.processingMaxDays ?? product?.processingMaxDays;
 
   // Returns the variant to purchase, or null after flagging the first unselected option.
   const requireVariant = () => {
@@ -1177,7 +1179,7 @@ export default function ProductContent({ slug }) {
       {/* Product Info */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
         {/* Product Images */}
-        <div className="w-full">
+        <div className="w-full lg:sticky lg:top-24 lg:self-start">
           {loading ? (
             <div className="aspect-square w-full bg-gray-100 rounded-lg animate-pulse"></div>
           ) : error ? (
@@ -1258,10 +1260,10 @@ export default function ProductContent({ slug }) {
                   {product.deliveryProfile.originPincode ? ` · Dispatched from ${product.deliveryProfile.originPincode}` : ""}
                 </li>
               )}
-              {product.processingMinDays != null && product.processingMaxDays != null && (
+              {processingMinDays != null && processingMaxDays != null && (
                 <li className="flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 text-[#3D1C02]" />
-                  Ready to dispatch in {product.processingMinDays}–{product.processingMaxDays} business days
+                  Ready to dispatch in {processingMinDays}–{processingMaxDays} business days
                 </li>
               )}
               {product.returnPolicy && (
@@ -1288,6 +1290,12 @@ export default function ProductContent({ slug }) {
                   <CheckCircle className="h-4 w-4 text-[#3D1C02]" />
                   {product.whoMade === "I did" ? "Handmade by the seller" : product.whoMade === "A member of my shop" ? "Made by our workshop" : "Made by a production partner"}
                   {product.whenMade ? ` · ${product.whenMade}` : ""}
+                </li>
+              )}
+              {product.whatIsIt && (
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-[#3D1C02]" />
+                  {product.whatIsIt}
                 </li>
               )}
             </ul>
@@ -1683,11 +1691,55 @@ export default function ProductContent({ slug }) {
               <AccordionItem value="shipping">
                 <AccordionTrigger className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-900 py-6">Shipping & Returns</AccordionTrigger>
                 <AccordionContent>
-                  <div className="prose prose-sm max-w-none text-gray-600 pb-6 pt-2 text-sm leading-relaxed">
-                    {product.shippingAndReturns
-                      ? <div dangerouslySetInnerHTML={{ __html: stripInlineStyles(product.shippingAndReturns) }} />
-                      : <p>3-5 business days (standard shipping)<br />30 days return window from the date of delivery.</p>
-                    }
+                  <div className="space-y-4 pb-6 pt-2 text-sm leading-relaxed text-gray-600">
+                    {product.shippingAndReturns && (
+                      <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: stripInlineStyles(product.shippingAndReturns) }} />
+                    )}
+
+                    {product.deliveryProfile && (
+                      <div>
+                        <h4 className="font-semibold text-gray-900">Delivery</h4>
+                        <p>
+                          Domestic delivery: {product.deliveryProfile.pricingType === "FREE" ? "Free" : formatCurrency(product.deliveryProfile.domesticCost)}.
+                          {product.deliveryProfile.internationalCost != null && ` International delivery: ${formatCurrency(product.deliveryProfile.internationalCost)}.`}
+                          {product.deliveryProfile.internationalCost == null && " International delivery is not offered."}
+                        </p>
+                        {product.deliveryProfile.originPincode && <p>Ships from {product.deliveryProfile.originPincode}.</p>}
+                        {(product.deliveryProfile.minDeliveryDays != null || product.deliveryProfile.maxDeliveryDays != null) && (
+                          <p>Estimated delivery: {product.deliveryProfile.minDeliveryDays ?? "?"}–{product.deliveryProfile.maxDeliveryDays ?? "?"} days.</p>
+                        )}
+                        {processingMinDays != null && processingMaxDays != null && (
+                          <p>Processing time: {processingMinDays}–{processingMaxDays} business days.</p>
+                        )}
+                      </div>
+                    )}
+
+                    {product.returnPolicy && (
+                      <div>
+                        <h4 className="font-semibold text-gray-900">Returns and exchanges</h4>
+                        <p>
+                          {product.returnPolicy.acceptReturns && product.returnPolicy.acceptExchanges
+                            ? "Returns and exchanges are accepted."
+                            : product.returnPolicy.acceptReturns
+                              ? "Returns are accepted; exchanges are not accepted."
+                              : product.returnPolicy.acceptExchanges
+                                ? "Exchanges are accepted; returns are not accepted."
+                                : "Returns and exchanges are not accepted."}
+                          {(product.returnPolicy.acceptReturns || product.returnPolicy.acceptExchanges) && ` Request within ${product.returnPolicy.windowDays} days of delivery.`}
+                        </p>
+                        {(product.returnPolicy.acceptReturns || product.returnPolicy.acceptExchanges) && (
+                          <p>
+                            {product.returnPolicy.buyerPaysReturnShipping
+                              ? "The buyer is responsible for return postage costs."
+                              : "The seller covers return postage costs."}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {!product.shippingAndReturns && !product.deliveryProfile && !product.returnPolicy && (
+                      <p>3–5 business days (standard shipping)<br />30 days return window from the date of delivery.</p>
+                    )}
                   </div>
                 </AccordionContent>
               </AccordionItem>
