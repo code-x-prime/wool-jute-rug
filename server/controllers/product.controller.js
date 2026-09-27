@@ -759,13 +759,12 @@ export const getProductBySlug = asyncHandler(async (req, res) => {
     const cur = (v) => parseFloat(v.flashSalePrice ?? v.salePrice ?? v.price);
     const orig = (v) => parseFloat(v.flashSaleOriginalPrice ?? v.price);
     const vs = formattedProduct.variants.filter((v) => Number.isFinite(cur(v)) && cur(v) > 0);
+    // "was" belongs to the same variant as "now" (cheapest / dearest), never mixed across variants
+    const byNow = [...vs].sort((a, b) => cur(a) - cur(b));
+    const low = byNow[0];
+    const high = byNow[byNow.length - 1];
     formattedProduct.priceRange = vs.length
-      ? {
-        min: Math.min(...vs.map(cur)),
-        max: Math.max(...vs.map(cur)),
-        originalMin: Math.min(...vs.map(orig)),
-        originalMax: Math.max(...vs.map(orig)),
-      }
+      ? { min: cur(low), max: cur(high), originalMin: orig(low), originalMax: orig(high) }
       : null;
   }
 

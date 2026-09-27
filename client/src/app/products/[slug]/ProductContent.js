@@ -478,6 +478,26 @@ export default function ProductContent({ slug }) {
     return map;
   }, [product]);
 
+  // Per-option price hints, only for the variation that changes the price (Etsy shows them on SIZES, not Colour)
+  const optionPriceHints = useMemo(() => {
+    const out = {};
+    const combos = (product?.variants || []).filter((v) => v.isActive !== false);
+    const now = (v) => parseFloat(v.flashSalePrice ?? v.salePrice ?? v.price);
+    for (const attr of product?.attributeOptions || []) {
+      const byValue = {};
+      for (const val of attr.values) {
+        const prices = combos
+          .filter((v) => v.attributes?.some((a) => a.attributeValueId === val.id))
+          .map(now)
+          .filter((n) => n > 0);
+        if (prices.length) byValue[val.id] = { min: Math.min(...prices), max: Math.max(...prices) };
+      }
+      const mins = new Set(Object.values(byValue).map((h) => h.min));
+      if (mins.size > 1) out[attr.id] = byValue;
+    }
+    return out;
+  }, [product]);
+
   const openLightbox = useCallback((index) => {
     setLightboxIndex(index);
     setZoomLevel(1);
@@ -820,6 +840,50 @@ export default function ProductContent({ slug }) {
     };
   };
 
+  // Current / pre-sale price of a variant (flash sale wins over a normal sale price)
+  const variantNow = (v) => parseFloat(v.flashSalePrice ?? v.salePrice ?? v.price);
+  const variantWas = (v) => parseFloat(v.flashSaleOriginalPrice ?? v.price);
+
+  const saleEndsText = (endsAt) => {
+    if (!endsAt) return null;
+    const ms = new Date(endsAt).getTime() - Date.now();
+    if (ms <= 0) return null;
+    const days = Math.floor(ms / 86400000);
+    if (days >= 1) return `Sale ends in ${days} day${days === 1 ? "" : "s"}`;
+    const hours = Math.max(1, Math.floor(ms / 3600000));
+    return `Sale ends in ${hours} hour${hours === 1 ? "" : "s"}`;
+  };
+
+  // Etsy-style price block: "Now ₹11,660+  ₹21,200+  45% off • Sale ends in 3 days"
+  const renderPrice = ({ now, nowMax = now, was, wasMax = was, footer }) => {
+    const plus = nowMax > now ? "+" : "";
+    const onSale = was > now;
+    const pct = onSale ? Math.round((1 - now / was) * 100) : 0;
+    const ends = onSale ? saleEndsText(product?.flashSale?.endsAt) : null;
+    return (
+      <div className="space-y-1">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <span className="text-3xl md:text-4xl font-bold text-primary">
+            {onSale && <span className="mr-1">Now</span>}
+            {formatCurrency(now)}{plus}
+          </span>
+          {onSale && (
+            <span className="text-lg md:text-xl text-gray-500 line-through">
+              {formatCurrency(was)}{wasMax > was ? "+" : ""}
+            </span>
+          )}
+        </div>
+        {onSale && (
+          <p className="text-sm font-semibold text-green-700">
+            {pct}% off{ends ? <span className="font-normal"> • {ends}</span> : null}
+          </p>
+        )}
+        {footer}
+        <p className="text-xs text-gray-500">Local taxes included (where applicable)</p>
+      </div>
+    );
+  };
+
   // Format price display
   const getPriceDisplay = () => {
     // Show loading state while initial data is being fetched
@@ -875,33 +939,13 @@ export default function ProductContent({ slug }) {
         );
       }
 
-      return (
-        <div className="space-y-2">
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="text-3xl md:text-4xl font-bold text-primary">
-              {formatCurrency(effectivePrice)}
-            </span>
-            {originalPrice > effectivePrice && (
-              <>
-                <span className="text-xl md:text-2xl text-gray-500 line-through">
-                  {formatCurrency(originalPrice)}
-                </span>
-                {discount > 0 && (
-                  <span className="bg-red-500 text-white text-xs md:text-sm font-bold px-2 md:px-3 py-1 rounded">
-                    {discount}% OFF
-                  </span>
-                )}
-              </>
-            )}
-          </div>
-          {isSlabPrice && quantity > 1 && (
-            <p className="text-xs text-green-600 font-medium">
-              Bulk pricing applied for {quantity} units
-            </p>
-          )}
-          <p className="text-xs text-gray-500">Inclusive of all taxes</p>
-        </div>
-      );
+      return renderPrice({
+        now: effectivePrice,
+        was: discount > 0 ? originalPrice : effectivePrice,
+        footer: isSlabPrice && quantity > 1 ? (
+          <p className="text-xs text-green-600 font-medium">Bulk pricing applied for {quantity} units</p>
+        ) : null,
+      });
     }
 
     // Options not fully chosen yet: show the starting price like Etsy ("₹21,200+")
@@ -913,16 +957,19 @@ export default function ProductContent({ slug }) {
           </div>
         );
       }
-      const { min, max } = product.priceRange;
-      return (
-        <div className="space-y-1">
-          <span className="text-3xl md:text-4xl font-bold text-primary">
-            {formatCurrency(min)}
-            {max > min ? "+" : ""}
-          </span>
-          <p className="text-xs text-gray-500">Local taxes included (where applicable)</p>
-        </div>
-      );
+      const chosen = Object.values(selectedAttributes);
+      const matching = availableCombinations
+        .map((c) => c.variant)
+        .filter((v) => chosen.every((id) => v.attributes?.some((a) => a.attributeValueId === id)))
+        .filter((v) => variantNow(v) > 0);
+      if (!matching.length) {
+        const { min, max, originalMin, originalMax } = product.priceRange;
+        return renderPrice({ now: min, nowMax: max, was: originalMin ?? min, wasMax: originalMax ?? max });
+      }
+      const sorted = [...matching].sort((a, b) => variantNow(a) - variantNow(b));
+      const low = sorted[0];
+      const high = sorted[sorted.length - 1];
+      return renderPrice({ now: variantNow(low), nowMax: variantNow(high), was: variantWas(low), wasMax: variantWas(high) });
     }
 
     // Fallback to product base price if no variant is selected
@@ -1267,13 +1314,8 @@ export default function ProductContent({ slug }) {
                         <option value="">Select an option</option>
                         {attribute.values.map((value) => {
                           const available = availableIds.has(value.id);
-                          const onlyThis = availableCombinations.filter((c) => c.attributeValueIds.includes(value.id));
-                          const prices = onlyThis.map((c) => parseFloat(c.variant.flashSalePrice ?? c.variant.salePrice ?? c.variant.price)).filter((n) => n > 0);
-                          const pMin = prices.length ? Math.min(...prices) : null;
-                          const pMax = prices.length ? Math.max(...prices) : null;
-                          const priceHint = product.attributeOptions.length === 1 && pMin != null
-                            ? ` (${formatCurrency(pMin)})`
-                            : pMin != null && pMin === pMax ? ` (${formatCurrency(pMin)})` : "";
+                          const hint = optionPriceHints[attribute.id]?.[value.id];
+                          const priceHint = hint ? ` (${formatCurrency(hint.min)}${hint.max > hint.min ? "+" : ""})` : "";
                           return (
                             <option key={value.id} value={value.id} disabled={!available}>
                               {value.value}{available ? priceHint : " [Sold out]"}
@@ -1643,7 +1685,7 @@ export default function ProductContent({ slug }) {
                   <div className="prose prose-sm max-w-none text-gray-600 pb-6 pt-2 text-sm leading-relaxed">
                     {product.shippingAndReturns
                       ? <div dangerouslySetInnerHTML={{ __html: stripInlineStyles(product.shippingAndReturns) }} />
-                      : <p>3-5 business days (standard shipping)<br />Free shipping on all orders above ₹999<br />30 days return window from the date of delivery.</p>
+                      : <p>3-5 business days (standard shipping)<br />30 days return window from the date of delivery.</p>
                     }
                   </div>
                 </AccordionContent>

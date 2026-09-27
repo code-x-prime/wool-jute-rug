@@ -13,14 +13,16 @@ import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency } from "@/lib/utils";
 
 type Carrier = { code: string; name: string; scope: "domestic" | "international" | "any"; ready: boolean; mode: string | null };
-type Rate = { serviceCode: string; serviceName: string; amount: number; currency: string; amountInr: number | null; transit: string | null; deliveryDate: string | null; cod?: boolean };
+type Rate = { serviceCode: string; serviceName: string; amount: number; currency: string; amountInr: number | null; amountStore: number | null; transit: string | null; deliveryDate: string | null; cod?: boolean };
 type Parcel = { weightKg: number; lengthCm: number; widthCm: number; heightCm: number };
+type Place = { id: string; name: string; city: string; country?: string; pincode?: string; isDefault: boolean };
+type FromLocation = { label?: string; city?: string; countryCode?: string; postalCode?: string } | null;
 type Shipment = {
   id: string; carrier: string; serviceName: string | null; status: string; trackingNumber: string | null; trackingUrl: string | null;
   cost: string | null; costCurrency: string | null; costInr: string | null; weightKg: number | null;
   lastTrackingStatus: string | null; trackingEvents: { delivered?: boolean; events: { date: string; description: string; location?: string }[] } | null;
   trackedAt: string | null; customerNotifiedAt: string | null; cancelledAt: string | null; cancelNote: string | null; createdAt: string;
-  hasLabel: boolean; hasInvoice: boolean;
+  hasLabel: boolean; hasInvoice: boolean; fromLocation: FromLocation;
 };
 
 const errMsg = (e: unknown, fallback: string) =>
@@ -36,6 +38,11 @@ export default function ShipmentPanel({
   const [carriers, setCarriers] = useState<Carrier[]>([]);
   const [isIntl, setIsIntl] = useState<boolean | null>(null);
   const [charged, setCharged] = useState(0);
+  const [orderCurrency, setOrderCurrency] = useState("INR");
+  const [inrPerUnit, setInrPerUnit] = useState(1);
+  const [warehouses, setWarehouses] = useState<Place[]>([]);
+  const [pickups, setPickups] = useState<Place[]>([]);
+  const [fromId, setFromId] = useState("");
 
   const [carrier, setCarrier] = useState("");
   const [parcel, setParcel] = useState<Partial<Parcel>>({});
@@ -57,6 +64,10 @@ export default function ShipmentPanel({
       setCarriers(d.carriers);
       setIsIntl(d.isInternational);
       setCharged(d.chargedToCustomer || 0);
+      setOrderCurrency(d.currency || "INR");
+      setInrPerUnit(d.inrPerUnit || 1);
+      setWarehouses(d.warehouses || []);
+      setPickups(d.shiprocketPickups || []);
     } catch (e) {
       toast.error(errMsg(e, "Could not load shipments"));
     } finally {
@@ -81,6 +92,13 @@ export default function ShipmentPanel({
     }
   }, [usable, carrier]);
 
+  const fromOptions = carrier === "SHIPROCKET" ? pickups : warehouses;
+  useEffect(() => {
+    const def = fromOptions.find((p) => p.isDefault) || fromOptions[0];
+    setFromId(def?.id || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carrier, warehouses, pickups]);
+
   const chooseCarrier = (code: string) => {
     setCarrier(code);
     setRates(null);
@@ -94,7 +112,7 @@ export default function ShipmentPanel({
     setRates(null);
     setSelected(null);
     try {
-      const r = await shipmentsApi.rates(orderId, carrier, parcel);
+      const r = await shipmentsApi.rates(orderId, carrier, parcel, fromId || undefined);
       setRates(r.data.data.rates);
       if (r.data.data.parcel) setParcel(r.data.data.parcel);
       if (!r.data.data.rates.length) setRatesError("No services available for this destination and parcel.");
@@ -107,13 +125,13 @@ export default function ShipmentPanel({
 
   const book = async () => {
     const carrierName = carriers.find((c) => c.code === carrier)?.name;
-    const price = selected ? ` for ${selected.amountInr != null ? formatCurrency(selected.amountInr) : `${selected.currency} ${selected.amount}`}` : "";
+    const price = selected ? ` for ${selected.amountStore != null ? formatCurrency(selected.amountStore, orderCurrency) : `${selected.currency} ${selected.amount}`}` : "";
     if (carrier !== "MANUAL" && !window.confirm(`Buy a ${selected?.serviceName || carrierName} label${price}? The carrier will charge your account.`)) return;
     setBooking(true);
     try {
       await shipmentsApi.create(orderId, carrier === "MANUAL"
-        ? { carrier, manual: { ...manual, cost: manual.cost ? Number(manual.cost) : undefined }, notifyCustomer: notify }
-        : { carrier, serviceCode: selected?.serviceCode, serviceName: selected?.serviceName, amount: selected?.amount, currency: selected?.currency, parcel, notifyCustomer: notify });
+        ? { carrier, fromId: fromId || undefined, manual: { ...manual, cost: manual.cost ? Number(manual.cost) : undefined }, notifyCustomer: notify }
+        : { carrier, fromId: fromId || undefined, serviceCode: selected?.serviceCode, serviceName: selected?.serviceName, amount: selected?.amount, currency: selected?.currency, parcel, notifyCustomer: notify });
       toast.success(notify ? "Shipment created — tracking emailed to the customer" : "Shipment created");
       setRates(null);
       setSelected(null);
@@ -166,9 +184,11 @@ export default function ShipmentPanel({
     }
   };
 
+  const money = (n: number) => formatCurrency(n, orderCurrency);
+  const costInOrderCurrency = (s: Shipment) => (s.costInr != null ? Number(s.costInr) / inrPerUnit : null);
   const carrierName = (code: string) => carriers.find((c) => c.code === code)?.name || code;
   const costLine = (s: Shipment) =>
-    s.costInr != null ? formatCurrency(Number(s.costInr)) : s.cost != null ? `${s.costCurrency} ${Number(s.cost).toFixed(2)}` : "—";
+    s.costInr != null ? money(costInOrderCurrency(s)!) : s.cost != null ? `${s.costCurrency} ${Number(s.cost).toFixed(2)}` : "—";
 
   return (
     <Card className="bg-[var(--bg-card)] border-[var(--border-color)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] rounded-xl">
@@ -195,6 +215,14 @@ export default function ShipmentPanel({
               <span className="text-xs text-[var(--text-secondary)]">{fmtDate(active.createdAt)}</span>
             </div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              {active.fromLocation && (
+                <>
+                  <span className="text-[var(--text-secondary)]">Ships from</span>
+                  <span className="text-[var(--text-primary)]">
+                    {active.fromLocation.label}{active.fromLocation.city ? ` · ${active.fromLocation.city}` : ""}{active.fromLocation.countryCode ? `, ${active.fromLocation.countryCode}` : ""}
+                  </span>
+                </>
+              )}
               <span className="text-[var(--text-secondary)]">Service</span>
               <span className="text-[var(--text-primary)]">{active.serviceName || "—"}</span>
               <span className="text-[var(--text-secondary)]">Tracking / AWB</span>
@@ -209,12 +237,12 @@ export default function ShipmentPanel({
               <span className="text-[var(--text-secondary)]">Courier cost</span>
               <span className="text-[var(--text-primary)] font-medium">{costLine(active)}</span>
               <span className="text-[var(--text-secondary)]">Customer paid for shipping</span>
-              <span className="text-[var(--text-primary)]">{formatCurrency(charged)}</span>
+              <span className="text-[var(--text-primary)]">{money(charged)}</span>
               {active.costInr != null && (
                 <>
                   <span className="text-[var(--text-secondary)]">Shipping margin</span>
-                  <span className={cn("font-medium", charged - Number(active.costInr) < 0 ? "text-[var(--destructive)]" : "text-emerald-600")}>
-                    {formatCurrency(charged - Number(active.costInr))}
+                  <span className={cn("font-medium", charged - costInOrderCurrency(active)! < 0 ? "text-[var(--destructive)]" : "text-emerald-600")}>
+                    {money(charged - costInOrderCurrency(active)!)}
                   </span>
                 </>
               )}
@@ -300,6 +328,33 @@ export default function ShipmentPanel({
               ))}
             </div>
 
+            {carrier && carriers.find((c) => c.code === carrier)?.ready && (
+              <div>
+                <Label className="text-xs">Ship from</Label>
+                {fromOptions.length ? (
+                  <select
+                    value={fromId}
+                    onChange={(e) => { setFromId(e.target.value); setRates(null); setSelected(null); }}
+                    className="mt-1 h-9 w-full rounded-md border border-[var(--border-color)] bg-[var(--bg-card)] px-2 text-sm text-[var(--text-primary)]"
+                  >
+                    {fromOptions.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} — {p.city}{p.country ? `, ${p.country}` : ""}{p.pincode ? ` ${p.pincode}` : ""}{p.isDefault ? " (default)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                    {carrier === "SHIPROCKET" ? (
+                      <>No pickup address yet — <Link to="/site-settings?tab=shipping" className="underline">add one in Settings → Shipping</Link>.</>
+                    ) : (
+                      <>Store address from Settings → General. <Link to="/site-settings?tab=intl-shipping" className="underline">Add warehouses</Link> to ship from other locations.</>
+                    )}
+                  </p>
+                )}
+              </div>
+            )}
+
             {carrier && !carriers.find((c) => c.code === carrier)?.ready ? (
               <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800">
                 {carrierName(carrier)} is not set up or is disabled.{" "}
@@ -348,12 +403,12 @@ export default function ShipmentPanel({
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-semibold text-[var(--text-primary)]">{r.amountInr != null ? formatCurrency(r.amountInr) : `${r.currency} ${r.amount}`}</p>
-                          {r.currency !== "INR" && <p className="text-xs text-[var(--text-secondary)]">{r.currency} {r.amount}</p>}
+                          <p className="text-sm font-semibold text-[var(--text-primary)]">{r.amountStore != null ? money(r.amountStore) : `${r.currency} ${r.amount}`}</p>
+                          {r.currency !== orderCurrency && <p className="text-xs text-[var(--text-secondary)]">{r.currency} {r.amount}</p>}
                         </div>
                       </label>
                     ))}
-                    <p className="text-xs text-[var(--text-secondary)]">Customer paid {formatCurrency(charged)} for shipping on this order.</p>
+                    <p className="text-xs text-[var(--text-secondary)]">Customer paid {money(charged)} for shipping on this order.</p>
                   </div>
                 )}
               </>

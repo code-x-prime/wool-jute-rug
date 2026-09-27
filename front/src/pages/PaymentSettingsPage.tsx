@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import api from "@/api/api";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { currencySymbol } from "@/lib/utils";
 
 export default function PaymentSettingsPage() {
   const { admin } = useAuth();
@@ -222,7 +223,7 @@ export default function PaymentSettingsPage() {
                 <div className="flex items-center gap-4">
                   <div className="flex-1">
                     <Label htmlFor="codCharge" className="text-sm font-medium text-[var(--text-primary)] mb-1 block">
-                      COD Surcharge (₹)
+                      COD Surcharge ({currencySymbol()})
                     </Label>
                     <p className="text-xs text-[var(--text-secondary)] mb-2">
                       Extra charge added to orders when customer selects Cash on Delivery

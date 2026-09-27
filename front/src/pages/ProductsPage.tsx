@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useLanguage } from "@/context/LanguageContext";
 import ListingEditor from "./ListingEditor";
+import { formatCurrency } from "@/lib/utils";
 
 export default function ProductsPage() {
   const { id } = useParams();
@@ -88,7 +89,7 @@ const getListingStock = (product: any) =>
 const getListingSku = (product: any) =>
   product.sku || product.variants?.find((v: any) => v.sku)?.sku || "";
 
-const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
+const inr = (n: number) => formatCurrency(n);
 
 function ProductsList() {
   const { t } = useLanguage();

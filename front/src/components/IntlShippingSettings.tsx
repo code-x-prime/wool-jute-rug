@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Loader2, Trash2, Truck, Eye, EyeOff, Globe } from "lucide-react";
 import api from "@/api/api";
 import { shipments as shipmentsApi } from "@/api/adminService";
+import WarehousesSettings from "@/components/WarehousesSettings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -115,6 +116,8 @@ export default function IntlShippingSettings() {
           </p>
         </CardHeader>
       </Card>
+
+      <WarehousesSettings />
 
       {(Object.keys(CARRIERS) as Carrier[]).map((c) => {
         const cfg = CARRIERS[c];

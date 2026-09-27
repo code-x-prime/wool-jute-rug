@@ -33,7 +33,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { cn, currencySymbol } from "@/lib/utils";
 import { toast } from "sonner";
 import { useLanguage } from "@/context/LanguageContext";
 
@@ -326,13 +326,13 @@ function CouponsList() {
                       <>
                         <IndianRupee className="h-4 w-4 text-[var(--accent)]" />
                         <span className="font-semibold text-[var(--text-primary)]">
-                          ₹{coupon.discountValue} {t('coupons.discount.off')}
+                          {currencySymbol()}{coupon.discountValue} {t('coupons.discount.off')}
                         </span>
                       </>
                     )}
                     {coupon.minOrderAmount && (
                       <span className="text-xs text-[var(--text-secondary)]">
-                        ({t('coupons.discount.min_order')} ₹{coupon.minOrderAmount})
+                        ({t('coupons.discount.min_order')} {currencySymbol()}{coupon.minOrderAmount})
                       </span>
                     )}
                   </div>

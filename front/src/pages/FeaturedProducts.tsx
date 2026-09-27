@@ -24,6 +24,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { currencySymbol } from "@/lib/utils";
 
 interface Product {
   id: string;
@@ -384,7 +385,7 @@ export default function FeaturedProductsPage() {
                               </div>
                             </TableCell>
                             <TableCell>{getCategoryName(product)}</TableCell>
-                            <TableCell>₹{getProductPrice(product)}</TableCell>
+                            <TableCell>{currencySymbol()}{getProductPrice(product)}</TableCell>
                             <TableCell>
                               {getVariantCount(product) > 0 ? (
                                 <Badge variant="outline">
@@ -484,7 +485,7 @@ export default function FeaturedProductsPage() {
                               </div>
                             </TableCell>
                             <TableCell>{getCategoryName(product)}</TableCell>
-                            <TableCell>₹{getProductPrice(product)}</TableCell>
+                            <TableCell>{currencySymbol()}{getProductPrice(product)}</TableCell>
                             <TableCell>
                               {getVariantCount(product) > 0 ? (
                                 <Badge variant="outline">

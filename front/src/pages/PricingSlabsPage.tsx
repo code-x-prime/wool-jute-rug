@@ -38,6 +38,7 @@ import {
 import { toast } from "sonner";
 import api from "@/api/api";
 import { useLanguage } from "@/context/LanguageContext";
+import { currencySymbol } from "@/lib/utils";
 
 interface PricingSlab {
     id: string;
@@ -399,7 +400,7 @@ export default function PricingSlabsPage() {
                                         </TableCell>
                                         <TableCell>{slab.minQty}</TableCell>
                                         <TableCell>{slab.maxQty || "∞"}</TableCell>
-                                        <TableCell>₹{parseFloat(slab.price.toString()).toFixed(2)}</TableCell>
+                                        <TableCell>{currencySymbol()}{parseFloat(slab.price.toString()).toFixed(2)}</TableCell>
                                         <TableCell>
                                             <div className="flex gap-2">
                                                 <Button

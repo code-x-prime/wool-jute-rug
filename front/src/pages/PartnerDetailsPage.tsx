@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 import { partners } from "@/api/adminService";
 import { useLanguage } from "@/context/LanguageContext";
+import { currencySymbol } from "@/lib/utils";
 
 interface MonthlyEarning {
     id: string;
@@ -255,7 +256,7 @@ export default function PartnerDetailsPage() {
                         <IndianRupee className="h-8 w-8 text-green-600" />
                         <div>
                             <p className="text-sm text-gray-600">{t('partner_management.details.stats.total_earnings')}</p>
-                            <p className="text-2xl font-bold">₹{partner.totalEarnings?.toLocaleString() || 0}</p>
+                            <p className="text-2xl font-bold">{currencySymbol()}{partner.totalEarnings?.toLocaleString() || 0}</p>
                         </div>
                     </div>
                 </Card>
@@ -265,7 +266,7 @@ export default function PartnerDetailsPage() {
                         <Clock className="h-8 w-8 text-orange-600" />
                         <div>
                             <p className="text-sm text-gray-600">{t('partner_management.details.stats.pending_amount')}</p>
-                            <p className="text-2xl font-bold">₹{partner.pendingAmount?.toLocaleString() || 0}</p>
+                            <p className="text-2xl font-bold">{currencySymbol()}{partner.pendingAmount?.toLocaleString() || 0}</p>
                         </div>
                     </div>
                 </Card>
@@ -275,7 +276,7 @@ export default function PartnerDetailsPage() {
                         <CheckCircle className="h-8 w-8 text-blue-600" />
                         <div>
                             <p className="text-sm text-gray-600">{t('partner_management.details.stats.paid_amount')}</p>
-                            <p className="text-2xl font-bold">₹{partner.paidAmount?.toLocaleString() || 0}</p>
+                            <p className="text-2xl font-bold">{currencySymbol()}{partner.paidAmount?.toLocaleString() || 0}</p>
                         </div>
                     </div>
                 </Card>
@@ -345,11 +346,11 @@ export default function PartnerDetailsPage() {
                                             <span className="font-medium">{t('partner_management.details.coupons.discount')}:</span>
                                             {coupon.discountType === 'PERCENTAGE'
                                                 ? ` ${coupon.discountValue}%`
-                                                : ` ₹${coupon.discountValue}`}
+                                                : ` ${currencySymbol()}${coupon.discountValue}`}
                                         </div>
                                         {coupon.minOrderAmount && (
                                             <div>
-                                                <span className="font-medium">{t('partner_management.details.coupons.min_order')}:</span> ₹{coupon.minOrderAmount}
+                                                <span className="font-medium">{t('partner_management.details.coupons.min_order')}:</span> {currencySymbol()}{coupon.minOrderAmount}
                                             </div>
                                         )}
                                         <div>
@@ -437,7 +438,7 @@ export default function PartnerDetailsPage() {
                                         </td>
                                         <td className="px-4 py-3">{earning.totalOrders}</td>
                                         <td className="px-4 py-3">
-                                            <div className="font-medium">₹{earning.totalAmount.toLocaleString()}</div>
+                                            <div className="font-medium">{currencySymbol()}{earning.totalAmount.toLocaleString()}</div>
                                         </td>
                                         <td className="px-4 py-3">
                                             <Badge

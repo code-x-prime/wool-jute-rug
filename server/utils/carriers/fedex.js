@@ -67,8 +67,8 @@ const commodities = (ctx) =>
     quantity: i.quantity,
     quantityUnits: "PCS",
     weight: { units: "KG", value: Math.max(i.unitWeightKg * i.quantity, 0.1) },
-    unitPrice: { amount: i.unitValueUsd, currency: "USD" },
-    customsValue: { amount: Math.round(i.unitValueUsd * i.quantity * 100) / 100, currency: "USD" },
+    unitPrice: { amount: i.unitValueUsd, currency: ctx.customs.currency },
+    customsValue: { amount: Math.round(i.unitValueUsd * i.quantity * 100) / 100, currency: ctx.customs.currency },
     countryOfManufacture: "IN",
     harmonizedCode: i.hsCode,
   }));
@@ -89,10 +89,12 @@ export async function getRates(ctx, cfg) {
         recipient: { address: { ...address(ctx.recipient), residential: true } },
         pickupType: "DROPOFF_AT_FEDEX_LOCATION",
         rateRequestType: ["ACCOUNT", "LIST"],
-        customsClearanceDetail: {
-          dutiesPayment: { paymentType: "RECIPIENT" },
-          commodities: commodities(ctx),
-        },
+        ...(ctx.isInternational && {
+          customsClearanceDetail: {
+            dutiesPayment: { paymentType: "RECIPIENT" },
+            commodities: commodities(ctx),
+          },
+        }),
         requestedPackageLineItems: packageLine(ctx),
       },
     },
@@ -133,7 +135,7 @@ export async function createShipment(ctx, cfg, { serviceCode }) {
           address: { ...address(r), residential: true },
         }],
         shippingChargesPayment: { paymentType: "SENDER", payor: { responsibleParty: { accountNumber: { value: cfg.account } } } },
-        customsClearanceDetail: {
+        ...(ctx.isInternational && { customsClearanceDetail: {
           dutiesPayment: { paymentType: "RECIPIENT" },
           isDocumentOnly: false,
           commercialInvoice: {
@@ -142,13 +144,15 @@ export async function createShipment(ctx, cfg, { serviceCode }) {
             ...(s.iec && { specialInstructions: `IEC: ${s.iec}` }),
           },
           commodities: commodities(ctx),
-          totalCustomsValue: { amount: ctx.customs.valueUsd, currency: "USD" },
-        },
+          totalCustomsValue: { amount: ctx.customs.valueUsd, currency: ctx.customs.currency },
+        } }),
         labelSpecification: { imageType: "PDF", labelStockType: "PAPER_4X6", labelFormatType: "COMMON2D" },
-        shippingDocumentSpecification: {
-          shippingDocumentTypes: ["COMMERCIAL_INVOICE"],
-          commercialInvoiceDetail: { documentFormat: { docType: "PDF", stockType: "PAPER_LETTER" } },
-        },
+        ...(ctx.isInternational && {
+          shippingDocumentSpecification: {
+            shippingDocumentTypes: ["COMMERCIAL_INVOICE"],
+            commercialInvoiceDetail: { documentFormat: { docType: "PDF", stockType: "PAPER_LETTER" } },
+          },
+        }),
         requestedPackageLineItems: packageLine(ctx),
       },
     },
@@ -179,7 +183,7 @@ export async function cancel(shipment, cfg) {
     body: {
       accountNumber: { value: cfg.account },
       emailShipment: false,
-      senderCountryCode: "IN",
+      senderCountryCode: shipment.fromLocation?.countryCode || "IN",
       deletionControl: "DELETE_ALL_PACKAGES",
       trackingNumber: shipment.trackingNumber,
     },

@@ -15,15 +15,25 @@ export function formatDate(date: string | Date | undefined | null): string {
   });
 }
 
-export function formatCurrency(amount: number | string | undefined | null, currency = "INR"): string {
-  if (amount === undefined || amount === null) return "₹0";
-  const num = typeof amount === "string" ? parseFloat(amount) : amount;
-  return isNaN(num) ? "₹0" : new Intl.NumberFormat("en-IN", {
+// Store-wide currency (INR / USD / EUR) from Site Settings; loaded once by DashboardLayout.
+let STORE_CURRENCY = "INR";
+const SYMBOLS: Record<string, string> = { INR: "₹", USD: "$", EUR: "€" };
+
+export function setStoreCurrency(code: string | undefined | null) {
+  if (code && SYMBOLS[code]) STORE_CURRENCY = code;
+}
+export const getStoreCurrency = () => STORE_CURRENCY;
+export const currencySymbol = (code: string = STORE_CURRENCY) => SYMBOLS[code] || code;
+
+export function formatCurrency(amount: number | string | undefined | null, currency: string = STORE_CURRENCY): string {
+  const code = SYMBOLS[currency] ? currency : STORE_CURRENCY;
+  const num = amount === undefined || amount === null ? 0 : typeof amount === "string" ? parseFloat(amount) : amount;
+  return new Intl.NumberFormat(code === "INR" ? "en-IN" : code === "EUR" ? "en-IE" : "en-US", {
     style: "currency",
-    currency,
+    currency: code,
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
-  }).format(num);
+  }).format(isNaN(num) ? 0 : num);
 }
 
 export function debugData(_label: string, _data: unknown, _verbose?: boolean): void {

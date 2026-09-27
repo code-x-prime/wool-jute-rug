@@ -1,6 +1,7 @@
 import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation, Navigate, Outlet } from "react-router-dom";
-import { cn } from "@/lib/utils";
+import { cn, getStoreCurrency, setStoreCurrency } from "@/lib/utils";
+import api from "@/api/api";
 import { useAuth } from "@/context/AuthContext";
 import { Resource, Action } from "@/types/admin";
 import {
@@ -201,6 +202,22 @@ export default function DashboardLayout() {
   const { t } = useLanguage();
   const { theme, toggle } = useTheme();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  // Store currency drives every price in the admin; pages re-mount once it is known
+  const [storeCurrency, setStoreCurrencyState] = useState(getStoreCurrency());
+  useEffect(() => {
+    api.get("/api/public/settings")
+      .then((r) => {
+        const code = r.data?.data?.storeCurrency;
+        if (code) {
+          setStoreCurrency(code);
+          setStoreCurrencyState(code);
+        }
+      })
+      .catch(() => { /* keep INR */ });
+    const onChange = (e: Event) => setStoreCurrencyState((e as CustomEvent<string>).detail);
+    window.addEventListener("store-currency-changed", onChange);
+    return () => window.removeEventListener("store-currency-changed", onChange);
+  }, []);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     products: false,
     orders: false,
@@ -1105,7 +1122,7 @@ export default function DashboardLayout() {
 
         {/* Main content area */}
         <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto bg-[var(--bg-secondary)] p-4 lg:p-8">
-          <Outlet />
+          <Outlet key={storeCurrency} />
         </main>
       </div>
     </div>

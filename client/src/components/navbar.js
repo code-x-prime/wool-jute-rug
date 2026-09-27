@@ -20,7 +20,7 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
-import { fetchApi } from "@/lib/utils";
+import { fetchApi, formatCurrency } from "@/lib/utils";
 import { ClientOnly } from "./client-only";
 import { cn } from "@/lib/utils";
 import { toast, Toaster } from "sonner";
@@ -32,7 +32,7 @@ const BRAND_CREAM = "#F5ECD7";
 
 export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
-  const { getCartItemCount } = useCart();
+  const { getCartItemCount, cart } = useCart();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [menuItems, setMenuItems] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -219,15 +219,15 @@ export function Navbar() {
                     {product.hasSale ? (
                       <div className="flex items-center gap-1.5 justify-end">
                         <span className="text-xs text-gray-400 line-through">
-                          ₹{product.regularPrice}
+                          {formatCurrency(product.regularPrice)}
                         </span>
                         <span className="text-sm font-semibold text-[#CC0000]">
-                          ₹{product.basePrice}
+                          {formatCurrency(product.basePrice)}
                         </span>
                       </div>
                     ) : (
                       <span className="text-sm font-semibold text-gray-700">
-                        ₹{product.basePrice}
+                        {formatCurrency(product.basePrice)}
                       </span>
                     )}
                   </div>
@@ -281,7 +281,7 @@ export function Navbar() {
 
           >
             <p className="text-center tracking-widest font-jost uppercase text-white">
-              FREE SHIPPING ON ORDERS ABOVE ₹999 &nbsp;·&nbsp; HANDCRAFTED PREMIUM RUGS
+              {cart?.freeShippingThreshold > 0 ? <>FREE SHIPPING ON ORDERS ABOVE {formatCurrency(cart.freeShippingThreshold)}</> : <>WORLDWIDE SHIPPING</>} &nbsp;·&nbsp; HANDCRAFTED PREMIUM RUGS
             </p>
             <button
               onClick={() => setAnnouncementVisible(false)}

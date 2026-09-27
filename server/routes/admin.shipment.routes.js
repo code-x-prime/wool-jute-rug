@@ -9,6 +9,10 @@ import {
   notifyCustomer,
   getShipmentDocument,
   testCarrierConnection,
+  listWarehouses,
+  createWarehouse,
+  updateWarehouse,
+  deleteWarehouse,
 } from "../controllers/admin.shipment.controller.js";
 
 const router = express.Router();
@@ -23,5 +27,10 @@ router.post("/shipments/:shipmentId/track", ...write, trackShipmentById);
 router.post("/shipments/:shipmentId/notify", ...write, notifyCustomer);
 router.get("/shipments/:shipmentId/document/:kind", ...read, getShipmentDocument);
 router.post("/shipments/test/:carrier", verifyAdminJWT, testCarrierConnection);
+
+router.get("/warehouses", ...read, listWarehouses);
+router.post("/warehouses", ...write, createWarehouse);
+router.put("/warehouses/:id", ...write, updateWarehouse);
+router.delete("/warehouses/:id", ...write, deleteWarehouse);
 
 export default router;

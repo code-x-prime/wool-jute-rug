@@ -11,6 +11,7 @@ import {
   createReturnPolicy,
   updateReturnPolicy,
   deleteReturnPolicy,
+  checkSkus,
 } from "../controllers/admin.listing.controller.js";
 import { verifyAdminJWT, hasPermission } from "../middlewares/admin.middleware.js";
 import { uploadFiles } from "../middlewares/multer.middlerware.js";
@@ -19,6 +20,7 @@ const router = express.Router();
 const read = [verifyAdminJWT, hasPermission("products", "read")];
 const write = [verifyAdminJWT, hasPermission("products", "update")];
 
+router.post("/products/sku-check", ...read, checkSkus);
 router.get("/products/:productId/listing", ...read, getListing);
 router.post(
   "/products/:productId/listing-media",

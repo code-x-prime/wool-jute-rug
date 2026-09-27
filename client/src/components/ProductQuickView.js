@@ -825,9 +825,7 @@ export default function ProductQuickView({ product, open, onOpenChange }) {
                           <AddonSvgIcon icon={addon.icon} size={16} className="text-gray-700" />
                           <span className="flex-1 text-xs font-medium text-gray-900 truncate">{addon.name}</span>
                           <span className="text-xs font-semibold text-[#3D1C02] flex-shrink-0">
-                            +{typeof addon.price === "number"
-                              ? `₹${addon.price.toLocaleString("en-IN")}`
-                              : `₹${parseFloat(addon.price).toLocaleString("en-IN")}`}
+                            +{formatCurrency(addon.price)}
                           </span>
                         </label>
                       );

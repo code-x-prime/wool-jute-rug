@@ -635,6 +635,7 @@ export const getPublicSettings = asyncHandler(async (req, res) => {
         siteAddress: settings.siteAddress,
         razorpayKeyId: settings.razorpayKeyId,
         razorpayEnabled: settings.razorpayEnabled,
+        storeCurrency: settings.storeCurrency || "INR",
       },
       "Public settings fetched"
     )

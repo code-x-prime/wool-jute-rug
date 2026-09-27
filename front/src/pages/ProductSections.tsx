@@ -42,7 +42,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
+import { cn, currencySymbol } from "@/lib/utils";
 import { useLanguage } from "@/context";
 
 interface Product {
@@ -625,15 +625,15 @@ export default function ProductSectionsPage() {
                                   {item.product.salePrice ? (
                                     <div className="flex flex-col items-end">
                                       <span className="font-bold text-[var(--text-primary)]">
-                                        ₹{item.product.salePrice}
+                                        {currencySymbol()}{item.product.salePrice}
                                       </span>
                                       <span className="text-xs line-through text-[var(--text-secondary)]">
-                                        ₹{item.product.price}
+                                        {currencySymbol()}{item.product.price}
                                       </span>
                                     </div>
                                   ) : (
                                     <span className="font-bold text-[var(--text-primary)]">
-                                      ₹{item.product.price || 0}
+                                      {currencySymbol()}{item.product.price || 0}
                                     </span>
                                   )}
                                 </div>
@@ -1057,15 +1057,15 @@ export default function ProductSectionsPage() {
                           {product.salePrice ? (
                             <div className="flex flex-col items-end">
                               <span className="font-bold text-[var(--text-primary)]">
-                                ₹{product.salePrice}
+                                {currencySymbol()}{product.salePrice}
                               </span>
                               <span className="text-xs line-through text-[var(--text-secondary)]">
-                                ₹{product.price}
+                                {currencySymbol()}{product.price}
                               </span>
                             </div>
                           ) : (
                             <span className="font-bold text-[var(--text-primary)]">
-                              ₹{product.price || 0}
+                              {currencySymbol()}{product.price || 0}
                             </span>
                           )}
                         </div>

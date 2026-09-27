@@ -60,10 +60,11 @@ export async function applyFlashSalePrice(basePrice, productId) {
   }
   const orig = Number(basePrice) || 0;
   const discountAmount = (orig * fs.discountPercentage) / 100;
-  const discounted = Math.round(Math.max(0, orig - discountAmount));
+  // cents kept; callers round to the store currency (whole rupees for INR)
+  const discounted = Math.round(Math.max(0, orig - discountAmount) * 100) / 100;
   return {
     price: discounted,
-    originalPrice: Math.round(orig),
+    originalPrice: Math.round(orig * 100) / 100,
     hasFlashSale: true,
     discountPercentage: fs.discountPercentage,
     endsAt: fs.endsAt,

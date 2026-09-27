@@ -34,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { useLanguage } from "@/context/LanguageContext";
+import { currencySymbol } from "@/lib/utils";
 import {
   PieChart,
   Pie,
@@ -464,7 +465,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="px-6 pb-6">
             <div className="text-3xl font-bold text-foreground">
-              ₹
+              {currencySymbol()}
               {orderStats?.totalSales
                 ? parseFloat(orderStats.totalSales.toString()).toLocaleString(
                   "en-IN"
@@ -634,7 +635,7 @@ export default function DashboardPage() {
                           </span>
                           <span>
                             <span className="font-semibold text-foreground">
-                              ₹
+                              {currencySymbol()}
                               {typeof product.revenue === "string"
                                 ? product.revenue
                                 : parseFloat(

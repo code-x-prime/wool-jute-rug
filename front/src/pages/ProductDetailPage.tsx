@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { DeleteProductDialog } from "@/components/DeleteProductDialog";
 import { useLanguage } from "@/context/LanguageContext";
+import { currencySymbol } from "@/lib/utils";
 
 export default function ProductDetailPage() {
   const { t } = useLanguage();
@@ -469,15 +470,15 @@ export default function ProductDetailPage() {
                           {product.variants[0].salePrice ? (
                             <>
                               <span className="text-lg font-semibold text-green-600">
-                                ₹{product.variants[0].salePrice}
+                                {currencySymbol()}{product.variants[0].salePrice}
                               </span>
                               <span className="text-sm line-through text-muted-foreground">
-                                ₹{product.variants[0].price}
+                                {currencySymbol()}{product.variants[0].price}
                               </span>
                             </>
                           ) : (
                             <span className="text-lg font-semibold">
-                              ₹{product.variants[0].price}
+                              {currencySymbol()}{product.variants[0].price}
                             </span>
                           )}
                         </div>

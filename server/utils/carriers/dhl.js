@@ -45,7 +45,7 @@ export async function getRates(ctx, cfg) {
   assertShipperReady(ctx);
   const q = new URLSearchParams({
     accountNumber: cfg.account,
-    originCountryCode: "IN",
+    originCountryCode: ctx.shipper.countryCode,
     originCityName: ctx.shipper.city,
     originPostalCode: ctx.shipper.postalCode,
     destinationCountryCode: ctx.recipient.countryCode,
@@ -56,7 +56,7 @@ export async function getRates(ctx, cfg) {
     width: String(ctx.parcel.widthCm),
     height: String(ctx.parcel.heightCm),
     plannedShippingDate: ymd(),
-    isCustomsDeclarable: "true",
+    isCustomsDeclarable: String(ctx.isInternational),
     unitOfMeasurement: "metric",
   });
   const data = await call(cfg, `/rates?${q}`);
@@ -88,7 +88,7 @@ export async function createShipment(ctx, cfg, { serviceCode }) {
         encodingFormat: "pdf",
         imageOptions: [
           { typeCode: "label", templateName: "ECOM26_84_001" },
-          { typeCode: "invoice", templateName: "COMMERCIAL_INVOICE_P_10", isRequested: true, invoiceType: "commercial" },
+          ...(ctx.isInternational ? [{ typeCode: "invoice", templateName: "COMMERCIAL_INVOICE_P_10", isRequested: true, invoiceType: "commercial" }] : []),
         ],
       },
       customerDetails: {
@@ -106,13 +106,12 @@ export async function createShipment(ctx, cfg, { serviceCode }) {
           weight: ctx.parcel.weightKg,
           dimensions: { length: ctx.parcel.lengthCm, width: ctx.parcel.widthCm, height: ctx.parcel.heightCm },
         }],
-        isCustomsDeclarable: true,
-        declaredValue: ctx.customs.valueUsd,
-        declaredValueCurrency: "USD",
+        isCustomsDeclarable: ctx.isInternational,
+        ...(ctx.isInternational && { declaredValue: ctx.customs.valueUsd, declaredValueCurrency: ctx.customs.currency }),
         description: ctx.customs.items[0]?.description || "Rug",
         incoterm: "DAP",
         unitOfMeasurement: "metric",
-        exportDeclaration: {
+        ...(ctx.isInternational && { exportDeclaration: {
           lineItems: ctx.customs.items.map((i, idx) => ({
             number: idx + 1,
             description: i.description,
@@ -126,7 +125,7 @@ export async function createShipment(ctx, cfg, { serviceCode }) {
           invoice: { number: ctx.customs.invoiceNumber, date: ctx.customs.invoiceDate },
           exportReason: "sale",
           ...(s.iec && { remarks: [{ value: `IEC: ${s.iec}` }] }),
-        },
+        } }),
       },
     },
   });

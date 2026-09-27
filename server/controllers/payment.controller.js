@@ -11,7 +11,7 @@ import { processReferralReward } from "./referral.controller.js";
 import { decrypt } from "../utils/encryption.js";
 import { getStoreConfigFromDb } from "../utils/storeConfig.js";
 import { applyFlashSalePrice } from "../utils/flashSaleHelpers.js";
-import { buildIntlQuote, createOrderFromSession, findDuplicateOrder, DuplicatePaymentError } from "../utils/intlCheckout.js";
+import { buildIntlQuote, createOrderFromSession, findDuplicateOrder, DuplicatePaymentError, placeCodOrder } from "../utils/intlCheckout.js";
 
 
 export async function getPaymentGatewayConfig(userId = null, gateway = "RAZORPAY") {
@@ -246,9 +246,9 @@ export async function settleRazorpaySession(session, config, { paymentId, signat
   if (payment.order_id !== session.providerRef) throw new ApiError(400, "Payment does not belong to this checkout");
 
   const expected = Math.round(parseFloat(session.amountInr) * 100);
-  if (payment.currency !== "INR" || payment.amount !== expected) {
+  if (payment.currency !== session.currency || payment.amount !== expected) {
     await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { status: "FAILED", providerStatus: "AMOUNT_MISMATCH" } });
-    console.error(`Razorpay mismatch: session ${session.id} paid ${payment.amount} ${payment.currency}, expected ${expected} INR (payment ${payment.id})`);
+    console.error(`Razorpay mismatch: session ${session.id} paid ${payment.amount} ${payment.currency}, expected ${expected} ${session.currency} (payment ${payment.id})`);
     throw new ApiError(400, "Payment amount did not match your order. Please contact support.");
   }
 
@@ -263,7 +263,7 @@ export async function settleRazorpaySession(session, config, { paymentId, signat
       await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { status: "FAILED", providerStatus: "DUPLICATE_NOT_CAPTURED" } });
       throw new ApiError(409, `You already placed order #${duplicate.orderNumber} for these items, so this payment was not captured and will be released by your bank.`);
     }
-    payment = await rz.payments.capture(payment.id, expected, "INR");
+    payment = await rz.payments.capture(payment.id, expected, session.currency);
   }
   if (payment.status !== "captured") {
     await prisma.intlPaymentSession.update({ where: { id: session.id }, data: { providerStatus: payment.status } });
@@ -321,7 +321,8 @@ export const checkout = asyncHandler(async (req, res) => {
   if (!paymentSettings?.razorpayEnabled) throw new ApiError(400, "Online payment is not enabled");
 
   const config = await getPaymentGatewayConfig(userId, "RAZORPAY");
-  const { quote } = await buildIntlQuote(userId, shippingAddressId, couponCode, { currency: "INR" });
+  // Razorpay charges the store currency (USD/EUR need International Payments enabled on the Razorpay account)
+  const { quote } = await buildIntlQuote(userId, shippingAddressId, couponCode, { payInStoreCurrency: true });
 
   const session = await prisma.intlPaymentSession.create({
     data: {
@@ -332,7 +333,7 @@ export const checkout = asyncHandler(async (req, res) => {
       quote,
       amountInr: quote.total,
       amountUsd: quote.amountUsd,
-      currency: "INR",
+      currency: quote.currency,
     },
   });
 
@@ -340,7 +341,7 @@ export const checkout = asyncHandler(async (req, res) => {
   try {
     rzOrder = await config.razorpayInstance.orders.create({
       amount: Math.round(quote.total * 100),
-      currency: "INR",
+      currency: quote.currency,
       receipt: session.id.slice(0, 40),
       notes: { sessionId: session.id, userId },
     });
@@ -513,6 +514,7 @@ export const getOrderHistory = asyncHandler(async (req, res) => {
     return {
       id: order.id,
       orderNumber: order.orderNumber,
+      currency: order.currency || "INR",
       date: order.createdAt,
       status: order.status,
       // Use the original stored total
@@ -694,6 +696,7 @@ export const getOrderDetails = asyncHandler(async (req, res) => {
   const formattedOrder = {
     id: order.id,
     orderNumber: order.orderNumber,
+    currency: order.currency || "INR",
     date: order.createdAt,
     status: order.status,
     cancelReason: order.cancelReason || null,
@@ -1071,423 +1074,32 @@ export const phonePeCallback = asyncHandler(async (req, res) => {
 });
 
 export const createCashOrder = asyncHandler(async (req, res) => {
-  const {
-    shippingAddressId,
-    billingAddressSameAsShipping = true,
-    billingAddress,
-    couponCode: requestCouponCode,
-    couponId: requestCouponId,
-    discountAmount: requestDiscount,
-    notes,
-    selectedCourierId,
-    selectedShippingCharge,
-  } = req.body;
+  const { shippingAddressId, billingAddressSameAsShipping = true, billingAddress, couponCode, notes } = req.body;
+  if (!shippingAddressId) throw new ApiError(400, "Shipping address is required");
 
-  if (!shippingAddressId) {
-    throw new ApiError(400, "Shipping address is required");
-  }
-
-  // Check payment settings
   const paymentSettings = await prisma.paymentSettings.findFirst();
   if (!paymentSettings || !paymentSettings.cashEnabled) {
     throw new ApiError(400, "Cash on Delivery is not enabled");
   }
 
-  try {
-    // Get user's cart items
-    const userId = req.user.id;
-    const cartItems = await prisma.cartItem.findMany({
-      where: { userId },
-      include: {
-        addons: { include: { addonService: true } },
-        productVariant: {
-          include: {
-            product: {
-              include: {
-                images: {
-                  where: { isPrimary: true },
-                  take: 1,
-                },
-                pricingSlabs: {
-                  orderBy: { minQty: 'desc' }
-                }
-              },
-            },
-            attributes: {
-              include: {
-                attributeValue: {
-                  include: {
-                    attribute: true,
-                  },
-                },
-              },
-            },
-            pricingSlabs: {
-              orderBy: { minQty: 'desc' }
-            }
-          },
-        },
-      },
-    });
+  // Same pricing, coupon, stock and duplicate-click protection as online payments
+  const { order, created } = await placeCodOrder({
+    userId: req.user.id,
+    shippingAddressId,
+    couponCode,
+    codCharge: parseFloat(paymentSettings.codCharge) || 0,
+    billingAddressSameAsShipping,
+    billingAddress,
+    notes,
+  });
 
-    if (!cartItems.length) {
-      throw new ApiError(400, "No items in cart");
-    }
-
-    // Double-click / retry guard: return the COD order placed moments ago for the same items
-    const recentCod = await prisma.order.findFirst({
-      where: {
-        userId,
-        paymentMethod: "CASH",
-        createdAt: { gt: new Date(Date.now() - 60 * 1000) },
-        items: { some: { variantId: { in: cartItems.map((c) => c.productVariantId) } } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    if (recentCod) {
-      return res.status(200).json(new ApiResponsive(200, {
-        orderId: recentCod.id,
-        orderNumber: recentCod.orderNumber,
-        paymentMethod: "CASH",
-        alreadyPlaced: true,
-      }, "Order already placed"));
-    }
-
-    // Check if user has an active coupon
-    const userCoupon = await prisma.userCoupon.findFirst({
-      where: {
-        userId,
-        isActive: true,
-      },
-      include: {
-        coupon: true,
-      },
-    });
-
-    // Verify shipping address
-    const shippingAddress = await prisma.address.findFirst({
-      where: {
-        id: shippingAddressId,
-        userId,
-      },
-    });
-
-    if (!shippingAddress) {
-      throw new ApiError(404, "Shipping address not found");
-    }
-
-    // Calculate order totals
-    let subTotal = 0;
-    let tax = 0;
-    let shippingCost = 0;
-    let discount = 0;
-    let couponCode = null;
-    let couponId = null;
-
-    const calculateEffectivePriceCOD = async (variant, quantity) => {
-      const qty = parseInt(quantity);
-      let basePrice = parseFloat(variant.salePrice || variant.price);
-      const flashSale = await applyFlashSalePrice(basePrice, variant.productId);
-      if (flashSale.hasFlashSale) basePrice = flashSale.price;
-      if (variant.pricingSlabs && variant.pricingSlabs.length > 0) {
-        const match = variant.pricingSlabs.find(slab =>
-          qty >= slab.minQty && (slab.maxQty === null || qty <= slab.maxQty)
-        );
-        if (match) return parseFloat(match.price);
-      }
-      if (variant.product.pricingSlabs && variant.product.pricingSlabs.length > 0) {
-        const match = variant.product.pricingSlabs.find(slab =>
-          qty >= slab.minQty && (slab.maxQty === null || qty <= slab.maxQty)
-        );
-        if (match) return parseFloat(match.price);
-      }
-      return basePrice;
-    };
-
-    for (const item of cartItems) {
-      const variant = item.productVariant;
-      const price = Math.round(await calculateEffectivePriceCOD(variant, item.quantity));
-      const itemTotal = Math.round(price * item.quantity);
-      subTotal += itemTotal;
-
-      if (variant.quantity < item.quantity) {
-        throw new ApiError(400, `Not enough stock for ${variant.product.name}`);
-      }
-    }
-
-    const shiprocketSettings = await prisma.shiprocketSettings.findFirst();
-    if (shiprocketSettings) {
-      const threshold = parseFloat(shiprocketSettings.freeShippingThreshold || 0);
-      const charge = parseFloat(shiprocketSettings.shippingCharge || 0);
-
-      if (threshold > 0 && subTotal >= threshold) {
-        shippingCost = 0;
-      } else if (selectedShippingCharge !== undefined && selectedShippingCharge !== null) {
-        // Use courier-selected rate from client (validated: must be >= 0 and reasonable)
-        const clientCharge = parseFloat(selectedShippingCharge);
-        shippingCost = !isNaN(clientCharge) && clientCharge >= 0 && clientCharge <= 10000 ? clientCharge : charge;
-      } else {
-        shippingCost = charge;
-      }
-    }
-
-    if (userCoupon && userCoupon.coupon) {
-      couponCode = userCoupon.coupon.code;
-      couponId = userCoupon.coupon.id;
-
-      if (userCoupon.coupon.discountType === "PERCENTAGE") {
-        let discountPercentage = parseFloat(userCoupon.coupon.discountValue);
-        if (discountPercentage > 90 || userCoupon.coupon.isDiscountCapped) {
-          discountPercentage = Math.min(discountPercentage, 90);
-        }
-        discount = (subTotal * discountPercentage) / 100;
-      } else {
-        discount = Math.min(
-          parseFloat(userCoupon.coupon.discountValue),
-          subTotal
-        );
-      }
-    } else if (requestCouponCode) {
-      // Discount is recalculated on the server — never taken from the browser
-      const { quote } = await buildIntlQuote(userId, shippingAddressId, requestCouponCode, { currency: "INR" });
-      if (quote.coupon) {
-        couponCode = quote.coupon.code;
-        couponId = quote.coupon.id;
-        discount = quote.discount;
-      }
-    }
-
-    tax = 0;
-
-    // Generate order number (use SiteSettings.orderPrefix when available)
-    const siteSettingsForOrder = await prisma.siteSettings.findFirst();
-    const orderPrefix = siteSettingsForOrder?.orderPrefix || "ORD";
-    const orderNumber = `${orderPrefix}-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
-
-    // Get COD charge from payment settings
-    const codCharge = parseFloat(paymentSettings.codCharge) || 0;
-
-    // Create order in a transaction (whole numbers only)
-    const roundedSubTotalCOD = Math.round(subTotal);
-    const roundedShippingCOD = Math.round(shippingCost);
-    const roundedDiscountCOD = Math.round(discount);
-    const roundedCodCharge = Math.round(codCharge);
-    const roundedTotalCOD = Math.round(roundedSubTotalCOD + roundedShippingCOD + roundedCodCharge - roundedDiscountCOD);
-    const result = await prisma.$transaction(async (tx) => {
-      // Serialise order creation per user so two simultaneous clicks cannot both succeed
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"order:" + userId}))`;
-      const stillInCart = await tx.cartItem.count({ where: { userId } });
-      if (!stillInCart) throw new ApiError(409, "This order was already placed");
-
-      // 1. Create the order
-      const order = await tx.order.create({
-        data: {
-          orderNumber,
-          userId,
-          subTotal: roundedSubTotalCOD.toString(),
-          tax: Math.round(tax).toString(),
-          shippingCost: roundedShippingCOD.toString(),
-          discount: roundedDiscountCOD,
-          codCharge: roundedCodCharge.toString(),
-          total: roundedTotalCOD.toString(),
-          paymentMethod: "CASH",
-          shippingAddressId,
-          billingAddressSameAsShipping,
-          billingAddress: !billingAddressSameAsShipping
-            ? billingAddress
-            : undefined,
-          notes,
-          status: "PENDING", // COD orders start as PENDING
-          couponCode,
-          couponId: couponId,
-        },
-      });
-
-      // If a coupon was used, mark it as inactive for this user
-      if (userCoupon && userCoupon.coupon) {
-        await tx.userCoupon.update({
-          where: {
-            id: userCoupon.id,
-          },
-          data: {
-            isActive: false,
-          },
-        });
-
-        await tx.coupon.update({
-          where: {
-            id: userCoupon.coupon.id,
-          },
-          data: {
-            usedCount: {
-              increment: 1,
-            },
-          },
-        });
-      }
-
-      // 2. Create order items and update inventory
-      const orderItems = [];
-      for (const item of cartItems) {
-        const variant = item.productVariant;
-        const price = Math.round(await calculateEffectivePriceCOD(variant, item.quantity));
-        const subtotal = Math.round(price * item.quantity);
-
-        const orderItem = await tx.orderItem.create({
-          data: {
-            orderId: order.id,
-            productId: variant.product.id,
-            variantId: variant.id,
-            price,
-            quantity: item.quantity,
-            subtotal,
-          },
-        });
-        orderItems.push(orderItem);
-
-        // Save selected addons as OrderItemAddon (price snapshot)
-        if (item.addons && item.addons.length > 0) {
-          for (const cartAddon of item.addons) {
-            await tx.orderItemAddon.create({
-              data: {
-                orderItemId: orderItem.id,
-                addonServiceId: cartAddon.addonService.id,
-                name: cartAddon.addonService.name,
-                price: cartAddon.price,
-              },
-            });
-          }
-        }
-
-        // Update inventory
-        await tx.productVariant.update({
-          where: { id: variant.id },
-          data: {
-            quantity: {
-              decrement: item.quantity,
-            },
-          },
-        });
-
-        // Log inventory change
-        await tx.inventoryLog.create({
-          data: {
-            variantId: variant.id,
-            quantityChange: -item.quantity,
-            reason: "sale",
-            referenceId: order.id,
-            previousQuantity: variant.quantity,
-            newQuantity: variant.quantity - item.quantity,
-            createdBy: userId,
-          },
-        });
-      }
-
-      // 3. Clear the user's cart
-      await tx.cartItem.deleteMany({
-        where: { userId },
-      });
-
-      return { order, orderItems };
-    });
-
-    // Process referral reward (outside transaction to avoid blocking)
-    processReferralReward(result.order.id, userId).catch((err) => {
-      console.error("Referral reward processing error:", err);
-    });
-
-    // Shipping is booked manually by the admin from the order page (no automatic Shiprocket push)
-
-    // Send order confirmation email
-    try {
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-      });
-
-      if (user && user.email) {
-        const orderItems = await prisma.orderItem.findMany({
-          where: { orderId: result.order.id },
-          include: {
-            product: true,
-            variant: {
-              include: {
-                attributes: {
-                  include: {
-                    attributeValue: {
-                      include: {
-                        attribute: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        });
-
-        const emailItems = orderItems.map((item) => ({
-          name: item.product.name,
-          variant: item.variant.attributes
-            .map((va) => va.attributeValue.value)
-            .join(" "),
-          quantity: item.quantity,
-          price: parseFloat(item.price).toFixed(2),
-        }));
-
-        const storeConfig = await getStoreConfigFromDb();
-        await sendEmail({
-          email: user.email,
-          subject: `Order Confirmation - #${result.order.orderNumber}`,
-          html: getOrderConfirmationTemplate({
-            userName: user.name || "Valued Customer",
-            orderNumber: result.order.orderNumber,
-            orderDate: result.order.createdAt,
-            paymentMethod: "Cash on Delivery",
-            items: emailItems,
-            subtotal: parseFloat(result.order.subTotal).toFixed(2),
-            shipping: parseFloat(result.order.shippingCost).toFixed(2),
-            tax: "0.00",
-            total: (
-              parseFloat(result.order.subTotal) +
-              parseFloat(result.order.shippingCost) -
-              parseFloat(result.order.discount || 0)
-            ).toFixed(2),
-            shippingAddress: shippingAddress,
-          }, storeConfig),
-        });
-      }
-    } catch (emailError) {
-      console.error("Order confirmation email error:", emailError);
-    }
-
-    // Return success response
-    return res.status(200).json(
-      new ApiResponsive(
-        200,
-        {
-          orderId: result.order.id,
-          orderNumber: result.order.orderNumber,
-          paymentMethod: "CASH",
-        },
-        "Cash on Delivery order created successfully"
-      )
-    );
-  } catch (error) {
-    console.error("Cash Order Creation Error:", error);
-
-    if (error.code === "P2002") {
-      throw new ApiError(400, "Duplicate order record");
-    }
-
-    if (error.code === "P2025") {
-      throw new ApiError(404, "Related record not found");
-    }
-
-    throw new ApiError(
-      error.statusCode || 500,
-      error.message || "Cash order creation failed"
-    );
-  }
+  return res.status(200).json(new ApiResponsive(200, {
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    currency: order.currency || "INR",
+    paymentMethod: "CASH",
+    ...(!created && { alreadyPlaced: true }),
+  }, created ? "Cash on Delivery order created successfully" : "Order already placed"));
 });
 
 // Helper function to map Razorpay payment method to our enum

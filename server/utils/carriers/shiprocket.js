@@ -24,8 +24,8 @@ export async function shiprocketConfig(_settings, { requireEnabled = true } = {}
 }
 
 export async function getRates(ctx) {
-  if (ctx.isInternational) throw new ApiError(400, "Shiprocket is for Indian addresses only — use FedEx, DHL or Easyship");
-  const pickup = await getDefaultPickupAddress();
+  if (ctx.recipientCountry !== "IN") throw new ApiError(400, "Shiprocket is for Indian addresses only — use FedEx, DHL or Easyship");
+  const pickup = ctx.shiprocketPickup;
   if (!pickup) throw new ApiError(400, "Add a default pickup address in Settings → Shipping");
   const res = await checkServiceability({
     pickupPincode: pickup.pincode,
@@ -49,6 +49,7 @@ export async function createShipment(ctx, _cfg, { serviceCode }) {
   let order = ctx.order;
   if (!order.shiprocketOrderId || !order.shiprocketShipmentId) {
     const payload = await buildShiprocketOrderPayload({ ...order, user: order.user, shippingAddress: order.shippingAddress });
+    if (ctx.shiprocketPickup?.nickname) payload.pickup_location = ctx.shiprocketPickup.nickname;
     payload.length = ctx.parcel.lengthCm;
     payload.breadth = ctx.parcel.widthCm;
     payload.height = ctx.parcel.heightCm;

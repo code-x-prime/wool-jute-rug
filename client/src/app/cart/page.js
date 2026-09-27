@@ -358,7 +358,7 @@ export default function CartPage() {
     // Ensure minimum amount is 1
     const calculatedAmount = totals.subtotal - totals.discount;
     if (calculatedAmount < 1) {
-      toast.info("Minimum order amount is ₹1");
+      toast.info(`Minimum order amount is ${formatCurrency(1)}`);
       return;
     }
 
@@ -591,7 +591,7 @@ export default function CartPage() {
                       <p className="text-sm font-semibold text-brand-brown mb-1">
                         {coupon.discountType === "PERCENTAGE"
                           ? `${coupon.discountValue}% off`
-                          : `₹${coupon.discountValue} off`}
+                          : `${formatCurrency(coupon.discountValue)} off`}
                       </p>
                       {coupon.applicableSubtotal && (
                         <p className="text-xs text-brand-brown mt-1">

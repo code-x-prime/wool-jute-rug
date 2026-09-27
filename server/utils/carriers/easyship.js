@@ -46,7 +46,7 @@ const parcels = (ctx) => [{
     category: "home_decor",
     sku: i.sku,
     quantity: i.quantity,
-    declared_currency: "USD",
+    declared_currency: ctx.customs.currency,
     declared_customs_value: i.unitValueUsd,
     hs_code: i.hsCode,
     origin_country_alpha2: "IN",

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2, Loader2, Check, X } from "lucide-react";
 import { toast } from "sonner";
+import { currencySymbol } from "@/lib/utils";
 
 interface AddonService {
   id: string;
@@ -118,7 +119,7 @@ export default function AddonServicesPage() {
           <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Anti-Slip Mat" className="h-8 text-sm" />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Price (₹) *</Label>
+          <Label className="text-xs">Price ({currencySymbol()}) *</Label>
           <Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="e.g. 5200" className="h-8 text-sm" min="0" />
         </div>
       </div>
@@ -232,7 +233,7 @@ export default function AddonServicesPage() {
                     </td>
                     <td className="px-4 py-3 font-medium text-sm">{addon.name}</td>
                     <td className="px-4 py-3 text-sm text-muted-foreground">{addon.description || "—"}</td>
-                    <td className="px-4 py-3 text-right font-mono text-sm">₹{parseFloat(String(addon.price)).toLocaleString("en-IN")}</td>
+                    <td className="px-4 py-3 text-right font-mono text-sm">{currencySymbol()}{parseFloat(String(addon.price)).toLocaleString("en-IN")}</td>
                     <td className="px-4 py-3 text-center">
                       <Badge variant={addon.isActive ? "default" : "secondary"} className="text-xs">
                         {addon.isActive ? "Active" : "Inactive"}

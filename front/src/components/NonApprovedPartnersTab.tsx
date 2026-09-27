@@ -5,7 +5,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatCurrency } from "@/lib/utils";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -146,7 +146,7 @@ export default function NonApprovedPartnersTab() {
                                     {partner.status === "PENDING" ? t("reviews.status.pending") : t("reviews.status.rejected")}
                                 </Badge>
                             </TableCell>
-                            <TableCell>₹0.00</TableCell>
+                            <TableCell>{formatCurrency(0)}</TableCell>
                             <TableCell>
                                 <div className="flex gap-2">
                                     <Button

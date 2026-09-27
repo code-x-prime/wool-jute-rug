@@ -188,17 +188,30 @@ export function getAuthToken() {
 }
 
 // Format currency (whole numbers only - no decimals)
-export function formatCurrency(amount) {
-  const parseAmount =
-    amount !== undefined && amount !== null ? parseFloat(amount) : 0;
-  const rounded = Math.round(parseAmount);
+// Store-wide currency chosen by the admin (INR / USD / EUR). Set once at startup by <CurrencyInit>.
+let STORE_CURRENCY = "INR";
+const SYMBOLS = { INR: "₹", USD: "$", EUR: "€" };
 
-  return new Intl.NumberFormat("en-IN", {
+export function setStoreCurrency(code) {
+  if (SYMBOLS[code]) STORE_CURRENCY = code;
+}
+export const getStoreCurrency = () => STORE_CURRENCY;
+export const currencySymbol = (code = STORE_CURRENCY) => SYMBOLS[code] || code;
+
+// INR shows whole rupees; USD/EUR show cents only when there are any ($49.99, $50)
+export function formatCurrency(amount, currency = STORE_CURRENCY) {
+  const n = amount !== undefined && amount !== null ? parseFloat(amount) || 0 : 0;
+  const code = SYMBOLS[currency] ? currency : STORE_CURRENCY;
+  if (code === "INR") {
+    return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(n));
+  }
+  const hasCents = Math.round(n * 100) % 100 !== 0;
+  return new Intl.NumberFormat(code === "EUR" ? "en-IE" : "en-US", {
     style: "currency",
-    currency: "INR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(rounded);
+    currency: code,
+    minimumFractionDigits: hasCents ? 2 : 0,
+    maximumFractionDigits: 2,
+  }).format(n);
 }
 
 // Format date

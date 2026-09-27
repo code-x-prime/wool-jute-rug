@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import IntlShippingSettings, { ShiprocketWebhookSettings } from "@/components/IntlShippingSettings";
+import StoreCurrencySettings from "@/components/StoreCurrencySettings";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +35,7 @@ import {
 import { toast } from "sonner";
 import api from "@/api/api";
 import { Badge } from "@/components/ui/badge";
+import { currencySymbol } from "@/lib/utils";
 
 interface SiteSettings {
   id: string;
@@ -819,6 +821,7 @@ export default function SiteSettingsPage() {
         </TabsList>
 
         <TabsContent value="general" className="space-y-6">
+          <StoreCurrencySettings />
           <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
             <CardHeader>
               <CardTitle className="text-[var(--text-primary)]">Store Information</CardTitle>
@@ -978,7 +981,7 @@ export default function SiteSettingsPage() {
               </div>
               {cashEnabled && (
                 <div className="ml-8 p-4 bg-[var(--bg-secondary)] rounded-lg">
-                  <Label className="text-[var(--text-primary)]">COD Surcharge (₹)</Label>
+                  <Label className="text-[var(--text-primary)]">COD Surcharge ({currencySymbol()})</Label>
                   <Input
                     type="number"
                     min={0}
@@ -1270,11 +1273,11 @@ export default function SiteSettingsPage() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-[var(--text-primary)]">Shipping Charge (₹)</Label>
+                  <Label className="text-[var(--text-primary)]">Shipping Charge ({currencySymbol()})</Label>
                   <Input type="number" min={0} value={shippingCharge} onChange={(e) => setShippingCharge(parseFloat(e.target.value) || 0)} />
                 </div>
                 <div>
-                  <Label className="text-[var(--text-primary)]">Free Shipping Above (₹)</Label>
+                  <Label className="text-[var(--text-primary)]">Free Shipping Above ({currencySymbol()})</Label>
                   <Input type="number" min={0} value={freeShippingThreshold} onChange={(e) => setFreeShippingThreshold(parseFloat(e.target.value) || 0)} />
                   <p className="text-xs text-[var(--text-secondary)] mt-1">Orders above this amount get free shipping</p>
                 </div>

@@ -9,6 +9,18 @@ import { RouteGuard } from "@/components/route-guard";
 import { ClientOnly } from "@/components/client-only";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import TawkToWidget from "@/components/TawkToWidget";
+import CurrencyInit from "@/components/CurrencyInit";
+import { API_URL } from "@/lib/utils";
+
+async function getStoreCurrencyCode() {
+  try {
+    const res = await fetch(`${API_URL}/public/settings`, { next: { revalidate: 60 } });
+    const json = await res.json();
+    return json?.data?.storeCurrency || "INR";
+  } catch {
+    return "INR";
+  }
+}
 
 const jost = Jost({
   subsets: ["latin"],
@@ -27,17 +39,19 @@ const roboto = Roboto({
 export const metadata = {
   title: "Wool Jute Rug Co - Premium Handcrafted Rugs & Carpets",
   description:
-    "Discover premium handcrafted wool and jute rugs at Wool Jute Rug Co. Shop Moroccan, Oriental, Vintage, and custom rugs. Free shipping on orders above ₹999.",
+    "Discover premium handcrafted wool and jute rugs at Wool Jute Rug Co. Shop Moroccan, Oriental, Vintage, and custom rugs.",
   keywords:
     "wool rugs, jute rugs, handcrafted carpets, moroccan rugs, oriental rugs, custom rugs, premium carpets",
 };
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  const storeCurrency = await getStoreCurrencyCode();
   return (
     <html lang="en">
       <body
         className={`${jost.variable} ${roboto.variable} font-roboto antialiased`}
       >
+        <CurrencyInit currency={storeCurrency}>
         <AuthProvider>
           <CartProvider>
             <ScrollToTop />
@@ -54,6 +68,7 @@ export default function RootLayout({ children }) {
             <TawkToWidget />
           </CartProvider>
         </AuthProvider>
+        </CurrencyInit>
       </body>
     </html>
   );

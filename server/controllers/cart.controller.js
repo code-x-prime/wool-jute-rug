@@ -5,9 +5,13 @@ import { prisma } from "../config/db.js";
 import { getFileUrl } from "../utils/deleteFromS3.js";
 import { formatVariantWithAttributes } from "../utils/variant-attributes.js";
 import { applyFlashSalePrice } from "../utils/flashSaleHelpers.js";
+import { getStoreCurrency } from "../utils/currency.js";
+import { roundMoney } from "../utils/intlCheckout.js";
 
 // Get user's cart
 export const getUserCart = asyncHandler(async (req, res) => {
+  const storeCur = await getStoreCurrency();
+  const rm = (n) => roundMoney(n, storeCur.code);
   const userId = req.user.id;
 
   // Get cart items with product and variant details
@@ -126,9 +130,9 @@ export const getUserCart = asyncHandler(async (req, res) => {
         variant.productId
       );
       if (flashSaleResult.hasFlashSale) {
-        effectivePrice = Math.round(flashSaleResult.price);
+        effectivePrice = rm(flashSaleResult.price);
       } else {
-        effectivePrice = Math.round(effectivePrice);
+        effectivePrice = rm(effectivePrice);
       }
       let priceSource = flashSaleResult.hasFlashSale ? "FLASH_SALE" : "DEFAULT";
       let appliedSlab = null;
@@ -136,7 +140,7 @@ export const getUserCart = asyncHandler(async (req, res) => {
       // Find matching pricing slab (slab overrides flash sale when applicable)
       for (const slab of allSlabs) {
         if (item.quantity >= slab.minQty && (slab.maxQty === null || item.quantity <= slab.maxQty)) {
-          effectivePrice = Math.round(parseFloat(slab.price));
+          effectivePrice = rm(parseFloat(slab.price));
           priceSource = slab.variantId ? "VARIANT_SLAB" : "PRODUCT_SLAB";
           appliedSlab = {
             id: slab.id,
@@ -148,14 +152,14 @@ export const getUserCart = asyncHandler(async (req, res) => {
         }
       }
 
-      const originalPrice = Math.round(
+      const originalPrice = rm(
         flashSaleResult.hasFlashSale && priceSource !== "VARIANT_SLAB" && priceSource !== "PRODUCT_SLAB"
           ? flashSaleResult.originalPrice
           : parseFloat(variant.salePrice || variant.price)
       );
 
-      const itemTotal = Math.round(effectivePrice * item.quantity);
-      const addonsTotal = Math.round((item.addons || []).reduce((sum, a) => sum + parseFloat(a.price), 0));
+      const itemTotal = rm(effectivePrice * item.quantity);
+      const addonsTotal = rm((item.addons || []).reduce((sum, a) => sum + parseFloat(a.price), 0));
       subtotal += itemTotal + addonsTotal;
 
       // Enhanced image handling with fallback logic
@@ -272,11 +276,12 @@ export const getUserCart = asyncHandler(async (req, res) => {
       200,
       {
         items: formattedItems,
-        subtotal: Math.round(subtotal),
-        shippingTotal: Math.round(shippingTotal),
-        freeShippingThreshold: Math.round(freeShippingThreshold),
+        subtotal: rm(subtotal),
+        shippingTotal: rm(shippingTotal),
+        freeShippingThreshold: rm(freeShippingThreshold),
         shippingMessage,
-        grandTotal: Math.round(subtotal + shippingTotal),
+        grandTotal: rm(subtotal + shippingTotal),
+        currency: storeCur.code,
         itemCount: cartItems.length,
         totalQuantity: cartItems.reduce((sum, item) => sum + item.quantity, 0),
       },

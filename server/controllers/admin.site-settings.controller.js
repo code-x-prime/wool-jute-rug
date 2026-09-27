@@ -83,6 +83,8 @@ export const updateSiteSettings = asyncHandler(async (req, res) => {
     easyshipAccountId,
     usdExchangeRate,
     razorpayWebhookSecret,
+    storeCurrency,
+    eurExchangeRate,
     fedexEnabled,
     fedexMode,
     fedexClientId,
@@ -180,6 +182,16 @@ export const updateSiteSettings = asyncHandler(async (req, res) => {
 
   if (razorpayWebhookSecret !== undefined && razorpayWebhookSecret !== "••••••••") {
     updateData.razorpayWebhookSecret = razorpayWebhookSecret ? "enc:" + encrypt(String(razorpayWebhookSecret).trim()) : null;
+  }
+
+  // Store currency — every price is entered and shown in it (no conversion of existing prices)
+  if (storeCurrency !== undefined) {
+    if (!["INR", "USD", "EUR"].includes(storeCurrency)) throw new ApiError(400, "Store currency must be INR, USD or EUR");
+    updateData.storeCurrency = storeCurrency;
+  }
+  if (eurExchangeRate !== undefined) {
+    if (!(parseFloat(eurExchangeRate) > 0)) throw new ApiError(400, "EUR exchange rate must be greater than 0");
+    updateData.eurExchangeRate = parseFloat(eurExchangeRate);
   }
 
   // FedEx / DHL Express

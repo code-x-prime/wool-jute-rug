@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ClientOnly } from "@/components/client-only";
 import { DynamicIcon } from "@/components/dynamic-icon";
-import { fetchApi, formatDate } from "@/lib/utils";
+import { fetchApi, formatDate, formatCurrency, currencySymbol } from "@/lib/utils";
 import { ProtectedRoute } from "@/components/protected-route";
 
 export default function AccountPage() {
@@ -368,7 +368,7 @@ export default function AccountPage() {
                     </Button>
                   </div>
                   <p className="text-xs text-gray-400 mt-2">
-                    Share this code with friends. You&apos;ll earn ₹{referralStats?.totalEarnings || "0"} when they place their first order!
+                    Share this code with friends. You&apos;ll earn {formatCurrency(referralStats?.totalEarnings || 0)} when they place their first order!
                   </p>
                 </div>
 
@@ -395,7 +395,7 @@ export default function AccountPage() {
                     </div>
                     <div className="bg-white border border-gray-100 rounded-lg p-4 text-center">
                       <p className="text-2xl font-bold text-[#3D1C02] flex items-center justify-center gap-1">
-                        <span>₹</span>
+                        <span>{currencySymbol()}</span>
                         {parseFloat(referralStats.totalEarnings || 0).toFixed(2)}
                       </p>
                       <p className="text-xs text-gray-500 mt-1 uppercase tracking-wide">Total Earnings</p>

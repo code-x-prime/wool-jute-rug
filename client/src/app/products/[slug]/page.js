@@ -12,7 +12,7 @@ export async function generateMetadata({ params }) {
   const { slug } = params;
   let title = "Product Details | Wool Jute Rug Co";
   let description =
-    "Premium handcrafted wool and jute rugs. Browse our collection of Moroccan, Oriental, Vintage, and custom rugs. Free shipping on orders above ₹999!";
+    "Premium handcrafted wool and jute rugs. Browse our collection of Moroccan, Oriental, Vintage, and custom rugs.";
   let image = null;
 
   try {

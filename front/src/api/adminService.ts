@@ -968,8 +968,8 @@ export const attributeValues = {
 export interface ParcelInput { weightKg?: number; lengthCm?: number; widthCm?: number; heightCm?: number }
 export const shipments = {
   forOrder: (orderId: string) => api.get(`/api/admin/shipments/order/${orderId}`),
-  rates: (orderId: string, carrier: string, parcel: ParcelInput) =>
-    api.post(`/api/admin/shipments/order/${orderId}/rates`, { carrier, parcel }),
+  rates: (orderId: string, carrier: string, parcel: ParcelInput, fromId?: string) =>
+    api.post(`/api/admin/shipments/order/${orderId}/rates`, { carrier, parcel, fromId }),
   create: (orderId: string, data: Record<string, unknown>) => api.post(`/api/admin/shipments/order/${orderId}`, data),
   cancel: (shipmentId: string, note?: string) => api.post(`/api/admin/shipments/${shipmentId}/cancel`, { note }),
   track: (shipmentId: string) => api.post(`/api/admin/shipments/${shipmentId}/track`),
@@ -977,6 +977,13 @@ export const shipments = {
   document: (shipmentId: string, kind: "label" | "invoice") =>
     api.get(`/api/admin/shipments/${shipmentId}/document/${kind}`, { responseType: "blob" }),
   test: (carrier: string) => api.post(`/api/admin/shipments/test/${carrier}`),
+};
+
+export const warehouses = {
+  list: () => api.get("/api/admin/warehouses"),
+  create: (data: Record<string, unknown>) => api.post("/api/admin/warehouses", data),
+  update: (id: string, data: Record<string, unknown>) => api.put(`/api/admin/warehouses/${id}`, data),
+  remove: (id: string) => api.delete(`/api/admin/warehouses/${id}`),
 };
 
 // Etsy-style listing editor

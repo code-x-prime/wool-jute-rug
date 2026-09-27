@@ -509,6 +509,7 @@ model Order {
   shippingProvider             String?              @default("SHIPROCKET") // "SHIPROCKET" | "EASYSHIP"
   // PayPal capture ID
   paypalCaptureId              String?
+  currency                     String               @default("INR")
   paymentCurrency              String?
   paidAmount                   Decimal?             @db.Decimal(10, 2)
   exchangeRate                 Float?
@@ -1535,6 +1536,8 @@ model SiteSettings {
   shiprocketToken        String?
   shiprocketTokenExpiry  DateTime?
   usdExchangeRate        Float     @default(90)
+  eurExchangeRate        Float     @default(100)
+  storeCurrency          String    @default("INR") // INR | USD | EUR — every price is entered and shown in this
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 }
@@ -1652,6 +1655,7 @@ model Shipment {
   trackingNumber     String?
   trackingUrl        String?
   externalId         String?
+  fromLocation       Json?
   labelUrl           String?
   labelData          Bytes?
   invoiceUrl         String?
@@ -1673,4 +1677,23 @@ model Shipment {
 
   @@index([orderId])
   @@index([trackingNumber])
+}
+
+// Ship-from location for FedEx / DHL / Easyship / manual shipments (India or abroad).
+// Without any warehouse the store address from Site Settings is used.
+model Warehouse {
+  id          String   @id @default(uuid())
+  name        String
+  contactName String
+  phone       String
+  email       String?
+  street      String
+  city        String
+  state       String?
+  postalCode  String
+  country     String   @default("IN") // ISO 2-letter
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

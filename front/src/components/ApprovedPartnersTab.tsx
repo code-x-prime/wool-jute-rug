@@ -6,7 +6,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { formatDate } from "@/lib/utils";
+import { formatDate, currencySymbol } from "@/lib/utils";
 import { Trash2, UserMinus, Eye } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -153,7 +153,7 @@ export default function ApprovedPartnersTab() {
                                 <TableCell>
                                     <Badge variant="default">{t("partners_tab.approved.active")}</Badge>
                                 </TableCell>
-                                <TableCell>₹{partner.monthlyEarnings?.toFixed(2) || '0.00'}</TableCell>
+                                <TableCell>{currencySymbol()}{partner.monthlyEarnings?.toFixed(2) || '0.00'}</TableCell>
                                 <TableCell>
                                     <div className="flex gap-2">
                                         <Button
@@ -269,7 +269,7 @@ export default function ApprovedPartnersTab() {
                                         <h4 className="font-semibold mb-2">{t("partners_tab.approved.earnings")}:</h4>
                                         <div className="mb-3">
                                             <span className="text-lg font-bold">
-                                                {t("partners_tab.approved.total")}: ₹{selectedPartner.earnings?.total?.toFixed(2) || '0.00'}
+                                                {t("partners_tab.approved.total")}: {currencySymbol()}{selectedPartner.earnings?.total?.toFixed(2) || '0.00'}
                                             </span>
                                         </div>
                                         <div>
@@ -278,7 +278,7 @@ export default function ApprovedPartnersTab() {
                                                 {selectedPartner.earnings?.monthly && Object.entries(selectedPartner.earnings.monthly).map(([month, amount]) => (
                                                     <div key={month} className="bg-accent px-2 py-1 rounded">
                                                         <div className="font-semibold">{month}</div>
-                                                        <div>₹{amount.toFixed(2)}</div>
+                                                        <div>{currencySymbol()}{amount.toFixed(2)}</div>
                                                     </div>
                                                 ))}
                                             </div>

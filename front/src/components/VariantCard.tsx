@@ -21,6 +21,7 @@ import {
 import { toast } from "sonner";
 import { products, moq, pricingSlabs } from "@/api/adminService";
 import { useLanguage } from "@/context/LanguageContext";
+import { currencySymbol } from "@/lib/utils";
 
 
 interface ImageData {
@@ -768,7 +769,7 @@ export default function VariantCard({
 
             <div className="space-y-1">
               <Label htmlFor={`price-${index}`} className="text-xs text-[var(--text-primary)]">
-                Price (₹)
+                Price ({currencySymbol()})
               </Label>
               <Input
                 id={`price-${index}`}
@@ -784,7 +785,7 @@ export default function VariantCard({
 
             <div className="space-y-1">
               <Label htmlFor={`salePrice-${index}`} className="text-xs text-[var(--text-primary)]">
-                Sale Price (₹)
+                Sale Price ({currencySymbol()})
               </Label>
               <Input
                 id={`salePrice-${index}`}
@@ -881,7 +882,7 @@ export default function VariantCard({
                         <span className="text-[var(--text-primary)]">
                           {slab.minQty}-{slab.maxQty || "∞"} {t("variant_card.pricing_slabs.pieces")}
                         </span>
-                        <span className="font-medium text-green-600">₹{slab.price}</span>
+                        <span className="font-medium text-green-600">{currencySymbol()}{slab.price}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <Button

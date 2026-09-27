@@ -1229,6 +1229,7 @@ export const getContactFormTemplate = (data) => `
 `;
 
 export const getOrderConfirmationTemplate = (data, storeConfig = null) => {
+  const cs = { INR: "₹", USD: "$", EUR: "€" }[data.currency] || "₹";
   const store = storeConfig || getStoreConfig();
   return `
 <!DOCTYPE html>
@@ -1377,26 +1378,26 @@ export const getOrderConfirmationTemplate = (data, storeConfig = null) => {
                     <tr>
                         <td>${item.name} ${item.variant}</td>
                         <td>${item.quantity}</td>
-                        <td>₹${item.price}</td>
+                        <td>${cs}${item.price}</td>
                     </tr>
                     `
                       )
                       .join("")}
                     <tr class="total-row">
                         <td colspan="2">Subtotal</td>
-                        <td>₹${data.subtotal}</td>
+                        <td>${cs}${data.subtotal}</td>
                     </tr>
                     <tr>
                         <td colspan="2">Shipping</td>
-                        <td>₹${data.shipping}</td>
+                        <td>${cs}${data.shipping}</td>
                     </tr>
                     <tr>
                         <td colspan="2">Tax</td>
-                        <td>₹${data.tax}</td>
+                        <td>${cs}${data.tax}</td>
                     </tr>
                     <tr class="total-row">
                         <td colspan="2">Total</td>
-                        <td>₹${data.total}</td>
+                        <td>${cs}${data.total}</td>
                     </tr>
                 </tbody>
             </table>

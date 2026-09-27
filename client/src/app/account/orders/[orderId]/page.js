@@ -517,8 +517,8 @@ export default function OrderDetailsPage({ params }) {
                             </p>
                           ) : null}
                           <p>
-                            {formatCurrency(item.price)} × {item.quantity} ={" "}
-                            {formatCurrency(item.subtotal)}
+                            {formatCurrency(item.price, order?.currency)} × {item.quantity} ={" "}
+                            {formatCurrency(item.subtotal, order?.currency)}
                           </p>
                           {item.addons && item.addons.length > 0 && (
                             <div className="mt-2 pt-2 border-t border-gray-100">
@@ -529,7 +529,7 @@ export default function OrderDetailsPage({ params }) {
                                     <AddonSvgIcon icon={addon.icon} size={13} className="text-gray-500" />
                                     {addon.name}
                                   </span>
-                                  <span className="font-medium">{formatCurrency(addon.price)}</span>
+                                  <span className="font-medium">{formatCurrency(addon.price, order?.currency)}</span>
                                 </div>
                               ))}
                             </div>
@@ -653,12 +653,12 @@ export default function OrderDetailsPage({ params }) {
                 <div className="p-5 space-y-3 text-sm">
                   <div className="flex justify-between text-gray-500">
                     <span>Subtotal</span>
-                    <span className="font-medium text-gray-800">{formatCurrency(order.subTotal)}</span>
+                    <span className="font-medium text-gray-800">{formatCurrency(order.subTotal, order?.currency)}</span>
                   </div>
                   <div className="flex justify-between text-gray-500">
                     <span>Shipping</span>
                     {parseFloat(order.shippingCost) > 0 ? (
-                      <span className="font-medium text-gray-800">{formatCurrency(order.shippingCost)}</span>
+                      <span className="font-medium text-gray-800">{formatCurrency(order.shippingCost, order?.currency)}</span>
                     ) : (
                       <span className="text-[#C9A84C] font-semibold">FREE</span>
                     )}
@@ -666,13 +666,13 @@ export default function OrderDetailsPage({ params }) {
                   {parseFloat(order.codCharge) > 0 && (
                     <div className="flex justify-between text-gray-500">
                       <span>COD Surcharge</span>
-                      <span className="font-medium text-gray-800">{formatCurrency(order.codCharge)}</span>
+                      <span className="font-medium text-gray-800">{formatCurrency(order.codCharge, order?.currency)}</span>
                     </div>
                   )}
                   {order.discount > 0 && (
                     <div className="flex justify-between text-[#C9A84C] font-medium">
                       <span>Discount</span>
-                      <span>-{formatCurrency(order.discount)}</span>
+                      <span>-{formatCurrency(order.discount, order?.currency)}</span>
                     </div>
                   )}
                   {(order.couponCode || order.couponDetails) && (
@@ -685,14 +685,14 @@ export default function OrderDetailsPage({ params }) {
                         <p className="text-xs text-[#3D1C02]/70">
                           {order.couponDetails.discountType === "PERCENTAGE"
                             ? `${order.couponDetails.discountValue}% off`
-                            : `${formatCurrency(order.couponDetails.discountValue)} off`}
+                            : `${formatCurrency(order.couponDetails.discountValue, order?.currency)} off`}
                         </p>
                       )}
                     </div>
                   )}
                   <div className="border-t border-gray-100 pt-3 mt-1 flex justify-between">
                     <span className="font-semibold text-[#3D1C02]">Total</span>
-                    <span className="font-bold text-[#3D1C02] text-lg">{formatCurrency(order.total)}</span>
+                    <span className="font-bold text-[#3D1C02] text-lg">{formatCurrency(order.total, order?.currency)}</span>
                   </div>
                 </div>
 
@@ -821,7 +821,7 @@ export default function OrderDetailsPage({ params }) {
                 <div className="mb-5 p-4 bg-[#FDF8F0] border border-[#C9A84C]/20 rounded-xl">
                   <p className="text-sm font-semibold text-[#3D1C02]">{selectedItem.name}</p>
                   <p className="text-sm text-gray-500 mt-0.5">
-                    {formatCurrency(selectedItem.price)} × {selectedItem.quantity}
+                    {formatCurrency(selectedItem.price, order?.currency)} × {selectedItem.quantity}
                   </p>
                 </div>
 

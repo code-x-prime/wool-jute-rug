@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { formatDate } from "@/lib/utils";
+import { formatDate, currencySymbol } from "@/lib/utils";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Trash2 } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
@@ -413,12 +413,12 @@ export default function PartnerRegistrationsPage() {
                                                                 </div>
                                                                 <div>
                                                                     <div className="font-semibold mb-1">{t('partner_management.registrations.dialogs.details.earnings')}:</div>
-                                                                    <div>{t('partner_management.registrations.dialogs.details.total')}: <span className="font-bold">₹{partnerDetails.earnings.total.toFixed(2)}</span></div>
+                                                                    <div>{t('partner_management.registrations.dialogs.details.total')}: <span className="font-bold">{currencySymbol()}{partnerDetails.earnings.total.toFixed(2)}</span></div>
                                                                     <div className="mt-1">
                                                                         <div className="font-semibold text-xs mb-1">{t('partner_management.registrations.dialogs.details.monthly')}:</div>
                                                                         <ul className="text-xs grid grid-cols-2 gap-x-4 gap-y-1">
                                                                             {Object.entries(partnerDetails.earnings.monthly).map(([month, amt]) => (
-                                                                                <li key={month}>{month}: <span className="font-mono">₹{amt.toFixed(2)}</span></li>
+                                                                                <li key={month}>{month}: <span className="font-mono">{currencySymbol()}{amt.toFixed(2)}</span></li>
                                                                             ))}
                                                                         </ul>
                                                                     </div>

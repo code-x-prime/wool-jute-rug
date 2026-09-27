@@ -31,6 +31,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import api from "@/api/api";
+import { formatCurrency, currencySymbol } from "@/lib/utils";
 
 /* ───────────────────────── types ───────────────────────── */
 
@@ -138,8 +140,16 @@ const textToHtml = (text: string) =>
 const cartesian = (lists: VarOption[][]): VarOption[][] =>
   lists.reduce<VarOption[][]>((acc, list) => acc.flatMap((combo) => list.map((o) => [...combo, o])), [[]]);
 
+// SKU = <listing prefix>-<option codes>, e.g. HTWR-7K2-3X5FT-IVORY
+const skuPart = (v: string, len = 6) => v.toUpperCase().replace(/[^A-Z0-9]+/g, "").slice(0, len);
+const makeSkuPrefix = (title: string) => {
+  const initials = title.trim().split(/\s+/).filter(Boolean).map((w) => w[0]).join("");
+  const letters = skuPart(initials || title, 4) || "ITEM";
+  return `${letters}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+};
+
 const num = (v: string) => (v === "" || v === undefined || v === null ? NaN : Number(v));
-const money = (v: unknown) => `₹${Number(v || 0).toLocaleString("en-IN")}`;
+const money = (v: unknown) => formatCurrency(Number(v || 0));
 
 /* ───────────────────────── small UI pieces ───────────────────────── */
 
@@ -226,7 +236,10 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [materials, setMaterials] = useState<string[]>([]);
-  const [globalPricing, setGlobalPricing] = useState(false);
+  // One price for every country (in the store currency). Kept so older listings saved with global prices are switched off on save.
+  const globalPricing = false;
+  const skuPrefix = useRef("");
+  const [baseSkuTouched, setBaseSkuTouched] = useState(false);
   const [base, setBase] = useState({ price: "", priceUS: "", priceIntl: "", quantity: "1", sku: "", procMin: "", procMax: "" });
   const [allowRestock, setAllowRestock] = useState(false);
   const [deliveryProfileId, setDeliveryProfileId] = useState("");
@@ -297,7 +310,6 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
         setCategoryId((cats.find((c) => c.isPrimary) || cats[0])?.id || "");
         setTags(p.tags || []);
         setMaterials(p.materials || []);
-        setGlobalPricing(!!p.globalPricing);
         setAllowRestock(!!p.allowRestockRequests);
         setDeliveryProfileId(p.deliveryProfileId || "");
         setReturnPolicyId(p.returnPolicyId || "");
@@ -663,7 +675,7 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
         if (old) return { ...old, values, valueIds };
         return {
           key, id: `new-${newIdx++}`, valueIds, values,
-          sku: "", price: base.price, priceUS: base.priceUS, priceIntl: base.priceIntl,
+          sku: autoSku(combo.map((o) => o.value)), price: base.price, priceUS: base.priceUS, priceIntl: base.priceIntl,
           quantity: base.quantity || "0", procMin: base.procMin, procMax: base.procMax, isActive: true, photoKeys: [], passthrough: {},
         };
       });
@@ -722,6 +734,28 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
     if (!linked) return [];
     const opt = linked.options.find((o) => o.value === row.values[linked.key]);
     return opt?.photoKey ? [opt.photoKey] : [];
+  };
+
+  /* ── SKU ── */
+  const ensurePrefix = () => {
+    if (!skuPrefix.current) {
+      // Reuse the style of existing SKUs on this listing (e.g. HTWR-7K2-…) when there are any
+      const existing = [base.sku, ...rows.map((r) => r.sku)].find((x) => /^[A-Z0-9]+-[A-Z0-9]+/.test(x || ""));
+      skuPrefix.current = existing ? existing.split("-").slice(0, 2).join("-") : makeSkuPrefix(title);
+    }
+    return skuPrefix.current;
+  };
+  const autoSku = (values: string[] = []) => [ensurePrefix(), ...values.map((v) => skuPart(v)).filter(Boolean)].join("-");
+
+  // Simple listing: fill the SKU from the title until the admin types their own
+  useEffect(() => {
+    if (loading || baseSkuTouched || hasVariations || !title.trim() || base.sku) return;
+    setBase((b) => ({ ...b, sku: autoSku() }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, loading, hasVariations]);
+
+  const fillMissingSkus = () => {
+    setRows((rs) => rs.map((r) => (r.sku.trim() ? r : { ...r, sku: autoSku(variations.map((v) => r.values[v.key]).filter(Boolean)) })));
   };
 
   /* ── delivery / returns dialogs ── */
@@ -823,8 +857,33 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
     return true;
   };
 
+  const checkSkus = async () => {
+    const skus = buildVariantPayload().map((e) => String(e.payload.sku || "").trim()).filter(Boolean);
+    const dup = skus.find((x, i) => skus.indexOf(x) !== i);
+    if (dup) {
+      toast.error(`SKU "${dup}" is used twice in this listing`);
+      scrollTo(hasVariations && vary.skus.on ? "options" : "pricing");
+      return false;
+    }
+    if (!skus.length) return true;
+    const r = await api.post("/api/admin/products/sku-check", { skus, productId: mode === "edit" ? productId : undefined });
+    const taken: { sku: string; product: string }[] = r.data?.data?.taken || [];
+    if (taken.length) {
+      toast.error(`SKU ${taken.map((t) => `"${t.sku}" (used by ${t.product})`).join(", ")} already exists — change it or use Auto-fill`);
+      scrollTo(hasVariations && vary.skus.on ? "options" : "pricing");
+      return false;
+    }
+    return true;
+  };
+
   const save = async (publish: boolean) => {
     if (!validate(publish)) return;
+    try {
+      if (!(await checkSkus())) return;
+    } catch {
+      toast.error("Could not check SKUs — please try again");
+      return;
+    }
     setSaving(publish ? "publish" : "draft");
     let savedId = productId;
     try {
@@ -1130,7 +1189,7 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
                   <Button type="button" size="sm" variant="outline" className="rounded-full" onClick={() => { setRows((rs) => rs.map((r) => (selectedRowKeys.includes(r.key) ? { ...r, isActive: false } : r))); }}>Hide</Button>
                   {vary.prices.on && (
                     <Button type="button" size="sm" variant="outline" className="rounded-full" onClick={() => {
-                      const v = window.prompt("Price in India (₹) for selected variants:");
+                      const v = window.prompt(`Price (${currencySymbol()}) for selected variants:`);
                       if (v !== null && num(v) >= 0) setRows((rs) => rs.map((r) => (selectedRowKeys.includes(r.key) ? { ...r, price: v } : r)));
                     }}>Set price</Button>
                   )}
@@ -1151,8 +1210,13 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
                       </th>
                       <th className="px-3 py-3">Photo</th>
                       {variations.map((v) => <th key={v.key} className="px-3 py-3 underline decoration-dotted">{v.name}</th>)}
-                      {vary.skus.on && <th className="px-3 py-3 underline decoration-dotted">SKU</th>}
-                      {vary.prices.on && <th className="px-3 py-3 underline decoration-dotted">Price in India</th>}
+                      {vary.skus.on && (
+                        <th className="px-3 py-3">
+                          <span className="underline decoration-dotted">SKU</span>
+                          <button type="button" onClick={fillMissingSkus} className="ml-2 text-xs font-normal text-[var(--accent)] hover:underline">Auto-fill</button>
+                        </th>
+                      )}
+                      {vary.prices.on && <th className="px-3 py-3 underline decoration-dotted">Price ({currencySymbol()})</th>}
                       {vary.prices.on && globalPricing && <th className="px-3 py-3 underline decoration-dotted">Price in United States</th>}
                       {vary.prices.on && globalPricing && <th className="px-3 py-3 underline decoration-dotted">Price in everywhere else</th>}
                       {vary.quantities.on && <th className="px-3 py-3 underline decoration-dotted">Quantity</th>}
@@ -1185,9 +1249,9 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
                           </td>
                           {variations.map((v) => <td key={v.key} className="px-3 py-2 text-[var(--text-primary)]">{r.values[v.key]}</td>)}
                           {vary.skus.on && <td className="px-3 py-2">{cell("skus", "sku", { className: "h-11 w-36 rounded-lg" })}</td>}
-                          {vary.prices.on && <td className="px-3 py-2"><div className="w-32">{cell("prices", "price", { type: "number", min: 0, placeholder: "₹" })}</div></td>}
-                          {vary.prices.on && globalPricing && <td className="px-3 py-2"><div className="w-32">{cell("prices", "priceUS", { type: "number", min: 0, placeholder: "₹" })}</div></td>}
-                          {vary.prices.on && globalPricing && <td className="px-3 py-2"><div className="w-32">{cell("prices", "priceIntl", { type: "number", min: 0, placeholder: "₹" })}</div></td>}
+                          {vary.prices.on && <td className="px-3 py-2"><div className="w-32">{cell("prices", "price", { type: "number", min: 0, placeholder: currencySymbol() })}</div></td>}
+                          {vary.prices.on && globalPricing && <td className="px-3 py-2"><div className="w-32">{cell("prices", "priceUS", { type: "number", min: 0, placeholder: currencySymbol() })}</div></td>}
+                          {vary.prices.on && globalPricing && <td className="px-3 py-2"><div className="w-32">{cell("prices", "priceIntl", { type: "number", min: 0, placeholder: currencySymbol() })}</div></td>}
                           {vary.quantities.on && <td className="px-3 py-2"><div className="w-24">{cell("quantities", "quantity", { type: "number", min: 0 })}</div></td>}
                           {vary.processing.on && (
                             <td className="px-3 py-2">
@@ -1331,29 +1395,22 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
 
         {/* ── Pricing & Delivery ── */}
         <Section id="pricing" title="Price and inventory" subtitle="Set your item price, and how many are available for sale.">
-          <div className="flex items-start justify-between gap-4">
-            <FieldLabel hint="Set prices for buyers in different locations.">Domestic and global pricing</FieldLabel>
-            <Switch checked={globalPricing} onCheckedChange={setGlobalPricing} />
-          </div>
-
           <div>
             <FieldLabel required>Price</FieldLabel>
             {hasVariations && vary.prices.on ? (
               <p className="text-sm text-[var(--text-primary)]">
-                {globalPricing ? "Domestic and global pricing" : "Prices"} vary for each {variesText("prices")}
+                Prices vary for each {variesText("prices")}
                 <button type="button" onClick={() => scrollTo("options")} className="mt-1 block font-semibold hover:underline">Edit in variations →</button>
               </p>
             ) : (
               <div className="flex flex-wrap gap-4">
-                {([["price", "Price in India"], ...(globalPricing ? [["priceUS", "Price in United States"], ["priceIntl", "Price in everywhere else"]] : [])] as [keyof typeof base, string][]).map(([k, label]) => (
-                  <div key={k} className="w-48">
-                    <Label className="text-xs">{label}</Label>
-                    <div className="relative mt-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]">₹</span>
-                      <Input type="number" min={0} value={base[k]} onChange={(e) => setBase({ ...base, [k]: e.target.value })} className="h-12 rounded-lg pl-7" />
-                    </div>
+                <div className="w-48">
+                  <Label className="text-xs">Price for all countries</Label>
+                  <div className="relative mt-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]">{currencySymbol()}</span>
+                    <Input type="number" min={0} step="0.01" value={base.price} onChange={(e) => setBase({ ...base, price: e.target.value })} className="h-12 rounded-lg pl-7" />
                   </div>
-                ))}
+                </div>
               </div>
             )}
           </div>
@@ -1379,7 +1436,11 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
               </p>
             ) : (
               <>
-                <Input value={base.sku} onChange={(e) => setBase({ ...base, sku: e.target.value })} placeholder="Leave blank to auto-generate" className="h-12 w-72 rounded-lg" />
+                <div className="flex items-center gap-2">
+                  <Input value={base.sku} onChange={(e) => { setBaseSkuTouched(true); setBase({ ...base, sku: e.target.value.toUpperCase() }); }} placeholder="Auto-generated from the title" className="h-12 w-72 rounded-lg font-mono" />
+                  <button type="button" className="text-sm font-semibold hover:underline" onClick={() => { skuPrefix.current = makeSkuPrefix(title); setBaseSkuTouched(false); setBase({ ...base, sku: autoSku() }); }}>Regenerate</button>
+                </div>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">Must be unique across your shop — checked when you save.</p>
               </>
             )}
           </div>
@@ -1826,12 +1887,12 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
               <div className="grid grid-cols-2 gap-3">
                 {profileDialog.pricingType === "FIXED" && (
                   <div>
-                    <Label>Within India (₹)</Label>
+                    <Label>Within India ({currencySymbol()})</Label>
                     <Input type="number" min={0} value={String(profileDialog.domesticCost ?? "")} onChange={(e) => setProfileDialog({ ...profileDialog, domesticCost: e.target.value })} className="mt-1 h-11" />
                   </div>
                 )}
                 <div>
-                  <Label>International (₹, blank = not offered)</Label>
+                  <Label>International ({currencySymbol()}, blank = not offered)</Label>
                   <Input type="number" min={0} value={profileDialog.internationalCost == null ? "" : String(profileDialog.internationalCost)} onChange={(e) => setProfileDialog({ ...profileDialog, internationalCost: e.target.value === "" ? null : e.target.value })} className="mt-1 h-11" />
                 </div>
                 <div>

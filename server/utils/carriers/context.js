@@ -3,6 +3,7 @@ import { prisma } from "../../config/db.js";
 import { ApiError } from "../ApiError.js";
 import { decrypt } from "../encryption.js";
 import { toCountryCode } from "../intlCheckout.js";
+import { getStoreCurrency, convert } from "../currency.js";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
@@ -26,8 +27,9 @@ export const ymd = (d = new Date()) => d.toISOString().slice(0, 10);
 /**
  * @param {string} orderId
  * @param {{weightKg?:number,lengthCm?:number,widthCm?:number,heightCm?:number}} overrides admin-edited parcel
+ * @param {{fromId?:string}} opts warehouse to ship from (FedEx/DHL/Easyship/manual) or Shiprocket pickup id
  */
-export async function buildShipmentContext(orderId, overrides = {}) {
+export async function buildShipmentContext(orderId, overrides = {}, opts = {}) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: {
@@ -67,7 +69,12 @@ export async function buildShipmentContext(orderId, overrides = {}) {
   const countryCode = toCountryCode(addr.country);
   if (!countryCode) throw new ApiError(400, `Unrecognised country "${addr.country}" on the shipping address`);
 
-  const exchangeRate = order.exchangeRate || settings?.usdExchangeRate || 90;
+  // Customs are declared in the order currency; INR orders are declared in USD at the admin rate
+  const cur = await getStoreCurrency();
+  const orderCurrency = order.currency || "INR";
+  const customsCurrency = orderCurrency === "INR" ? "USD" : orderCurrency;
+  const toCustoms = (n) => convert(n, orderCurrency, customsCurrency, cur);
+  const exchangeRate = cur.inrPerUnit;
   const goodsInr = Math.max(parseFloat(order.subTotal) - parseFloat(order.discount || 0), 0);
   const totalQty = order.items.reduce((s, i) => s + i.quantity, 0) || 1;
   const perUnitWeight = round2(parcel.weightKg / totalQty) || 0.1;
@@ -76,28 +83,31 @@ export async function buildShipmentContext(orderId, overrides = {}) {
     productName: i.product?.name || "Rug",
     sku: i.variant?.sku,
     quantity: i.quantity,
-    unitValueUsd: Math.max(round2(parseFloat(i.price) / exchangeRate), 1),
+    unitValueUsd: Math.max(round2(toCustoms(parseFloat(i.price))), 1),
     unitWeightKg: perUnitWeight,
     hsCode: settings?.intlHsCode || "570242",
   }));
 
+  const shipper = await resolveShipFrom(opts.fromId, settings);
+
+  // Shiprocket: chosen pickup address, else the default one
+  let shiprocketPickup = null;
+  if ("shiprocketPickupId" in opts) {
+    const p = opts.shiprocketPickupId
+      ? await prisma.shiprocketPickupAddress.findUnique({ where: { id: opts.shiprocketPickupId } })
+      : await prisma.shiprocketPickupAddress.findFirst({ orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }] });
+    if (!p) throw new ApiError(400, opts.shiprocketPickupId ? "That pickup address no longer exists" : "Add a pickup address in Settings → Shipping");
+    shiprocketPickup = { id: p.id, label: p.nickname, nickname: p.nickname, name: p.name, phone: p.phone, street: p.address, city: p.city, state: p.state, postalCode: p.pincode, pincode: p.pincode, countryCode: "IN" };
+  }
+
   return {
     order,
     settings,
-    isInternational: countryCode !== "IN",
-    shipper: {
-      name: settings?.siteName || "Store",
-      company: settings?.siteName || "Store",
-      phone: phoneDigits(settings?.sitePhone),
-      email: settings?.siteEmail || "",
-      street: settings?.siteAddress || "",
-      city: settings?.siteCity || "",
-      state: settings?.siteState || "",
-      postalCode: settings?.sitePincode || "",
-      countryCode: "IN",
-      gstin: settings?.siteGSTIN || null,
-      iec: settings?.exporterIec || null,
-    },
+    // Customs / international rules depend on where the parcel leaves from
+    isInternational: countryCode !== shipper.countryCode,
+    recipientCountry: countryCode,
+    shiprocketPickup,
+    shipper,
     recipient: {
       name: addr.name || order.user?.name || "Customer",
       phone: phoneDigits(addr.phone || order.user?.phone),
@@ -111,13 +121,63 @@ export async function buildShipmentContext(orderId, overrides = {}) {
     },
     parcel,
     customs: {
-      currency: "USD",
-      valueUsd: Math.max(round2(goodsInr / exchangeRate), 1),
+      currency: customsCurrency,
+      valueUsd: Math.max(round2(toCustoms(goodsInr)), 1),
       items: customsItems,
       invoiceNumber: order.orderNumber,
       invoiceDate: ymd(new Date(order.createdAt)),
     },
     exchangeRate,
+    orderCurrency,
+    cur,
+  };
+}
+
+/**
+ * Ship-from address: the chosen warehouse, else the default warehouse, else the store address (Settings → General).
+ * The returned object is also stored on the shipment as a snapshot.
+ */
+export async function resolveShipFrom(fromId, settings) {
+  const wh = fromId
+    ? await prisma.warehouse.findFirst({ where: { id: fromId, isActive: true } })
+    : await prisma.warehouse.findFirst({ where: { isActive: true }, orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }] });
+  if (fromId && !wh) throw new ApiError(400, "That warehouse no longer exists or is inactive");
+  const store = {
+    name: settings?.siteName || "Store",
+    company: settings?.siteName || "Store",
+    gstin: settings?.siteGSTIN || null,
+    iec: settings?.exporterIec || null,
+  };
+  if (wh) {
+    const cc = toCountryCode(wh.country) || "IN";
+    return {
+      ...store,
+      warehouseId: wh.id,
+      label: wh.name,
+      name: wh.contactName,
+      phone: phoneDigits(wh.phone),
+      email: wh.email || settings?.siteEmail || "",
+      street: wh.street,
+      city: wh.city,
+      state: wh.state || "",
+      stateCode: stateCode(wh.state, cc),
+      postalCode: wh.postalCode,
+      countryCode: cc,
+      // Indian GSTIN / IEC only apply to parcels leaving India
+      ...(cc !== "IN" && { gstin: null, iec: null }),
+    };
+  }
+  return {
+    ...store,
+    warehouseId: null,
+    label: "Store address",
+    phone: phoneDigits(settings?.sitePhone),
+    email: settings?.siteEmail || "",
+    street: settings?.siteAddress || "",
+    city: settings?.siteCity || "",
+    state: settings?.siteState || "",
+    postalCode: settings?.sitePincode || "",
+    countryCode: "IN",
   };
 }
 
@@ -131,7 +191,9 @@ export function assertShipperReady(ctx) {
     !s.phone && "phone",
   ].filter(Boolean);
   if (missing.length) {
-    throw new ApiError(400, `Fill your ${missing.join(", ")} in Site Settings → General before booking international shipments`);
+    throw new ApiError(400, s.warehouseId
+      ? `Warehouse "${s.label}" is missing its ${missing.join(", ")} — edit it in Settings → International Shipping`
+      : `Fill your ${missing.join(", ")} in Site Settings → General (or add a warehouse) before booking shipments`);
   }
   const r = ctx.recipient;
   if (!r.phone) throw new ApiError(400, "Customer phone number is missing on the shipping address — carriers require it");

@@ -7,8 +7,11 @@ import sendEmail from "./sendEmail.js";
 import { getOrderConfirmationTemplate } from "../email/temp/EmailTemplate.js";
 import { getStoreConfigFromDb } from "./storeConfig.js";
 import { processReferralReward } from "../controllers/referral.controller.js";
+import { getStoreCurrency } from "./currency.js";
 
 const round2 = (n) => Math.round(n * 100) / 100;
+/** INR is charged in whole rupees (as before); USD/EUR keep cents. */
+export const roundMoney = (n, code) => (code === "INR" ? Math.round(n) : round2(n));
 
 // "United States" / "USA" / "us" -> "US"
 let countryIndex = null;
@@ -39,23 +42,23 @@ export function toCountryCode(country) {
   return null;
 }
 
-async function effectiveUnitPrice(variant, quantity) {
+async function effectiveUnitPrice(variant, quantity, rm) {
   let price = parseFloat(variant.salePrice || variant.price);
   const flash = await applyFlashSalePrice(price, variant.productId);
-  price = Math.round(flash.hasFlashSale ? flash.price : price);
+  price = rm(flash.hasFlashSale ? flash.price : price);
   // Same precedence as the cart: variant slabs, then product slabs (ascending minQty, first match)
   const slabs = [...(variant.pricingSlabs || []), ...(variant.product?.pricingSlabs || [])].sort(
     (a, b) => a.minQty - b.minQty
   );
   for (const slab of slabs) {
     if (quantity >= slab.minQty && (slab.maxQty === null || quantity <= slab.maxQty)) {
-      return Math.round(parseFloat(slab.price));
+      return rm(parseFloat(slab.price));
     }
   }
   return price;
 }
 
-async function couponDiscount(couponCode, items) {
+async function couponDiscount(couponCode, items, rm) {
   if (!couponCode) return { discount: 0, coupon: null };
   const coupon = await prisma.coupon.findFirst({
     where: { code: couponCode, isActive: true },
@@ -82,22 +85,26 @@ async function couponDiscount(couponCode, items) {
   }
   if (hasTargets && applicable === 0) throw new ApiError(400, "Coupon does not apply to your cart");
   if (coupon.minOrderAmount && applicable < parseFloat(coupon.minOrderAmount)) {
-    throw new ApiError(400, `Minimum order amount of ₹${coupon.minOrderAmount} required for this coupon`);
+    throw new ApiError(400, `Minimum order amount of ${coupon.minOrderAmount} required for this coupon`);
   }
 
   let discount =
     coupon.discountType === "PERCENTAGE"
       ? (applicable * Math.min(parseFloat(coupon.discountValue), 90)) / 100
       : parseFloat(coupon.discountValue);
-  discount = Math.round(Math.min(discount, applicable * 0.9));
+  discount = rm(Math.min(discount, applicable * 0.9));
   return { discount, coupon: { id: coupon.id, code: coupon.code } };
 }
 
 /**
- * Price the user's current cart for an international payment.
+ * Price the user's current cart in the store currency.
+ * payInStoreCurrency=false (PayPal/Payoneer): an INR store is charged in USD at the admin rate;
+ * USD/EUR stores are always charged in their own currency.
  * Throws if the cart is empty, an item is inactive, or stock is insufficient.
  */
-export async function buildIntlQuote(userId, shippingAddressId, couponCode, { currency = "USD" } = {}) {
+export async function buildIntlQuote(userId, shippingAddressId, couponCode, { payInStoreCurrency = false } = {}) {
+  const cur = await getStoreCurrency();
+  const rm = (n) => roundMoney(n, cur.code);
   const address = await prisma.address.findFirst({ where: { id: shippingAddressId, userId } });
   if (!address) throw new ApiError(400, "Shipping address not found");
 
@@ -125,14 +132,14 @@ export async function buildIntlQuote(userId, shippingAddressId, couponCode, { cu
     if (v.quantity < ci.quantity) {
       throw new ApiError(409, `Only ${v.quantity} left of ${v.product.name}. Please update your cart.`);
     }
-    const unitPrice = await effectiveUnitPrice(v, ci.quantity);
+    const unitPrice = await effectiveUnitPrice(v, ci.quantity, rm);
     const addons = ci.addons.map((a) => ({
       addonServiceId: a.addonServiceId,
       name: a.addonService?.name || "",
       price: round2(parseFloat(a.price)),
     }));
-    const addonsTotal = Math.round(addons.reduce((s, a) => s + a.price, 0));
-    const lineTotal = Math.round(unitPrice * ci.quantity) + addonsTotal;
+    const addonsTotal = rm(addons.reduce((s, a) => s + a.price, 0));
+    const lineTotal = rm(rm(unitPrice * ci.quantity) + addonsTotal);
     subTotal += lineTotal;
     items.push({
       variantId: v.id,
@@ -147,7 +154,7 @@ export async function buildIntlQuote(userId, shippingAddressId, couponCode, { cu
       categoryIds: v.product.categories.map((c) => c.categoryId),
     });
   }
-  subTotal = Math.round(subTotal);
+  subTotal = rm(subTotal);
 
   // Shipping — same rule as the cart page
   let shippingCost = 0;
@@ -155,15 +162,17 @@ export async function buildIntlQuote(userId, shippingAddressId, couponCode, { cu
   if (shipSettings) {
     const charge = parseFloat(shipSettings.shippingCharge) || 0;
     const threshold = charge > 0 ? parseFloat(shipSettings.freeShippingThreshold) || 0 : 0;
-    shippingCost = charge > 0 && !(threshold > 0 && subTotal >= threshold) ? Math.round(charge) : 0;
+    shippingCost = charge > 0 && !(threshold > 0 && subTotal >= threshold) ? rm(charge) : 0;
   }
 
-  const { discount, coupon } = await couponDiscount(couponCode, items);
-  const total = Math.max(Math.round(subTotal - discount + shippingCost), 1);
+  const { discount, coupon } = await couponDiscount(couponCode, items, rm);
+  const total = Math.max(rm(subTotal - discount + shippingCost), cur.code === "INR" ? 1 : 0.5);
 
-  const settings = await prisma.siteSettings.findFirst({ select: { usdExchangeRate: true } });
-  const exchangeRate = settings?.usdExchangeRate > 0 ? settings.usdExchangeRate : 90;
-  const amountUsd = Math.max(round2(total / exchangeRate), 0.01);
+  // What the gateway charges: the store currency, except INR stores on PayPal/Payoneer (→ USD)
+  const convertToUsd = !payInStoreCurrency && cur.code === "INR";
+  const currency = convertToUsd ? "USD" : cur.code;
+  const exchangeRate = convertToUsd ? cur.usdRate : 1; // store units per 1 unit of the charged currency
+  const amountUsd = convertToUsd ? Math.max(round2(total / cur.usdRate), 0.01) : total; // legacy name: amount charged
 
   return {
     address,
@@ -177,6 +186,7 @@ export async function buildIntlQuote(userId, shippingAddressId, couponCode, { cu
       exchangeRate,
       amountUsd,
       currency,
+      storeCurrency: cur.code,
     },
   };
 }
@@ -252,37 +262,65 @@ export async function createOrderFromSession(sessionId, payment) {
       throw new ApiError(409, "Payment session is not payable");
     }
 
-    const quote = session.quote;
-    const address = await tx.address.findUnique({ where: { id: session.shippingAddressId } });
-    const settings = await tx.siteSettings.findFirst({ select: { orderPrefix: true } });
-    const orderNumber = `${settings?.orderPrefix || "ORD"}-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
-    const isIndia = toCountryCode(address?.country) === "IN";
-
-    const order = await tx.order.create({
+    const order = await insertOrder(tx, {
+      userId: session.userId,
+      shippingAddressId: session.shippingAddressId,
+      quote: session.quote,
       data: {
-        orderNumber,
-        userId: session.userId,
         status: payment.status,
         paymentMethod: payment.paymentMethod,
         paymentGateway: session.provider,
         paymentMode: session.mode === "live" ? "LIVE" : "TEST",
-        subTotal: quote.subTotal,
-        shippingCost: quote.shippingCost,
-        discount: quote.discount,
-        tax: 0,
-        total: quote.total,
-        shippingAddressId: session.shippingAddressId,
-        shippingProvider: isIndia ? "SHIPROCKET" : "EASYSHIP",
-        couponId: quote.coupon?.id || null,
-        couponCode: quote.coupon?.code || null,
         paypalCaptureId: payment.captureId || null,
-        paymentCurrency: quote.currency,
+        paymentCurrency: session.quote.currency,
         paidAmount: payment.paidAmount,
-        exchangeRate: quote.exchangeRate,
+        exchangeRate: session.quote.exchangeRate,
         paymentReference: payment.reference,
         notes: payment.note || null,
       },
     });
+
+    if (payment.afterCreate) await payment.afterCreate(tx, order);
+
+    await tx.intlPaymentSession.update({
+      where: { id: sessionId },
+      data: { status: "COMPLETED", orderId: order.id },
+    });
+    return { order, created: true };
+  });
+
+  if (result.created) {
+    sendConfirmationEmail(result.order.id).catch((err) => console.error("Order email failed:", err));
+    processReferralReward(result.order.id, result.order.userId).catch((err) => console.error("Referral reward failed:", err));
+  }
+  return result;
+}
+
+/** Creates the order, items, addons, stock + coupon bookkeeping and clears the bought cart lines. */
+async function insertOrder(tx, { userId, shippingAddressId, quote, data }) {
+  const address = await tx.address.findUnique({ where: { id: shippingAddressId } });
+  const settings = await tx.siteSettings.findFirst({ select: { orderPrefix: true } });
+  const orderNumber = `${settings?.orderPrefix || "ORD"}-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
+  const isIndia = toCountryCode(address?.country) === "IN";
+  const extraCharge = Number(data.codCharge || 0);
+
+  const order = await tx.order.create({
+    data: {
+      orderNumber,
+      userId,
+      subTotal: quote.subTotal,
+      shippingCost: quote.shippingCost,
+      discount: quote.discount,
+      tax: 0,
+      total: quote.total + extraCharge,
+      currency: quote.storeCurrency || "INR",
+      shippingAddressId,
+      shippingProvider: isIndia ? "SHIPROCKET" : "EASYSHIP",
+      couponId: quote.coupon?.id || null,
+      couponCode: quote.coupon?.code || null,
+      ...data,
+    },
+  });
 
     for (const item of quote.items) {
       const orderItem = await tx.orderItem.create({
@@ -311,32 +349,67 @@ export async function createOrderFromSession(sessionId, payment) {
           referenceId: order.id,
           previousQuantity: before?.quantity ?? 0,
           newQuantity: (before?.quantity ?? 0) - item.quantity,
-          createdBy: session.userId,
-          notes: before && before.quantity < item.quantity ? "Oversold — stock went negative after international payment" : null,
+          createdBy: userId,
+          notes: before && before.quantity < item.quantity ? "Oversold — stock went negative after payment" : null,
         },
       });
     }
 
-    if (quote.coupon?.id) {
-      await tx.coupon.update({ where: { id: quote.coupon.id }, data: { usedCount: { increment: 1 } } });
-      await tx.userCoupon.updateMany({ where: { userId: session.userId, couponId: quote.coupon.id, isActive: true }, data: { isActive: false } });
+  if (quote.coupon?.id) {
+    await tx.coupon.update({ where: { id: quote.coupon.id }, data: { usedCount: { increment: 1 } } });
+    await tx.userCoupon.updateMany({ where: { userId, couponId: quote.coupon.id, isActive: true }, data: { isActive: false } });
+  }
+
+  // Only remove what was bought — the customer may have added items in another tab.
+  await tx.cartItem.deleteMany({ where: { userId, productVariantId: { in: quote.items.map((i) => i.variantId) } } });
+  return order;
+}
+
+/**
+ * Cash on Delivery: same pricing engine as online payments, plus the COD surcharge.
+ * Serialised per user so a double click cannot create two orders.
+ */
+export async function placeCodOrder({ userId, shippingAddressId, couponCode, codCharge = 0, billingAddressSameAsShipping = true, billingAddress, notes }) {
+  const { quote } = await buildIntlQuote(userId, shippingAddressId, couponCode, { payInStoreCurrency: true });
+  const cod = roundMoney(Number(codCharge) || 0, quote.storeCurrency);
+
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"order:" + userId}))`;
+    const recent = await tx.order.findFirst({
+      where: {
+        userId,
+        paymentMethod: "CASH",
+        createdAt: { gt: new Date(Date.now() - 60 * 1000) },
+        items: { some: { variantId: { in: quote.items.map((i) => i.variantId) } } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (recent) return { order: recent, created: false };
+    const inCart = await tx.cartItem.count({ where: { userId } });
+    if (!inCart) throw new ApiError(409, "This order was already placed");
+    for (const item of quote.items) {
+      const v = await tx.productVariant.findUnique({ where: { id: item.variantId }, select: { quantity: true } });
+      if (!v || v.quantity < item.quantity) throw new ApiError(409, `Not enough stock for ${item.name}`);
     }
-
-    // Only remove what was bought — the customer may have added items in another tab.
-    await tx.cartItem.deleteMany({ where: { userId: session.userId, productVariantId: { in: quote.items.map((i) => i.variantId) } } });
-
-    if (payment.afterCreate) await payment.afterCreate(tx, order);
-
-    await tx.intlPaymentSession.update({
-      where: { id: sessionId },
-      data: { status: "COMPLETED", orderId: order.id },
+    const order = await insertOrder(tx, {
+      userId,
+      shippingAddressId,
+      quote,
+      data: {
+        status: "PENDING",
+        paymentMethod: "CASH",
+        codCharge: cod,
+        billingAddressSameAsShipping,
+        billingAddress: billingAddressSameAsShipping ? undefined : billingAddress,
+        notes: notes || null,
+      },
     });
     return { order, created: true };
   });
 
   if (result.created) {
     sendConfirmationEmail(result.order.id).catch((err) => console.error("Order email failed:", err));
-    processReferralReward(result.order.id, result.order.userId).catch((err) => console.error("Referral reward failed:", err));
+    processReferralReward(result.order.id, userId).catch((err) => console.error("Referral reward failed:", err));
   }
   return result;
 }
@@ -352,7 +425,7 @@ async function sendConfirmationEmail(orderId) {
   });
   if (!order?.user?.email) return;
   const storeConfig = await getStoreConfigFromDb();
-  const methodLabel = { PAYPAL: "PayPal", PAYONEER: "Payoneer", RAZORPAY: "Online payment (Razorpay)" }[order.paymentMethod] || "Online";
+  const methodLabel = { PAYPAL: "PayPal", PAYONEER: "Payoneer", RAZORPAY: "Online payment (Razorpay)", CASH: "Cash on Delivery" }[order.paymentMethod] || "Online";
   await sendEmail({
     email: order.user.email,
     subject: `Order Confirmation - #${order.orderNumber}`,
@@ -361,7 +434,8 @@ async function sendConfirmationEmail(orderId) {
         userName: order.user.name || "Valued Customer",
         orderNumber: order.orderNumber,
         orderDate: order.createdAt,
-        paymentMethod: order.paymentCurrency && order.paymentCurrency !== "INR" ? `${methodLabel} (${order.paymentCurrency} ${Number(order.paidAmount || 0).toFixed(2)})` : methodLabel,
+        paymentMethod: order.paymentCurrency && order.paymentCurrency !== order.currency && order.paidAmount != null ? `${methodLabel} (${order.paymentCurrency} ${Number(order.paidAmount).toFixed(2)})` : methodLabel,
+        currency: order.currency,
         items: order.items.map((i) => ({
           name: i.product.name,
           variant: i.variant.attributes.map((a) => a.attributeValue.value).join(" "),

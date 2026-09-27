@@ -426,3 +426,14 @@ export const deleteReturnPolicy = asyncHandler(async (req, res) => {
   await prisma.returnPolicy.delete({ where: { id: req.params.id } });
   res.status(200).json(new ApiResponsive(200, {}, "Return policy deleted"));
 });
+
+// POST /admin/products/sku-check  { skus: string[], productId?: string } → which SKUs already belong to another listing
+export const checkSkus = asyncHandler(async (req, res) => {
+  const skus = [...new Set((req.body?.skus || []).map((s) => String(s).trim()).filter(Boolean))];
+  if (!skus.length) return res.status(200).json(new ApiResponsive(200, { taken: [] }, "OK"));
+  const rows = await prisma.productVariant.findMany({
+    where: { sku: { in: skus }, ...(req.body.productId && { productId: { not: req.body.productId } }) },
+    select: { sku: true, product: { select: { name: true } } },
+  });
+  res.status(200).json(new ApiResponsive(200, { taken: rows.map((r) => ({ sku: r.sku, product: r.product?.name })) }, "OK"));
+});

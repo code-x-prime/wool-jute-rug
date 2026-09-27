@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import api from "@/api/api";
 import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/context/LanguageContext";
+import { currencySymbol } from "@/lib/utils";
 
 interface Referral {
   id: string;
@@ -421,7 +422,7 @@ export default function ReferralsPage() {
                             <div className="flex items-center gap-2 text-[var(--accent)]">
                               <IndianRupee className="h-4 w-4" />
                               <span className="font-semibold">
-                                {t('referrals_page.card.reward')}: ₹{referral.rewardAmount.toFixed(2)}
+                                {t('referrals_page.card.reward')}: {currencySymbol()}{referral.rewardAmount.toFixed(2)}
                               </span>
                               {referral.completedAt && (
                                 <span className="text-sm text-[var(--text-secondary)]">

@@ -105,6 +105,7 @@ export default function OrderDetailsPage() {
     refundPending?: boolean;
     reopenedAt?: string | null;
     paymentCurrency?: string;
+    currency?: string;
     paidAmount?: string | number | null;
     exchangeRate?: number | null;
     paymentReference?: string;
@@ -394,7 +395,7 @@ export default function OrderDetailsPage() {
     const gateway = o.paymentGateway === "PAYPAL" ? "PayPal" : o.paymentGateway === "PAYONEER" ? "Payoneer" : "Razorpay";
     const auto = o.paymentGateway !== "PAYONEER";
     if (!window.confirm(auto
-      ? `Refund ${formatCurrency(Number(o.total))} to the customer via ${gateway}? This sends the money back and cannot be undone.`
+      ? `Refund ${formatCurrency(Number(o.total), orderDetails?.currency)} to the customer via ${gateway}? This sends the money back and cannot be undone.`
       : `Mark as refunded? Payoneer has no refund API — send the refund from your Payoneer dashboard.`)) return;
     handleStatusUpdate("REFUNDED", "Refunded by admin");
   };
@@ -808,7 +809,7 @@ export default function OrderDetailsPage() {
                     <div className="text-right flex-shrink-0">
                       <p className="text-sm text-[var(--text-secondary)] mb-1">{t('orders.details.price')}</p>
                       <p className="font-semibold text-[var(--text-primary)] mb-3">
-                        {formatCurrency(item.price)}
+                        {formatCurrency(item.price, orderDetails?.currency)}
                       </p>
                       <p className="text-sm text-[var(--text-secondary)] mb-1">{t('orders.details.qty')}</p>
                       <p className="font-semibold text-[var(--text-primary)] mb-3">
@@ -816,7 +817,7 @@ export default function OrderDetailsPage() {
                       </p>
                       <p className="text-sm text-[var(--text-secondary)] mb-1">{t('orders.details.total')}</p>
                       <p className="font-bold text-lg text-[var(--text-primary)]">
-                        {formatCurrency(item.subtotal)}
+                        {formatCurrency(item.subtotal, orderDetails?.currency)}
                       </p>
                     </div>
                   </div>
@@ -1009,8 +1010,8 @@ export default function OrderDetailsPage() {
                     <p className="text-xs text-[var(--text-secondary)] mb-1">Amount received</p>
                     <p className="text-sm font-semibold text-[var(--text-primary)]">
                       {orderDetails.paymentCurrency} {Number(orderDetails.paidAmount).toFixed(2)}
-                      {orderDetails.exchangeRate ? (
-                        <span className="ml-1 text-xs font-normal text-[var(--text-secondary)]">(1 USD = ₹{orderDetails.exchangeRate})</span>
+                      {orderDetails.exchangeRate && orderDetails.exchangeRate !== 1 ? (
+                        <span className="ml-1 text-xs font-normal text-[var(--text-secondary)]">(1 {orderDetails.paymentCurrency} = {formatCurrency(orderDetails.exchangeRate, orderDetails.currency)})</span>
                       ) : null}
                     </p>
                   </div>
@@ -1084,13 +1085,13 @@ export default function OrderDetailsPage() {
                 <div className="flex justify-between text-sm">
                   <span className="text-[var(--text-secondary)]">{t('orders.details.subtotal')}:</span>
                   <span className="font-medium text-[var(--text-primary)]">
-                    {formatCurrency(orderDetails.subTotal)}
+                    {formatCurrency(orderDetails.subTotal, orderDetails?.currency)}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-[var(--text-secondary)]">{t('orders.details.tax')} (0%):</span>
                   <span className="font-medium text-[var(--text-primary)]">
-                    {formatCurrency(0)}
+                    {formatCurrency(0, orderDetails?.currency)}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
@@ -1100,7 +1101,7 @@ export default function OrderDetailsPage() {
                       typeof orderDetails.shippingCost === 'string'
                         ? parseFloat(orderDetails.shippingCost)
                         : (orderDetails.shippingCost || 0)
-                    )}
+                    , orderDetails?.currency)}
                   </span>
                 </div>
                 {(typeof orderDetails.codCharge === 'string' ? parseFloat(orderDetails.codCharge) : (orderDetails.codCharge || 0)) > 0 && (
@@ -1111,7 +1112,7 @@ export default function OrderDetailsPage() {
                         typeof orderDetails.codCharge === 'string'
                           ? parseFloat(orderDetails.codCharge)
                           : (orderDetails.codCharge || 0)
-                      )}
+                      , orderDetails?.currency)}
                     </span>
                   </div>
                 )}
@@ -1123,7 +1124,7 @@ export default function OrderDetailsPage() {
                         typeof orderDetails.discount === 'string'
                           ? parseFloat(orderDetails.discount)
                           : (orderDetails.discount || 0)
-                      )}
+                      , orderDetails?.currency)}
                     </span>
                   </div>
                 )}
@@ -1141,7 +1142,7 @@ export default function OrderDetailsPage() {
                           </span>
                         ) : (
                           <span>
-                            {formatCurrency(orderDetails.coupon.discountValue)} off the order total
+                            {formatCurrency(orderDetails.coupon.discountValue, orderDetails?.currency)} off the order total
                           </span>
                         )}
                         {orderDetails.coupon.description && (

@@ -3,7 +3,8 @@ import { prisma } from "../../config/db.js";
 import { ApiError } from "../ApiError.js";
 import sendEmail from "../sendEmail.js";
 import { getStoreConfigFromDb } from "../storeConfig.js";
-import { buildShipmentContext } from "./context.js";
+import { buildShipmentContext, resolveShipFrom } from "./context.js";
+import { getStoreCurrency, convert } from "../currency.js";
 import * as fedex from "./fedex.js";
 import * as dhl from "./dhl.js";
 import * as easyship from "./easyship.js";
@@ -51,19 +52,30 @@ export async function availableCarriers() {
   return out;
 }
 
-const toInr = (amount, currency, rate) =>
-  currency === "INR" ? round2(amount) : currency === "USD" ? round2(amount * rate) : null;
+// Courier charges come in INR/USD/EUR; convert with the admin rates (null for other currencies)
+const toInr = (amount, currency, cur) => convert(amount, currency, "INR", cur);
 
-export async function quoteRates(orderId, code, parcelOverrides) {
+// Shiprocket picks from its own pickup addresses; every other carrier ships from a warehouse
+const contextOpts = (code, fromId) => (code === "SHIPROCKET" ? { shiprocketPickupId: fromId } : { fromId });
+
+function assertScope(c, ctx) {
+  if (c.scope === "domestic" && ctx.recipientCountry !== "IN") throw new ApiError(400, `${c.name} cannot ship outside India`);
+  if (c.scope === "international" && ctx.recipientCountry === "IN" && ctx.shipper.countryCode === "IN") {
+    throw new ApiError(400, `${c.name} is set up for international shipping — use Shiprocket for India → India`);
+  }
+}
+
+export async function quoteRates(orderId, code, parcelOverrides, fromId) {
   if (code === "MANUAL") return { rates: [], parcel: null };
-  const ctx = await buildShipmentContext(orderId, parcelOverrides);
+  const ctx = await buildShipmentContext(orderId, parcelOverrides, contextOpts(code, fromId));
+  assertScope(carrier(code), ctx);
   const cfg = await carrierConfig(code);
   const rates = await carrier(code).mod.getRates(ctx, cfg);
   return {
     parcel: ctx.parcel,
     customsValueUsd: ctx.customs.valueUsd,
     rates: rates
-      .map((r) => ({ ...r, amountInr: toInr(r.amount, r.currency, ctx.exchangeRate) }))
+      .map((r) => ({ ...r, amountInr: toInr(r.amount, r.currency, ctx.cur), amountStore: convert(r.amount, r.currency, ctx.orderCurrency, ctx.cur) }))
       .sort((a, b) => (a.amountInr ?? a.amount) - (b.amountInr ?? b.amount)),
   };
 }
@@ -74,7 +86,7 @@ const ACTIVE = ["CREATING", "CREATED"];
  * Book a shipment. A placeholder row is created under a per-order lock first, so two clicks
  * (or two admins) can never buy two labels for the same order.
  */
-export async function bookShipment({ orderId, carrierCode, serviceCode, serviceName, quotedAmount, quotedCurrency, parcel, manual, adminId, notifyCustomer }) {
+export async function bookShipment({ orderId, carrierCode, serviceCode, serviceName, quotedAmount, quotedCurrency, parcel, manual, adminId, notifyCustomer, fromId }) {
   const c = carrier(carrierCode);
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) throw new ApiError(404, "Order not found");
@@ -97,8 +109,10 @@ export async function bookShipment({ orderId, carrierCode, serviceCode, serviceN
   try {
     let result;
     let weightKg = null;
-    let exchangeRate = order.exchangeRate || 90;
+    let fromLocation = null;
+    const cur = await getStoreCurrency();
     if (carrierCode === "MANUAL") {
+      fromLocation = await resolveShipFrom(fromId, await prisma.siteSettings.findFirst());
       if (!manual?.courierName?.trim() || !manual?.trackingNumber?.trim()) {
         throw new ApiError(400, "Courier name and tracking number are required");
       }
@@ -109,11 +123,10 @@ export async function bookShipment({ orderId, carrierCode, serviceCode, serviceN
         cost: manual.cost ? { amount: Number(manual.cost), currency: "INR" } : null,
       };
     } else {
-      const ctx = await buildShipmentContext(orderId, parcel);
+      const ctx = await buildShipmentContext(orderId, parcel, contextOpts(carrierCode, fromId));
+      fromLocation = ctx.shiprocketPickup || ctx.shipper;
       weightKg = ctx.parcel.weightKg;
-      exchangeRate = ctx.exchangeRate;
-      if (c.scope === "domestic" && ctx.isInternational) throw new ApiError(400, `${c.name} cannot ship outside India`);
-      if (c.scope === "international" && !ctx.isInternational) throw new ApiError(400, `${c.name} here is set up for international orders — use Shiprocket for India`);
+      assertScope(c, ctx);
       const cfg = await carrierConfig(carrierCode);
       result = await c.mod.createShipment(ctx, cfg, { serviceCode });
     }
@@ -133,8 +146,9 @@ export async function bookShipment({ orderId, carrierCode, serviceCode, serviceN
         invoiceData: result.invoiceData || null,
         cost: cost ? round2(cost.amount) : null,
         costCurrency: cost?.currency || null,
-        costInr: cost ? toInr(cost.amount, cost.currency, exchangeRate) : null,
+        costInr: cost ? toInr(cost.amount, cost.currency, cur) : null,
         weightKg,
+        fromLocation,
       },
     });
 
