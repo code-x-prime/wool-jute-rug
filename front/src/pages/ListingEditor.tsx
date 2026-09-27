@@ -14,6 +14,7 @@ import {
   Info,
   ChevronDown,
   Lightbulb,
+  Upload,
   Video,
 } from "lucide-react";
 import {
@@ -252,6 +253,7 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
 
   // ui state
   const [dragging, setDragging] = useState(false);
+  const [photoPickerDragging, setPhotoPickerDragging] = useState(false);
   const [dragPhotoIdx, setDragPhotoIdx] = useState<number | null>(null);
   const [categoryQuery, setCategoryQuery] = useState("");
   const [categoryOpen, setCategoryOpen] = useState(false);
@@ -514,6 +516,13 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
     setVideos(nextVideos);
     setRemovedVideos(nextRemoved);
     if (skipped) toast.error(`${skipped} file(s) skipped — up to ${MAX_PHOTOS} photos and 2 videos (MP4/WebM), 10MB each`);
+  };
+
+  const addPhotoPickerFiles = (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+    if (imageFiles.length !== files.length) toast.error("Only image files can be linked to an option");
+    if (imageFiles.length) addFiles(imageFiles);
   };
 
   const removePhoto = (key: string) => {
@@ -1804,13 +1813,38 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
 
       {/* ── Photo picker ── */}
       <Dialog open={!!photoPicker} onOpenChange={(o) => !o && setPhotoPicker(null)}>
-        <DialogContent className="max-w-xl rounded-2xl p-8">
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto rounded-2xl p-6 sm:p-8">
           <DialogHeader>
             <DialogTitle className="text-xl">Link a photo to this option</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-[var(--text-secondary)]">Choose the photo you want to show buyers when they view this option.</p>
-          {photos.length === 0 && <p className="text-sm">Upload photos in the Photo & Video section first.</p>}
-          <div className="grid grid-cols-4 gap-2">
+          <label
+            onDragOver={(event) => { event.preventDefault(); setPhotoPickerDragging(true); }}
+            onDragLeave={() => setPhotoPickerDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setPhotoPickerDragging(false);
+              if (event.dataTransfer.files.length) addPhotoPickerFiles(event.dataTransfer.files);
+            }}
+            className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-7 text-center transition ${photoPickerDragging ? "border-[var(--text-primary)] bg-[var(--bg-secondary)]" : "border-[var(--border-color)] hover:bg-[var(--bg-secondary)]"}`}
+          >
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              multiple
+              className="sr-only"
+              onChange={(event) => {
+                if (event.target.files?.length) addPhotoPickerFiles(event.target.files);
+                event.target.value = "";
+              }}
+            />
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--bg-secondary)] text-[var(--text-primary)]">
+              <Upload className="h-5 w-5" />
+            </span>
+            <span className="text-sm font-semibold text-[var(--text-primary)]">Drop photos here or browse</span>
+            <span className="text-xs text-[var(--text-secondary)]">JPG, PNG, WebP or GIF · up to 10 MB each</span>
+          </label>
+          <div className="grid max-h-[38vh] grid-cols-3 gap-3 overflow-y-auto sm:grid-cols-4">
             {photos.map((ph) => (
               <button key={ph.key} type="button" onClick={() => {
                 if (photoPicker?.target === "option" && editingVar) {
@@ -1819,7 +1853,7 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
                   setRows((rs) => rs.map((r) => (r.key === photoPicker.rowKey ? { ...r, photoKeys: [ph.key] } : r)));
                 }
                 setPhotoPicker(null);
-              }} className="aspect-square overflow-hidden rounded-lg border border-[var(--border-color)] hover:ring-2 hover:ring-[var(--text-primary)]">
+              }} title="Link this photo" className="aspect-square overflow-hidden rounded-lg border border-[var(--border-color)] transition hover:ring-2 hover:ring-[var(--text-primary)]">
                 <img src={ph.url} alt="" className="h-full w-full object-cover" />
               </button>
             ))}
