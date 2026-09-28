@@ -38,6 +38,7 @@ export default function OrderDetailsPage() {
     taxAmount: number;
     discount?: string | number;
     codCharge?: string | number;
+    usd?: { subTotal: number; tax: number; shippingCost: number; discount: number; total: number; items: { id: string; price: number; subtotal: number }[] };
     createdAt: string;
     updatedAt: string;
     cancelledAt?: string;
@@ -1156,15 +1157,22 @@ export default function OrderDetailsPage() {
                 )}
                 <div className="flex justify-between border-t border-[var(--border-color)] pt-3 font-bold text-lg">
                   <span className="text-[var(--text-primary)]">{t('orders.details.grand_total')}:</span>
-                  <span className="text-[var(--text-primary)]">
-                    {formatCurrency(
-                      orderDetails.total ||
-                      ((typeof orderDetails.subTotal === 'string' ? parseFloat(orderDetails.subTotal) : orderDetails.subTotal) +
-                        (typeof orderDetails.shippingCost === 'string' ? parseFloat(orderDetails.shippingCost) : (orderDetails.shippingCost || 0)) +
-                        (typeof orderDetails.codCharge === 'string' ? parseFloat(orderDetails.codCharge) : (orderDetails.codCharge || 0)) -
-                        (typeof orderDetails.discount === 'string' ? parseFloat(orderDetails.discount) : (orderDetails.discount || 0)))
+                  <div className="text-right">
+                    <div className="text-[var(--text-primary)]">
+                      {formatCurrency(
+                        orderDetails.total ||
+                        ((typeof orderDetails.subTotal === 'string' ? parseFloat(orderDetails.subTotal) : orderDetails.subTotal) +
+                          (typeof orderDetails.shippingCost === 'string' ? parseFloat(orderDetails.shippingCost) : (orderDetails.shippingCost || 0)) +
+                          (typeof orderDetails.codCharge === 'string' ? parseFloat(orderDetails.codCharge) : (orderDetails.codCharge || 0)) -
+                          (typeof orderDetails.discount === 'string' ? parseFloat(orderDetails.discount) : (orderDetails.discount || 0)))
+                      )}
+                    </div>
+                    {orderDetails.usd?.total != null && (
+                      <div className="text-sm font-normal text-[var(--text-secondary)]">
+                        ≈ {formatCurrency(orderDetails.usd.total, "USD")}
+                      </div>
                     )}
-                  </span>
+                  </div>
                 </div>
               </div>
             </CardContent>

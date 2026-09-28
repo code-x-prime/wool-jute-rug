@@ -204,13 +204,13 @@ export default function OrdersPage() {
                   <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-3 sm:gap-2 shrink-0">
                     <div className="text-right">
                       <div className="font-semibold text-gray-900 text-base">
-                        {formatCurrency(order.total, order?.currency)}
+                        {formatCurrency(order.total)}
                       </div>
                       {order.discount > 0 && (
                         <div className="text-xs text-[#C9A84C] font-medium">
                           {order.couponCode
-                            ? `Saved ${formatCurrency(order.discount, order?.currency)} · ${order.couponCode}`
-                            : `Saved ${formatCurrency(order.discount, order?.currency)}`}
+                            ? `Saved ${formatCurrency(order.discount)} · ${order.couponCode}`
+                            : `Saved ${formatCurrency(order.discount)}`}
                         </div>
                       )}
                     </div>

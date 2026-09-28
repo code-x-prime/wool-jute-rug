@@ -12,6 +12,7 @@ import { decrypt } from "../utils/encryption.js";
 import { getStoreConfigFromDb } from "../utils/storeConfig.js";
 import { applyFlashSalePrice } from "../utils/flashSaleHelpers.js";
 import { buildIntlQuote, createOrderFromSession, findDuplicateOrder, DuplicatePaymentError, placeCodOrder } from "../utils/intlCheckout.js";
+import { sendPriced, priceConvert } from "../utils/sendPriced.js";
 
 
 export async function getPaymentGatewayConfig(userId = null, gateway = "RAZORPAY") {
@@ -602,11 +603,13 @@ export const getOrderHistory = asyncHandler(async (req, res) => {
     };
   });
 
+  const convertedOrders = await priceConvert(formattedOrders);
+
   res.status(200).json(
     new ApiResponsive(
       200,
       {
-        orders: formattedOrders,
+        orders: convertedOrders,
         pagination: {
           total: totalOrders,
           page: parseInt(page),
@@ -781,15 +784,7 @@ export const getOrderDetails = asyncHandler(async (req, res) => {
       : null,
   };
 
-  res
-    .status(200)
-    .json(
-      new ApiResponsive(
-        200,
-        formattedOrder,
-        "Order details fetched successfully"
-      )
-    );
+  await sendPriced(res, 200, formattedOrder, "Order details fetched successfully");
 });
 
 // Cancel order

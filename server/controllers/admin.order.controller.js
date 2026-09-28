@@ -4,6 +4,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { prisma } from "../config/db.js";
 import { cancelShiprocketOrder, getShiprocketSettings } from "../utils/shiprocket.js";
 import { cancelActiveShipments } from "../utils/carriers/index.js";
+import { convertInrToUsd } from "../utils/exchangeRates.js";
 
 // Money was actually received online for this order (so cancelling it means a refund is owed)
 export const wasPaidOnline = (order) =>
@@ -297,15 +298,34 @@ export const getOrderById = asyncHandler(async (req, res, next) => {
     };
   });
 
+  const subTotalInr = parseFloat(order.subTotal);
+  const taxInr = parseFloat(order.tax);
+  const shippingCostInr = parseFloat(order.shippingCost);
+  const discountInr = parseFloat(order.discount) || 0;
+  const totalInr = parseFloat(order.total);
+
   // Normalize values for tax and shipping
   const modifiedOrder = {
     ...order,
     items: processedItems, // Use processed items with image URLs
-    subTotal: parseFloat(order.subTotal),
-    tax: parseFloat(order.tax),
-    shippingCost: parseFloat(order.shippingCost),
-    discount: parseFloat(order.discount) || 0,
-    total: parseFloat(order.total),
+    subTotal: subTotalInr,
+    tax: taxInr,
+    shippingCost: shippingCostInr,
+    discount: discountInr,
+    total: totalInr,
+    // USD figures for display alongside INR — admin still accounts in INR, but sees the customer-facing $ amount too
+    usd: {
+      subTotal: await convertInrToUsd(subTotalInr),
+      tax: await convertInrToUsd(taxInr),
+      shippingCost: await convertInrToUsd(shippingCostInr),
+      discount: await convertInrToUsd(discountInr),
+      total: await convertInrToUsd(totalInr),
+      items: await Promise.all(processedItems.map(async (it) => ({
+        id: it.id,
+        price: await convertInrToUsd(it.price),
+        subtotal: await convertInrToUsd(it.subtotal),
+      }))),
+    },
     date: order.createdAt, // Add date field for frontend compatibility
     // Add detailed coupon information
     couponDetails: order.coupon

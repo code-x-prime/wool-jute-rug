@@ -434,6 +434,14 @@ async function sendConfirmationEmail(orderId) {
   if (!order?.user?.email) return;
   const storeConfig = await getStoreConfigFromDb();
   const methodLabel = { PAYPAL: "PayPal", PAYONEER: "Payoneer", RAZORPAY: "Online payment (Razorpay)", CASH: "Cash on Delivery" }[order.paymentMethod] || "Online";
+
+  // Customers are always charged in USD. Use the rate actually locked at checkout so the email
+  // matches what was charged — never a fresh live rate that may have since drifted.
+  const lockedRate = order.exchangeRate > 0 ? order.exchangeRate : null;
+  const totalInr = parseFloat(order.total);
+  const rate = lockedRate || (order.paidAmount != null && totalInr > 0 ? totalInr / Number(order.paidAmount) : null) || (await getStoreCurrency()).usdRate;
+  const toUsd = (inr) => (inr / rate).toFixed(2);
+
   await sendEmail({
     email: order.user.email,
     subject: `Order Confirmation - #${order.orderNumber}`,
@@ -442,18 +450,18 @@ async function sendConfirmationEmail(orderId) {
         userName: order.user.name || "Valued Customer",
         orderNumber: order.orderNumber,
         orderDate: order.createdAt,
-        paymentMethod: order.paymentCurrency && order.paymentCurrency !== order.currency && order.paidAmount != null ? `${methodLabel} (${order.paymentCurrency} ${Number(order.paidAmount).toFixed(2)})` : methodLabel,
-        currency: order.currency,
+        paymentMethod: methodLabel,
+        currency: "USD",
         items: order.items.map((i) => ({
           name: i.product.name,
           variant: i.variant.attributes.map((a) => a.attributeValue.value).join(" "),
           quantity: i.quantity,
-          price: parseFloat(i.price).toFixed(2),
+          price: toUsd(parseFloat(i.price)),
         })),
-        subtotal: parseFloat(order.subTotal).toFixed(2),
-        shipping: parseFloat(order.shippingCost).toFixed(2),
+        subtotal: toUsd(parseFloat(order.subTotal)),
+        shipping: toUsd(parseFloat(order.shippingCost)),
         tax: "0.00",
-        total: parseFloat(order.total).toFixed(2),
+        total: order.paidAmount != null ? Number(order.paidAmount).toFixed(2) : toUsd(totalInr),
         shippingAddress: order.shippingAddress,
       },
       storeConfig
