@@ -5,6 +5,7 @@ import { prisma } from "../config/db.js";
 import { getFileUrl } from "../utils/deleteFromS3.js";
 import { formatVariantWithAttributes } from "../utils/variant-attributes.js";
 import { applyFlashSalePrice } from "../utils/flashSaleHelpers.js";
+import { sendPriced } from "../utils/sendPriced.js";
 
 const expandProductsToVariants = async (products, query = {}) => {
   const {
@@ -450,20 +451,19 @@ export const getAllProducts = asyncHandler(async (req, res) => {
   // Format products for response (expand each variant to its own card)
   const formattedProducts = await expandProductsToVariants(products, req.query);
 
-  res.status(200).json(
-    new ApiResponsive(
-      200,
-      {
-        products: formattedProducts,
-        pagination: {
-          total: totalProducts,
-          page: parseInt(page),
-          limit: parseInt(limit),
-          pages: Math.ceil(totalProducts / parseInt(limit)),
-        },
+  await sendPriced(
+    res,
+    200,
+    {
+      products: formattedProducts,
+      pagination: {
+        total: totalProducts,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(totalProducts / parseInt(limit)),
       },
-      "Products fetched successfully"
-    )
+    },
+    "Products fetched successfully"
   );
 });
 
@@ -855,15 +855,14 @@ export const getProductBySlug = asyncHandler(async (req, res) => {
     })
   );
 
-  res.status(200).json(
-    new ApiResponsive(
-      200,
-      {
-        product: formattedProduct,
-        relatedProducts: formattedRelated,
-      },
-      "Product fetched successfully"
-    )
+  await sendPriced(
+    res,
+    200,
+    {
+      product: formattedProduct,
+      relatedProducts: formattedRelated,
+    },
+    "Product fetched successfully"
   );
 });
 
@@ -928,15 +927,7 @@ export const getProductVariant = asyncHandler(async (req, res) => {
     }))
     : [];
 
-  res
-    .status(200)
-    .json(
-      new ApiResponsive(
-        200,
-        { variant: formattedVariant },
-        "Product variant fetched successfully"
-      )
-    );
+  await sendPriced(res, 200, { variant: formattedVariant }, "Product variant fetched successfully");
 });
 
 // Get product variant by ID
@@ -1050,15 +1041,7 @@ export const getProductVariantById = asyncHandler(async (req, res) => {
   formattedVariant.originalPrice = Math.round(flashSaleResult.originalPrice || basePrice);
   formattedVariant.hasFlashSale = flashSaleResult.hasFlashSale;
 
-  res
-    .status(200)
-    .json(
-      new ApiResponsive(
-        200,
-        { variant: formattedVariant },
-        "Product variant fetched successfully"
-      )
-    );
+  await sendPriced(res, 200, { variant: formattedVariant }, "Product variant fetched successfully");
 });
 
 // Get maximum product price for price range slider
@@ -1163,19 +1146,18 @@ export const getProductsByType = asyncHandler(async (req, res) => {
   // Format the response data (expand each variant to its own card)
   const formattedProducts = await expandProductsToVariants(products);
 
-  res.status(200).json(
-    new ApiResponsive(
-      200,
-      {
-        products: formattedProducts,
-        pagination: {
-          total: totalProducts,
-          page: parseInt(page),
-          limit: parseInt(limit),
-          pages: Math.ceil(totalProducts / parseInt(limit)),
-        },
+  await sendPriced(
+    res,
+    200,
+    {
+      products: formattedProducts,
+      pagination: {
+        total: totalProducts,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(totalProducts / parseInt(limit)),
       },
-      `${productType} products fetched successfully`
-    )
+    },
+    `${productType} products fetched successfully`
   );
 });

@@ -1425,9 +1425,9 @@ export default function ListingEditor({ mode, productId }: { mode: "create" | "e
             ) : (
               <div className="flex flex-wrap gap-4">
                 <div className="w-48">
-                  <Label className="text-xs">Price for all countries</Label>
+                  <Label className="text-xs">Price (INR)</Label>
                   <div className="relative mt-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]">{currencySymbol()}</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]">₹</span>
                     <Input type="number" min={0} step="0.01" value={base.price} onChange={(e) => setBase({ ...base, price: e.target.value })} className="h-12 rounded-lg pl-7" />
                   </div>
                 </div>

@@ -188,8 +188,8 @@ export function getAuthToken() {
 }
 
 // Format currency (whole numbers only - no decimals)
-// Store-wide currency chosen by the admin (INR / USD / EUR). Set once at startup by <CurrencyInit>.
-let STORE_CURRENCY = "INR";
+// The storefront always shows/charges in USD, live-converted from the INR prices admins enter.
+let STORE_CURRENCY = "USD";
 const SYMBOLS = { INR: "₹", USD: "$", EUR: "€" };
 
 export function setStoreCurrency(code) {

@@ -16,9 +16,9 @@ async function getStoreCurrencyCode() {
   try {
     const res = await fetch(`${API_URL}/public/settings`, { next: { revalidate: 60 } });
     const json = await res.json();
-    return json?.data?.storeCurrency || "INR";
+    return json?.data?.storeCurrency || "USD";
   } catch {
-    return "INR";
+    return "USD";
   }
 }
 

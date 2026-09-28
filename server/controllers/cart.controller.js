@@ -7,11 +7,14 @@ import { formatVariantWithAttributes } from "../utils/variant-attributes.js";
 import { applyFlashSalePrice } from "../utils/flashSaleHelpers.js";
 import { getStoreCurrency } from "../utils/currency.js";
 import { roundMoney } from "../utils/intlCheckout.js";
+import { sendPriced } from "../utils/sendPriced.js";
 
 // Get user's cart
 export const getUserCart = asyncHandler(async (req, res) => {
+  // Internal math (slabs, flash sales, MOQ, shipping threshold) is always INR — rm() rounds
+  // in INR "whole rupee" style regardless of the eventual display currency.
   const storeCur = await getStoreCurrency();
-  const rm = (n) => roundMoney(n, storeCur.code);
+  const rm = (n) => roundMoney(n, "INR");
   const userId = req.user.id;
 
   // Get cart items with product and variant details
@@ -271,22 +274,21 @@ export const getUserCart = asyncHandler(async (req, res) => {
     }
   }
 
-  res.status(200).json(
-    new ApiResponsive(
-      200,
-      {
-        items: formattedItems,
-        subtotal: rm(subtotal),
-        shippingTotal: rm(shippingTotal),
-        freeShippingThreshold: rm(freeShippingThreshold),
-        shippingMessage,
-        grandTotal: rm(subtotal + shippingTotal),
-        currency: storeCur.code,
-        itemCount: cartItems.length,
-        totalQuantity: cartItems.reduce((sum, item) => sum + item.quantity, 0),
-      },
-      "Cart fetched successfully"
-    )
+  await sendPriced(
+    res,
+    200,
+    {
+      items: formattedItems,
+      subtotal: rm(subtotal),
+      shippingTotal: rm(shippingTotal),
+      freeShippingThreshold: rm(freeShippingThreshold),
+      shippingMessage,
+      grandTotal: rm(subtotal + shippingTotal),
+      currency: storeCur.code,
+      itemCount: cartItems.length,
+      totalQuantity: cartItems.reduce((sum, item) => sum + item.quantity, 0),
+    },
+    "Cart fetched successfully"
   );
 });
 

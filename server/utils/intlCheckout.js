@@ -8,6 +8,7 @@ import { getOrderConfirmationTemplate } from "../email/temp/EmailTemplate.js";
 import { getStoreConfigFromDb } from "./storeConfig.js";
 import { processReferralReward } from "../controllers/referral.controller.js";
 import { getStoreCurrency } from "./currency.js";
+import { convertInrToUsd } from "./exchangeRates.js";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 /** INR is charged in whole rupees (as before); USD/EUR keep cents. */
@@ -97,14 +98,17 @@ async function couponDiscount(couponCode, items, rm) {
 }
 
 /**
- * Price the user's current cart in the store currency.
- * payInStoreCurrency=false (PayPal/Payoneer): an INR store is charged in USD at the admin rate;
- * USD/EUR stores are always charged in their own currency.
+ * Price the user's current cart. Product/variant prices are always stored in INR — that is the
+ * source of truth (subTotal/discount/shippingCost/total below are always INR).
+ * payInStoreCurrency=true (Razorpay/COD — INR-only gateways): charge in INR, no conversion.
+ * payInStoreCurrency=false (PayPal/Payoneer — USD-only gateways): the INR total is converted to
+ * USD with a live rate locked at this moment (returned as amountUsd + exchangeRate) so the
+ * gateway charge and the stored order amount always match, even if rates move later.
  * Throws if the cart is empty, an item is inactive, or stock is insufficient.
  */
 export async function buildIntlQuote(userId, shippingAddressId, couponCode, { payInStoreCurrency = false } = {}) {
   const cur = await getStoreCurrency();
-  const rm = (n) => roundMoney(n, cur.code);
+  const rm = (n) => roundMoney(n, "INR"); // DB prices are always INR
   const address = await prisma.address.findFirst({ where: { id: shippingAddressId, userId } });
   if (!address) throw new ApiError(400, "Shipping address not found");
 
@@ -166,13 +170,17 @@ export async function buildIntlQuote(userId, shippingAddressId, couponCode, { pa
   }
 
   const { discount, coupon } = await couponDiscount(couponCode, items, rm);
-  const total = Math.max(rm(subTotal - discount + shippingCost), cur.code === "INR" ? 1 : 0.5);
+  const total = Math.max(rm(subTotal - discount + shippingCost), 1); // INR, always
 
-  // What the gateway charges: the store currency, except INR stores on PayPal/Payoneer (→ USD)
-  const convertToUsd = !payInStoreCurrency && cur.code === "INR";
-  const currency = convertToUsd ? "USD" : cur.code;
-  const exchangeRate = convertToUsd ? cur.usdRate : 1; // store units per 1 unit of the charged currency
-  const amountUsd = convertToUsd ? Math.max(round2(total / cur.usdRate), 0.01) : total; // legacy name: amount charged
+  // Razorpay/COD charge INR directly; PayPal/Payoneer are USD-only gateways — lock a live
+  // INR->USD rate right now so the amount charged and the amount stored never drift apart.
+  const currency = payInStoreCurrency ? "INR" : "USD";
+  let exchangeRate = 1; // INR per 1 unit of the charged currency
+  let amountUsd = total; // legacy name: amount actually charged, in `currency`
+  if (!payInStoreCurrency) {
+    amountUsd = Math.max(await convertInrToUsd(total), 0.5);
+    exchangeRate = round2(total / amountUsd); // INR per 1 USD, locked at quote time
+  }
 
   return {
     address,
@@ -313,7 +321,7 @@ async function insertOrder(tx, { userId, shippingAddressId, quote, data }) {
       discount: quote.discount,
       tax: 0,
       total: quote.total + extraCharge,
-      currency: quote.storeCurrency || "INR",
+      currency: "INR", // subTotal/discount/shippingCost/total are always INR, the source of truth
       shippingAddressId,
       shippingProvider: isIndia ? "SHIPROCKET" : "EASYSHIP",
       couponId: quote.coupon?.id || null,
@@ -371,7 +379,7 @@ async function insertOrder(tx, { userId, shippingAddressId, quote, data }) {
  */
 export async function placeCodOrder({ userId, shippingAddressId, couponCode, codCharge = 0, billingAddressSameAsShipping = true, billingAddress, notes }) {
   const { quote } = await buildIntlQuote(userId, shippingAddressId, couponCode, { payInStoreCurrency: true });
-  const cod = roundMoney(Number(codCharge) || 0, quote.storeCurrency);
+  const cod = roundMoney(Number(codCharge) || 0, "INR"); // COD is India-only, always INR
 
   const result = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"order:" + userId}))`;
