@@ -622,8 +622,8 @@ const getContactInfo = asyncHandler(async (req, res) => {
 
     // Default fallback contact info
     const contactInfo = {
-      address: "89/2 Sector 39, Gurugram, Haryana",
-      phone: "+91 8053210008",
+      address: "Town - Khamaria - 221306, District - Bhadohi (Sant Ravidas Nagar), Uttar Pradesh",
+      phone: "+91 88403 37506",
       email: "connect.wooljuterug@gmail.com",
       hours: "Monday - Saturday: 10:00 AM - 7:00 PM",
       mapCoordinates: {

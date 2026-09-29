@@ -153,7 +153,7 @@ export default function RugServicesPage() {
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <a
-              href="tel:+918053210008"
+              href="tel:+918840337506"
               className="px-8 py-3.5 bg-black text-white hover:bg-neutral-900 font-jost text-[10px] tracking-widest uppercase font-semibold transition-all border border-black flex items-center gap-2 rounded-none"
             >
               <Phone className="h-3 w-3" />
@@ -271,7 +271,7 @@ export default function RugServicesPage() {
             </p>
             <div className="flex flex-wrap items-center gap-4">
               <a
-                href="tel:+918053210008"
+                href="tel:+918840337506"
                 className="px-6 py-3 bg-black text-white hover:bg-neutral-900 font-jost text-[10px] tracking-widest uppercase font-semibold transition-all border border-black flex items-center gap-2"
               >
                 <Phone className="h-3.5 w-3.5" />
@@ -441,7 +441,7 @@ export default function RugServicesPage() {
 
             <div className="flex justify-center items-center gap-4">
               <a
-                href="tel:+918053210008"
+                href="tel:+918840337506"
                 className="px-6 py-2.5 bg-black text-white hover:bg-neutral-900 font-jost text-[10px] tracking-widest uppercase font-semibold transition-all border border-black rounded-none flex items-center gap-1.5"
               >
                 <Phone className="h-3 w-3" /> Call Us
