@@ -15,6 +15,7 @@ import {
   Mail,
   ArrowRight,
   Send,
+  MessageCircle,
 } from "lucide-react";
 
 // Light theme — Jaipur Rugs style
@@ -203,13 +204,19 @@ export function Footer() {
                 <div className="flex items-start gap-2.5">
                   <MapPin size={14} className="mt-0.5 shrink-0" style={{ color: ACCENT }} />
                   <p className="text-sm font-roboto leading-snug" style={{ color: TEXT_MED }}>
-                    89/2 Sector 39,<br />Gurugram, Haryana
+                    Town - Khamaria - 221306,<br />District - Bhadohi (Sant Ravidas Nagar),<br />Uttar Pradesh
                   </p>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <Phone size={14} className="shrink-0" style={{ color: ACCENT }} />
-                  <a href="tel:+919999900000" className="text-sm font-roboto hover:text-[#C9A84C] transition-colors" style={{ color: TEXT_MED }}>
-                    +91 99999 00000
+                  <a href="tel:+918840337506" className="text-sm font-roboto hover:text-[#C9A84C] transition-colors" style={{ color: TEXT_MED }}>
+                    +91 88403 37506
+                  </a>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <MessageCircle size={14} className="shrink-0" style={{ color: ACCENT }} />
+                  <a href="https://wa.me/918840337506" target="_blank" rel="noopener noreferrer" className="text-sm font-roboto hover:text-[#C9A84C] transition-colors" style={{ color: TEXT_MED }}>
+                    WhatsApp: +91 88403 37506
                   </a>
                 </div>
                 <div className="flex items-start gap-2.5">

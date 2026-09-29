@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { 
-  Phone, 
-  Mail, 
-  MapPin, 
-  Clock, 
-  Send 
+import {
+  Phone,
+  Mail,
+  MapPin,
+  Clock,
+  Send,
+  MessageCircle
 } from "lucide-react";
 import { fetchApi } from "@/lib/utils";
 import { toast } from "sonner";
@@ -95,7 +96,7 @@ export default function ContactPage() {
                   Our Showroom
                 </h3>
                 <p className="text-neutral-600 text-xs leading-relaxed">
-                  89/2 Sector 39, Gurugram,<br />Haryana 122001, India
+                  Town - Khamaria - 221306,<br />District - Bhadohi (Sant Ravidas Nagar),<br />Uttar Pradesh
                 </p>
               </div>
             </div>
@@ -109,11 +110,31 @@ export default function ContactPage() {
                 <h3 className="font-jost text-sm font-semibold text-[#3D1C02] tracking-wide uppercase mb-1">
                   Call Us
                 </h3>
-                <a 
-                  href="tel:+918053210008" 
+                <a
+                  href="tel:+918840337506"
                   className="text-neutral-600 text-xs hover:text-[#C9A84C] transition-colors"
                 >
-                  +91 8053210008
+                  +91 88403 37506
+                </a>
+              </div>
+            </div>
+
+            {/* WhatsApp Card */}
+            <div className="bg-white border border-[#e8e0d5] p-6 rounded shadow-sm flex items-start gap-4">
+              <div className="w-10 h-10 rounded-full bg-[#FAF6F0] text-[#C9A84C] flex items-center justify-center shrink-0">
+                <MessageCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-jost text-sm font-semibold text-[#3D1C02] tracking-wide uppercase mb-1">
+                  WhatsApp
+                </h3>
+                <a
+                  href="https://wa.me/918840337506"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-neutral-600 text-xs hover:text-[#C9A84C] transition-colors"
+                >
+                  +91 88403 37506
                 </a>
               </div>
             </div>
@@ -127,8 +148,8 @@ export default function ContactPage() {
                 <h3 className="font-jost text-sm font-semibold text-[#3D1C02] tracking-wide uppercase mb-1">
                   Email Us
                 </h3>
-                <a 
-                  href="mailto:connect.wooljuterug@gmail.com" 
+                <a
+                  href="mailto:connect.wooljuterug@gmail.com"
                   className="text-neutral-600 text-xs hover:text-[#C9A84C] transition-colors break-all"
                 >
                   connect.wooljuterug@gmail.com
